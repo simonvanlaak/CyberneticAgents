@@ -1,13 +1,14 @@
 import json
-from typing import List
+from typing import List, Tuple
 
 from autogen_core import AgentId
-from sqlalchemy import ForeignKey, Integer, String, and_
+from sqlalchemy import Enum, ForeignKey, Integer, String, and_
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.db_utils import get_db
 from src.enums import SystemType
 from src.init_db import Base
+from src.models.serialize import model_to_dict
 
 
 class System(Base):
@@ -18,7 +19,7 @@ class System(Base):
         Integer, ForeignKey("teams.id"), nullable=False
     )
     name: Mapped[int] = mapped_column(String(255), nullable=False)
-    type: Mapped[SystemType] = mapped_column(SystemType, nullable=False)
+    type: Mapped[SystemType] = mapped_column(Enum(SystemType), nullable=False)
     agent_id_str: Mapped[str] = mapped_column(
         String(100), nullable=False
     )  # AgentId as string
@@ -31,11 +32,56 @@ class System(Base):
         return AgentId.from_str(self.agent_id_str)
 
     def to_prompt(self) -> List[str]:
-        return [json.dumps(self.dict(), indent=4)]
+        return [json.dumps(model_to_dict(self), indent=4, default=str)]
 
     def update(self):
         db = next(get_db())
+        db.merge(self)
         db.commit()
+
+
+DEFAULT_SYSTEM_SPECS: List[Tuple[SystemType, str]] = [
+    (SystemType.OPERATION, "System1/root"),
+    (SystemType.CONTROL, "System3/root"),
+    (SystemType.INTELLIGENCE, "System4/root"),
+    (SystemType.POLICY, "System5/root"),
+]
+
+
+def ensure_default_systems_for_team(team_id: int) -> List[System]:
+    """
+    Ensure each team has the default systems registered.
+
+    Args:
+        team_id: Team identifier to ensure defaults for.
+
+    Returns:
+        A list of newly created System records.
+    """
+    db = next(get_db())
+    created: List[System] = []
+    try:
+        for system_type, agent_id_str in DEFAULT_SYSTEM_SPECS:
+            existing = (
+                db.query(System)
+                .filter(and_(System.team_id == team_id, System.type == system_type))
+                .first()
+            )
+            if existing:
+                continue
+            system = System(
+                team_id=team_id,
+                name=agent_id_str,
+                type=system_type,
+                agent_id_str=agent_id_str,
+            )
+            db.add(system)
+            created.append(system)
+        if created:
+            db.commit()
+        return created
+    finally:
+        db.close()
 
 
 def get_system(system_id: int) -> System:
@@ -58,9 +104,7 @@ def get_system_by_type(team_id: int, system_type: int) -> System:
             f"There are multiple {system_type} systems found in this team. It's supposed to only be one."
         )
     if len(systems) == 0:
-        raise ValueError(
-            f"No system found for type {system_type} in team {team_id}."
-        )
+        raise ValueError(f"No system found for type {system_type} in team {team_id}.")
     return systems[0]
 
 

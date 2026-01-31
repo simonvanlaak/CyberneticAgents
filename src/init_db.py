@@ -3,6 +3,7 @@ Common database components shared across all modules
 """
 
 import os
+from urllib.parse import urlparse
 
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
@@ -12,7 +13,9 @@ from sqlalchemy.orm import sessionmaker
 os.makedirs("data", exist_ok=True)
 
 # SQLite database setup
-DATABASE_URL = "sqlite:///data/CyberneticAgents.db"
+DATABASE_URL = os.environ.get(
+    "CYBERAGENT_DB_URL", "sqlite:///data/CyberneticAgents.db"
+)
 engine = create_engine(DATABASE_URL, echo=False)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -33,6 +36,35 @@ def init_db():
 
     # Create all tables
     Base.metadata.create_all(bind=engine)
+
+
+def configure_database(database_url: str) -> None:
+    """Configure the database connection (used mainly for tests)."""
+    global DATABASE_URL
+    global engine
+    global SessionLocal
+    DATABASE_URL = database_url
+    engine = create_engine(DATABASE_URL, echo=False)
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+def get_database_path() -> str:
+    """Return the sqlite database path for the current DATABASE_URL."""
+    parsed = urlparse(DATABASE_URL)
+    if parsed.scheme != "sqlite":
+        raise ValueError("Database path is only available for sqlite databases.")
+    if parsed.path:
+        if parsed.path == "/:memory:":
+            return ":memory:"
+        normalized = os.path.normpath(parsed.path)
+        if normalized.startswith("//"):
+            while normalized.startswith("//"):
+                normalized = normalized[1:]
+            return normalized
+        if normalized.startswith("/"):
+            return normalized[1:]
+        return normalized
+    return "data/CyberneticAgents.db"
 
 
 # Note: init_db() is NOT called automatically during import to avoid circular dependencies

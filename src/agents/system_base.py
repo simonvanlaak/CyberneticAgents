@@ -32,7 +32,13 @@ from src.models.policy import (
     get_system_policy_prompts,
     get_team_policy_prompts,
 )
-from src.models.system import System
+from src.models.system import (
+    System,
+    ensure_default_systems_for_team,
+    get_systems_by_type,
+)
+from src.models.team import get_team
+from src.team_state import get_or_create_last_team_id
 from src.tools.tool_router import get_tools
 from src.ui_state import add_message
 
@@ -75,7 +81,20 @@ class SystemBase(RoutedAgent):
     ):
         self.name = name.replace("/", "_")
         self.agent_id = AgentId.from_str(name)
-        self.team_id = 0
+        team_id_env = os.environ.get("CYBERAGENT_ACTIVE_TEAM_ID")
+        if team_id_env:
+            try:
+                team_id = int(team_id_env)
+            except ValueError as exc:
+                raise ValueError(
+                    f"Invalid CYBERAGENT_ACTIVE_TEAM_ID '{team_id_env}'."
+                ) from exc
+            if get_team(team_id) is None:
+                raise ValueError(f"Team id {team_id} is not registered.")
+            self.team_id = team_id
+        else:
+            self.team_id = get_or_create_last_team_id()
+        ensure_default_systems_for_team(self.team_id)
         print(f"Initializing {self.name}")
         super().__init__(self.name)
         self.trace_context = trace_context or {}
@@ -353,8 +372,9 @@ class SystemBase(RoutedAgent):
         )
 
     def _get_systems_by_type(self, type: int) -> List[System]:
-        # generate prompts for available system 1 to handle tasks
-        raise NotImplementedError()
+        if not self.team_id:
+            raise ValueError("Team id is not set for this agent.")
+        return get_systems_by_type(self.team_id, type)
 
     def _get_last_message(self, result: TaskResult) -> BaseChatMessage:
         if not result.messages:

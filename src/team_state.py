@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Optional
 
 from src.db_utils import get_db
+from src.models.system import ensure_default_systems_for_team
 from src.models.team import Team
 
 STATE_FILE = Path("data/last_team.json")
@@ -32,17 +33,20 @@ def get_or_create_last_team_id() -> int:
         if last_id:
             team = session.query(Team).filter(Team.id == last_id).first()
             if team:
+                ensure_default_systems_for_team(team.id)
                 return team.id
 
         team = session.query(Team).order_by(Team.id.desc()).first()
         if team:
             write_last_team_id(team.id)
+            ensure_default_systems_for_team(team.id)
             return team.id
 
         new_team = Team(name="default_team")
         session.add(new_team)
         session.commit()
         write_last_team_id(new_team.id)
+        ensure_default_systems_for_team(new_team.id)
         return new_team.id
     finally:
         session.close()
