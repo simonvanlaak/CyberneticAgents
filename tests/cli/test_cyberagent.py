@@ -173,3 +173,20 @@ def test_handle_config_displays_teams(
     assert result == 0
     assert "Team: Engineering (id=99)" in captured.out
     assert "SYSTEM4 (System4/root)" in captured.out
+
+
+def test_help_lists_commands() -> None:
+    help_text = cyberagent.build_parser().format_help()
+    assert "start" in help_text
+    assert "Boot the VSM runtime." in help_text
+    for command in (
+        "stop",
+        "status",
+        "suggest",
+        "inbox",
+        "watch",
+        "logs",
+        "config",
+        "login",
+    ):
+        assert command in help_text
