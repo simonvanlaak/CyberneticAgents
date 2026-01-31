@@ -1,7 +1,8 @@
+import json
 import sqlite3
 import uuid
 
-from src.cli.status import collect_status, render_status
+from src.cli.status import collect_status, render_status, render_status_json
 from src.db_utils import get_db
 from src.init_db import init_db
 from src.models.purpose import Purpose
@@ -172,3 +173,54 @@ def test_status_active_only_filters_completed_tasks():
 
     assert f"Task {task_pending_id} [pending]" in output
     assert f"Task {task_completed_id} [completed]" not in output
+
+
+def test_status_json_output_includes_fields():
+    init_db()
+    team_id = _create_team_id()
+    purpose = Purpose(
+        team_id=team_id,
+        name="Purpose JSON",
+        content="Purpose content.",
+    )
+    purpose_id = purpose.add()
+    strategy_id = _insert_strategy(
+        team_id=team_id,
+        purpose_id=purpose_id,
+        name="Strategy JSON",
+        description="Strategy description.",
+        status="in_progress",
+    )
+    initiative_id = _insert_initiative(
+        team_id=team_id,
+        strategy_id=strategy_id,
+        name="Initiative JSON",
+        description="Initiative description.",
+        status="pending",
+    )
+    task_id = _insert_task(
+        team_id=team_id,
+        initiative_id=initiative_id,
+        name="Task JSON",
+        content="Task content.",
+        status="pending",
+        assignee="root_operations_json",
+    )
+
+    payload = json.loads(
+        render_status_json(collect_status(team_id=team_id, active_only=False))
+    )
+
+    assert payload["teams"][0]["id"] == team_id
+    assert payload["teams"][0]["purposes"][0]["id"] == purpose_id
+    assert payload["teams"][0]["purposes"][0]["strategies"][0]["id"] == strategy_id
+    assert (
+        payload["teams"][0]["purposes"][0]["strategies"][0]["initiatives"][0]["id"]
+        == initiative_id
+    )
+    assert (
+        payload["teams"][0]["purposes"][0]["strategies"][0]["initiatives"][0]["tasks"][
+            0
+        ]["id"]
+        == task_id
+    )

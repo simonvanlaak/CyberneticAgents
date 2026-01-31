@@ -1,6 +1,7 @@
 import argparse
+import json
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from typing import Iterable, Optional
 
 from src.init_db import init_db
@@ -216,6 +217,10 @@ def render_status(teams: list[TeamView]) -> str:
     return "\n".join(lines)
 
 
+def render_status_json(teams: list[TeamView]) -> str:
+    return json.dumps({"teams": [asdict(team) for team in teams]}, indent=2)
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="main.py status",
@@ -223,6 +228,7 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--team", type=int, default=None)
     parser.add_argument("--active-only", action="store_true")
+    parser.add_argument("--json", action="store_true")
     return parser
 
 
@@ -230,8 +236,10 @@ def main(argv: list[str]) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
     init_db()
-    output = render_status(
-        collect_status(team_id=args.team, active_only=args.active_only)
-    )
+    status = collect_status(team_id=args.team, active_only=args.active_only)
+    if args.json:
+        output = render_status_json(status)
+    else:
+        output = render_status(status)
     print(output)
     return 0
