@@ -190,3 +190,18 @@ def test_help_lists_commands() -> None:
         "login",
     ):
         assert command in help_text
+
+
+def test_help_command_prints_general(capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = cyberagent.main(["help"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "usage" in captured.out.lower()
+    assert "cyberagent" in captured.out
+
+
+def test_help_command_prints_start(capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = cyberagent.main(["help", "start"])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "Boot the VSM runtime." in captured.out

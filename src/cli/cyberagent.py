@@ -56,7 +56,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    start_parser = subparsers.add_parser("start", help="Boot the VSM runtime.")
+    start_parser = subparsers.add_parser(
+        "start", help="Boot the VSM runtime.", description="Boot the VSM runtime."
+    )
     start_parser.add_argument(
         "--message",
         "-m",
@@ -124,12 +126,21 @@ def build_parser() -> argparse.ArgumentParser:
         "--token", "-t", type=str, help="Authentication token. Prompts if omitted."
     )
 
+    help_parser = subparsers.add_parser("help", help="Show CLI help.")
+    help_parser.add_argument(
+        "topic",
+        nargs="?",
+        help="Specific command to show details for.",
+    )
+
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv or sys.argv[1:])
+    if args.command == "help":
+        return _handle_help(args)
     handler = _HANDLERS.get(args.command)
     if handler is None:
         print(f"Unknown command: {args.command}", file=sys.stderr)
@@ -273,6 +284,35 @@ def _handle_login(args: argparse.Namespace) -> int:
             f"Keyring unavailable; token saved to {fallback} (read/write permissions only)."
         )
     return 0
+
+
+def _handle_help(args: argparse.Namespace) -> int:
+    parser = build_parser()
+    if not args.topic:
+        parser.print_help()
+        return 0
+    subparser = _lookup_subparser(parser, args.topic)
+    if subparser is None:
+        print(f"Unknown help topic: {args.topic}", file=sys.stderr)
+        return 1
+    subparser.print_help()
+    return 0
+
+
+def _lookup_subparser(
+    parser: argparse.ArgumentParser, name: str
+) -> argparse.ArgumentParser | None:
+    subparsers_action = next(
+        (
+            action
+            for action in parser._actions
+            if isinstance(action, argparse._SubParsersAction)
+        ),
+        None,
+    )
+    if subparsers_action is None:
+        return None
+    return subparsers_action.choices.get(name)
 
 
 def _filter_logs(
