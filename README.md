@@ -102,4 +102,4 @@ pre-commit run --all-files
 
 ## License
 
-TBD
+MIT. See `LICENSE`.
