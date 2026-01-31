@@ -5,6 +5,7 @@ import io
 import os
 import subprocess
 import sys
+from pathlib import Path
 from typing import Sequence
 
 import pytest
@@ -33,16 +34,21 @@ def test_build_parser_includes_commands(command: Sequence[str], label: str) -> N
     assert parsed.command == label
 
 
-def test_start_command_invokes_headless_runner(monkeypatch: pytest.MonkeyPatch) -> None:
-    called: dict[str, str | None] = {}
+def test_start_command_uses_background_spawn(monkeypatch: pytest.MonkeyPatch) -> None:
+    called: dict[str, bool] = {"headless": False}
 
     async def fake_headless_session(initial_message: str | None = None) -> None:
-        called["initial_message"] = initial_message
+        called["headless"] = True
+
+    class DummyProcess:
+        def __init__(self, cmd: Sequence[str], **kwargs: Any) -> None:
+            self.pid = 1
 
     monkeypatch.setattr(cyberagent, "run_headless_session", fake_headless_session)
+    monkeypatch.setattr(subprocess, "Popen", DummyProcess)
     exit_code = cyberagent.main(["start", "--message", "ready"])
     assert exit_code == 0
-    assert called["initial_message"] == "ready"
+    assert called["headless"] is False
 
 
 def test_status_command_delegates_to_status_main(
@@ -229,3 +235,33 @@ def test_python_module_start_uses_stub(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert result.returncode == 0
     assert "Runtime start stubbed" in result.stdout
+
+
+def test_start_spawns_serve_process(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    recorded: dict[str, Sequence[str]] = {}
+
+    class DummyProcess:
+        def __init__(
+            self,
+            cmd: Sequence[str],
+            *,
+            env: dict[str, str],
+            stdout,
+            stderr,
+            close_fds: bool,
+        ):
+            recorded["cmd"] = cmd
+            recorded["env"] = env
+            self.pid = 4242
+
+    monkeypatch.setenv("CYBERAGENT_TEST_NO_RUNTIME", "")
+    monkeypatch.setattr(subprocess, "Popen", DummyProcess)
+    target_pid = tmp_path / "serve.pid"
+    monkeypatch.setattr(cyberagent, "RUNTIME_PID_FILE", target_pid)
+    exit_code = cyberagent.main(["start"])
+    assert exit_code == 0
+    assert recorded["cmd"][0] == sys.executable
+    assert recorded["cmd"][3] == cyberagent.SERVE_COMMAND
+    assert target_pid.read_text(encoding="utf-8") == "4242"

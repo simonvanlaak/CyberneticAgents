@@ -5,6 +5,7 @@ import asyncio
 import getpass
 import json
 import os
+import subprocess
 import sys
 import time
 from dataclasses import dataclass
@@ -42,6 +43,9 @@ from src.runtime import get_runtime, stop_runtime
 KEYRING_SERVICE = "cyberagent-cli"
 SYSTEM4_AGENT_ID = AgentId(type="System4", key="root")
 LOGS_DIR = Path("logs")
+RUNTIME_PID_FILE = Path("logs/cyberagent.pid")
+SERVE_COMMAND = "serve"
+TEST_START_ENV = "CYBERAGENT_TEST_NO_RUNTIME"
 TEST_START_ENV = "CYBERAGENT_TEST_NO_RUNTIME"
 
 
@@ -134,6 +138,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="Specific command to show details for.",
     )
 
+    serve_parser = subparsers.add_parser(SERVE_COMMAND, help=argparse.SUPPRESS)
+    serve_parser.add_argument(
+        "--message",
+        "-m",
+        type=str,
+        default=None,
+        help=argparse.SUPPRESS,
+    )
+
     return parser
 
 
@@ -159,7 +172,20 @@ async def _handle_start(args: argparse.Namespace) -> int:
     if os.environ.get(TEST_START_ENV) == "1":
         print("Runtime start stubbed (test mode).")
         return 0
-    await run_headless_session(initial_message=args.message)
+    cmd = [sys.executable, "-m", "src.cli.cyberagent", SERVE_COMMAND]
+    if args.message:
+        cmd.extend(["--message", args.message])
+    env = os.environ.copy()
+    proc = subprocess.Popen(
+        cmd,
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.STDOUT,
+        close_fds=True,
+    )
+    RUNTIME_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+    RUNTIME_PID_FILE.write_text(str(proc.pid), encoding="utf-8")
+    print(f"Runtime starting in background (pid {proc.pid}).")
     return 0
 
 
@@ -294,6 +320,11 @@ def _handle_login(args: argparse.Namespace) -> int:
     return 0
 
 
+async def _handle_serve(args: argparse.Namespace) -> int:
+    await run_headless_session(initial_message=args.message)
+    return 0
+
+
 def _handle_help(args: argparse.Namespace) -> int:
     parser = build_parser()
     if not args.topic:
@@ -390,6 +421,7 @@ _HANDLERS = {
     "logs": _handle_logs,
     "config": _handle_config,
     "login": _handle_login,
+    SERVE_COMMAND: _handle_serve,
 }
 
 
