@@ -39,6 +39,7 @@ from src.models.team import Team
 from src.rbac.enforcer import get_enforcer
 from src.registry import register_systems
 from src.runtime import get_runtime, stop_runtime
+from src.team_state import get_or_create_last_team_id, write_last_team_id
 
 KEYRING_SERVICE = "cyberagent-cli"
 SYSTEM4_AGENT_ID = AgentId(type="System4", key="root")
@@ -172,10 +173,13 @@ async def _handle_start(args: argparse.Namespace) -> int:
     if os.environ.get(TEST_START_ENV) == "1":
         print("Runtime start stubbed (test mode).")
         return 0
+    init_db()
+    team_id = get_or_create_last_team_id()
     cmd = [sys.executable, "-m", "src.cli.cyberagent", SERVE_COMMAND]
     if args.message:
         cmd.extend(["--message", args.message])
     env = os.environ.copy()
+    env["CYBERAGENT_ACTIVE_TEAM_ID"] = str(team_id)
     proc = subprocess.Popen(
         cmd,
         env=env,
@@ -321,6 +325,13 @@ def _handle_login(args: argparse.Namespace) -> int:
 
 
 async def _handle_serve(args: argparse.Namespace) -> int:
+    team_id = os.environ.get("CYBERAGENT_ACTIVE_TEAM_ID")
+    if team_id:
+        try:
+            write_last_team_id(int(team_id))
+            print(f"Starting headless runtime for team {team_id}.")
+        except ValueError:
+            print(f"Invalid team id '{team_id}' configured.", file=sys.stderr)
     await run_headless_session(initial_message=args.message)
     return 0
 

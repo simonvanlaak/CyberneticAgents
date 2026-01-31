@@ -258,10 +258,13 @@ def test_start_spawns_serve_process(
 
     monkeypatch.setenv("CYBERAGENT_TEST_NO_RUNTIME", "")
     monkeypatch.setattr(subprocess, "Popen", DummyProcess)
+    monkeypatch.setattr(cyberagent, "get_or_create_last_team_id", lambda: 7)
+    monkeypatch.setattr(cyberagent, "init_db", lambda: None)
     target_pid = tmp_path / "serve.pid"
     monkeypatch.setattr(cyberagent, "RUNTIME_PID_FILE", target_pid)
     exit_code = cyberagent.main(["start"])
     assert exit_code == 0
     assert recorded["cmd"][0] == sys.executable
     assert recorded["cmd"][3] == cyberagent.SERVE_COMMAND
+    assert recorded["env"]["CYBERAGENT_ACTIVE_TEAM_ID"] == "7"
     assert target_pid.read_text(encoding="utf-8") == "4242"
