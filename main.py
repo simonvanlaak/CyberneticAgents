@@ -18,6 +18,7 @@ from src.agents.messages import UserMessage
 from src.agents.user_agent import UserAgent
 from src.cli_session import forward_user_messages, read_stdin_loop
 from src.init_db import init_db
+from src.logging_utils import configure_autogen_logging
 from src.rbac.enforcer import get_enforcer
 from src.registry import register_systems
 from src.runtime import get_runtime, stop_runtime
@@ -59,6 +60,7 @@ async def main() -> None:
     os.makedirs(logs_dir, exist_ok=True)
     log_filename = time.strftime("chat_%Y%m%d_%H%M%S.log")
     set_log_file(os.path.join(logs_dir, log_filename))
+    configure_autogen_logging(logs_dir)
 
     runtime = get_runtime()
     recipient = AgentId(type=UserAgent.__name__, key="root")
@@ -84,4 +86,8 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == "status":
+        from src.cli.status import main as status_main
+
+        raise SystemExit(status_main(sys.argv[2:]))
     asyncio.run(main())
