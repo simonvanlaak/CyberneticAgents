@@ -1,0 +1,12 @@
+autogen-agentchat==0.7.5
+autogen-core==0.7.5
+autogen-ext==0.7.5
+casbin==1.43.0
+casbin_sqlalchemy_adapter==1.4.0
+SQLAlchemy==2.0.45
+opentelemetry-sdk
+opentelemetry-exporter-otlp-proto-http
+opentelemetry-instrumentation-openai
+traceloop-sdk
+mermaid-py
+textual==0.62.0

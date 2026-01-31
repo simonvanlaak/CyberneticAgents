@@ -1,0 +1,84 @@
+import json
+from typing import List
+
+from autogen_core import AgentId
+from sqlalchemy import ForeignKey, Integer, String, and_
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+
+from src.db_utils import get_db
+from src.enums import SystemType
+from src.init_db import Base
+
+
+class System(Base):
+    __tablename__ = "systems"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    team_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("teams.id"), nullable=False
+    )
+    name: Mapped[int] = mapped_column(String(255), nullable=False)
+    type: Mapped[SystemType] = mapped_column(SystemType, nullable=False)
+    agent_id_str: Mapped[str] = mapped_column(
+        String(100), nullable=False
+    )  # AgentId as string
+
+    # Relationships
+    team = relationship("Team", back_populates="systems")
+    policies = relationship("Policy", back_populates="system")
+
+    def get_agent_id(self) -> AgentId:
+        return AgentId.from_str(self.agent_id_str)
+
+    def to_prompt(self) -> List[str]:
+        return [json.dumps(self.dict(), indent=4)]
+
+    def update(self):
+        db = next(get_db())
+        db.commit()
+
+
+def get_system(system_id: int) -> System:
+    """Get system by ID from database"""
+    db = next(get_db())
+    try:
+        return db.query(System).filter(System.id == system_id).first()
+    finally:
+        db.close()
+
+
+def get_system_by_type(team_id: int, system_type: int) -> System:
+    if system_type == SystemType.OPERATION:
+        raise ValueError(
+            f"There can be multipel OPERATION Systems in a team. Use {get_systems_by_type.__name__}."
+        )
+    systems = get_systems_by_type(team_id, system_type)
+    if len(systems) > 1:
+        raise ValueError(
+            f"There are multiple {system_type} systems found in this team. It's supposed to only be one."
+        )
+    if len(systems) == 0:
+        raise ValueError(
+            f"No system found for type {system_type} in team {team_id}."
+        )
+    return systems[0]
+
+
+def get_systems_by_type(team_id: int, system_type: int) -> List[System]:
+    db = next(get_db())
+    try:
+        return (
+            db.query(System)
+            .filter(and_(System.team_id == team_id, System.type == system_type))
+            .all()
+        )
+    finally:
+        db.close()
+
+
+def get_system_from_agent_id(agent_id_str: str) -> System:
+    db = next(get_db())
+    try:
+        return db.query(System).filter(System.agent_id_str == agent_id_str).first()
+    finally:
+        db.close()

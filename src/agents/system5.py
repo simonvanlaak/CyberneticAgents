@@ -1,0 +1,274 @@
+from autogen_core import MessageContext, message_handler
+
+from src.agents.messages import (
+    CapabilityGapMessage,
+    ConfirmationMessage,
+    PolicySuggestionMessage,
+    PolicyVagueMessage,
+    PolicyViolationMessage,
+    ResearchReviewMessage,
+    StrategyReviewMessage,
+)
+from src.agents.system_base import SystemBase
+from src.models.policy import get_policy
+from src.models.strategy import get_strategy
+from src.models.task import get_task
+
+
+class System5(SystemBase):
+    def __init__(self, name: str, trace_context: dict | None = None):
+        super().__init__(
+            name,
+            identity_prompt="""
+            You are the Policy and Identity system responsible for maintaining the organization's identity,
+            making policy decisions, and ensuring overall system viability. You balance the immediate operational
+            needs (System 3) with long-term strategic requirements (System 4) to maintain organizational cohesion.
+            Your decisions shape the future of the organization while preserving its core identity and values.
+            """,
+            responsibility_prompts=[
+                "1. Policy Management: Create, update, and enforce organizational policies that govern all system operations.",
+                "2. Conflict Resolution: Resolve conflicts between System 3 (operations) and System 4 (strategy) to maintain harmony.",
+                "3. Resource Allocation: Make strategic decisions on resource distribution across all systems based on organizational priorities.",
+                "4. System Evolution: Evaluate and approve changes to system structure, capabilities, and organizational design.",
+                "5. Identity Maintenance: Ensure the system maintains its core identity, purpose, and values across all operations and evolution.",
+            ],
+            trace_context=trace_context,
+        )
+        # System5 should have NO tools to avoid structured output conflicts
+        # Remove the capability_gap_tool that SystemBase automatically adds
+        self.tools = []
+
+    @message_handler
+    async def handle_capability_gap_message(
+        self, message: CapabilityGapMessage, context: MessageContext
+    ) -> ConfirmationMessage:
+        """
+        Handle capability gaps identified by System3 or System4.
+
+        Analyzes the capability gap, determines if existing tools can address it,
+        and decides whether to request research from System4 or approve system evolution.
+        """
+        message_specific_prompts = [
+            "## CAPABILITY GAP ANALYSIS",
+            "You have received a capability gap report from a system that cannot complete its assigned task.",
+            "## ANALYSIS REQUIREMENTS",
+            "1. Assess the nature and severity of the capability gap.",
+            "2. Determine if existing tools or policies can address this gap.",
+            "3. If no existing solutions are available, consider:",
+            "   - Requesting research from System4 using ResearchRequestMessage",
+            "   - Approving system evolution to add new capabilities",
+            "   - Modifying existing policies to accommodate the requirement",
+            "4. Make a decision that balances immediate operational needs with long-term viability.",
+            "## RESPONSE FORMAT",
+            "Respond with a ConfirmationMessage indicating your decision and any actions taken.",
+        ]
+
+        raise NotImplementedError(
+            "Missing policy modification tools & permission tools here."
+        )
+
+        response = await self.run(
+            [message],
+            context,
+            message_specific_prompts,
+            output_content_type=ConfirmationMessage,
+        )
+
+        return self._get_structured_message(response, ConfirmationMessage)
+
+    @message_handler
+    async def handle_policy_violation_message(
+        self, message: PolicyViolationMessage, context: MessageContext
+    ) -> ConfirmationMessage:
+        """
+        Handle policy violations reported by System3.
+
+        Reviews the violation details and determines appropriate action,
+        which may include policy clarification, system modification, or other corrective measures.
+        """
+        message_specific_prompts = [
+            "## POLICY VIOLATION REVIEW",
+            "System3 has reported a policy violation that requires your attention.",
+            "## REVIEW REQUIREMENTS",
+            "1. Examine the details of the policy violation.",
+            "2. Determine if this is a genuine violation or a policy interpretation issue.",
+            "3. If it's a genuine violation, decide on appropriate corrective action:",
+            "   - Policy clarification and re-education",
+            "   - System modification to prevent recurrence",
+            "   - Disciplinary action if intentional",
+            "4. If it's an interpretation issue, provide clarification to System3.",
+            "5. Document your decision and any actions taken.",
+            "## RESPONSE FORMAT",
+            "Respond with a ConfirmationMessage detailing your decision and resolution.",
+        ]
+
+        raise NotImplementedError("Missing policy modification tools here.")
+
+        response = await self.run(
+            [message],
+            context,
+            message_specific_prompts,
+            output_content_type=ConfirmationMessage,
+        )
+
+        return self._get_structured_message(response, ConfirmationMessage)
+
+    @message_handler
+    async def handle_policy_vague_message(
+        self, message: PolicyVagueMessage, context: MessageContext
+    ) -> ConfirmationMessage:
+        """
+        Clarify ambiguous policies for System3.
+
+        Analyzes the ambiguous policy and provides clarification or updates the policy
+        to resolve the ambiguity, then communicates the resolution back to System3.
+        """
+        task = get_task(message.task_id)
+        policy = get_policy(message.policy_id)
+        message_specific_prompts = [
+            "## POLICY CLARIFICATION REQUEST",
+            "System3 has requested clarification on a policy that is unclear or ambiguous.",
+            "## DETAILS",
+            *task.to_prompt(),
+            *policy.to_prompt(),
+            "## CLARIFICATION REQUIREMENTS",
+            "1. Review the policy in question and identify sources of ambiguity.",
+            "2. Determine if the policy needs:",
+            "   - Simple clarification and explanation",
+            "   - Complete rewrite for better clarity",
+            "   - Additional examples or guidelines",
+            "3. If clarification is sufficient, provide clear guidance to System3.",
+            "4. If rewrite is needed, use the update_policy_tool to modify the policy.",
+            "5. Ensure the clarified policy maintains organizational intent and values.",
+            "## RESPONSE FORMAT",
+            "Respond with a ConfirmationMessage containing the clarification or policy update.",
+        ]
+
+        response = await self.run(
+            [message],
+            context,
+            message_specific_prompts,
+            output_content_type=ConfirmationMessage,
+        )
+
+        return self._get_structured_message(response, ConfirmationMessage)
+
+    @message_handler
+    async def handle_policy_suggestion_message(
+        self, message: PolicySuggestionMessage, context: MessageContext
+    ) -> ConfirmationMessage:
+        """
+        Review and approve/reject policy change suggestions from System3 or System4.
+
+        Carefully evaluates the reasoning behind policy change suggestions and
+        makes decisions that balance innovation with organizational stability.
+        """
+        policy_prompt = []
+        if message.policy_id:
+            policy_prompt = get_policy(message.policy_id).to_prompt()
+        message_specific_prompts = [
+            "## POLICY SUGGESTION REVIEW",
+            "You have received a policy change suggestion from another system.",
+            "## SUGGESTION DETAILS",
+            *policy_prompt,
+            f"Content: {message.content}",
+            "## EVALUATION REQUIREMENTS",
+            "1. Carefully review the suggested policy change.",
+            "2. Assess the reasoning and justification provided.",
+            "3. Evaluate the potential impact on:",
+            "   - Organizational identity and core values",
+            "   - Operational efficiency and effectiveness",
+            "   - Compliance and risk management",
+            "   - Long-term strategic goals",
+            "4. Consider alternatives or modifications to the suggestion.",
+            "5. Make a decision to approve, reject, or modify the suggestion.",
+            "## RESPONSE FORMAT",
+            "Respond with a ConfirmationMessage indicating your decision and rationale.",
+        ]
+
+        response = await self.run(
+            [message],
+            context,
+            message_specific_prompts,
+            output_content_type=ConfirmationMessage,
+        )
+
+        return self._get_structured_message(response, ConfirmationMessage)
+
+    @message_handler
+    async def handle_strategy_review_message(
+        self, message: StrategyReviewMessage, context: MessageContext
+    ) -> ConfirmationMessage:
+        """
+        Review strategies from System4.
+
+        Evaluates strategy alignment with organizational identity and makes
+        decisions to approve, reject, or request modifications to strategies.
+        """
+        strategy = get_strategy(message.strategy_id)
+        message_specific_prompts = [
+            "## STRATEGY REVIEW",
+            "System4 has submitted a strategy for your review and approval.",
+            "## STRATEGY DETAILS",
+            *strategy.to_prompt(),
+            "### INITIATIVES",
+            *[initiative.to_prompt() for initiative in strategy.get_initiatives()],
+            "## EVALUATION REQUIREMENTS",
+            "1. Examine the strategy in detail.",
+            "2. Assess alignment with organizational identity and core values.",
+            "3. Evaluate feasibility and resource requirements.",
+            "4. Consider long-term impact on organizational viability.",
+            "5. Determine if the strategy:",
+            "   - Should be approved as-is",
+            "   - Needs modifications before approval",
+            "   - Should be rejected with reasoning",
+            "## RESPONSE FORMAT",
+            "Respond with a ConfirmationMessage containing your decision and feedback.",
+        ]
+
+        response = await self.run(
+            [message],
+            context,
+            message_specific_prompts,
+            output_content_type=ConfirmationMessage,
+        )
+
+        return self._get_structured_message(response, ConfirmationMessage)
+
+    @message_handler
+    async def handle_research_review_message(
+        self, message: ResearchReviewMessage, context: MessageContext
+    ) -> ConfirmationMessage:
+        """
+        Review research results from System4.
+
+        Evaluates research findings and determines if new policies or system
+        changes are needed based on the research outcomes.
+        """
+        message_specific_prompts = [
+            "## RESEARCH REVIEW",
+            "System4 has completed research and submitted findings for your review.",
+            "## RESEARCH DETAILS",
+            f"Content: {message.content}",
+            "## EVALUATION REQUIREMENTS",
+            "1. Review the research findings thoroughly.",
+            "2. Assess the quality and reliability of the research.",
+            "3. Determine if the findings suggest:",
+            "   - New policies are needed",
+            "   - Existing policies should be updated",
+            "   - System capabilities need enhancement",
+            "   - Strategic direction should change",
+            "4. Consider the impact on organizational identity and viability.",
+            "5. Make decisions on what actions to take based on the research.",
+            "## RESPONSE FORMAT",
+            "Respond with a ConfirmationMessage detailing your decisions and next steps.",
+        ]
+
+        response = await self.run(
+            [message],
+            context,
+            message_specific_prompts,
+            output_content_type=ConfirmationMessage,
+        )
+
+        return self._get_structured_message(response, ConfirmationMessage)
