@@ -109,3 +109,6 @@ I think this is mainly due to the limitation of the current TUI that I'm using. 
 
 ## 2026-01-31
 Added CLI initial message support and headless mode for faster testing. Split user-contact into two tools (inform vs ask) and improved metadata handling so user updates and questions are correctly routed to the UI. Implemented persistent per-run chat logs under `logs/` and filtered out internal debug lines. Improved TUI presentation: "Latest update” panel, and combined updates/questions in the same area. Fixed System4 strategy creation flow and database persistence issues by adding missing `add()` methods, default purpose creation, and safe DB flush/commit. Added fallback assignment to System3 when initiative selection fails to ensure execution proceeds. Added targeted tests across UI state, tools, System4 strategy flow, and model persistence.
+
+## 2026-01-31
+Initial open-source posting of the project repository.
