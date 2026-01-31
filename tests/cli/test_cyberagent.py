@@ -192,6 +192,13 @@ def test_help_lists_commands() -> None:
         assert command in help_text
 
 
+def test_no_args_prints_help(capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = cyberagent.main([])
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "usage" in captured.out.lower()
+
+
 def test_help_command_prints_general(capsys: pytest.CaptureFixture[str]) -> None:
     exit_code = cyberagent.main(["help"])
     captured = capsys.readouterr()

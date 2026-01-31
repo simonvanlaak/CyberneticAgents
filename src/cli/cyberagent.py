@@ -138,7 +138,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args(argv or sys.argv[1:])
+    args_list = list(argv) if argv is not None else list(sys.argv[1:])
+    if not args_list:
+        parser.print_help()
+        return 0
+    args = parser.parse_args(args_list)
     if args.command == "help":
         return _handle_help(args)
     handler = _HANDLERS.get(args.command)
@@ -313,6 +317,10 @@ def _lookup_subparser(
     if subparsers_action is None:
         return None
     return subparsers_action.choices.get(name)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
 
 
 def _filter_logs(
