@@ -29,8 +29,10 @@ def test_set_log_file_appends_messages(tmp_path):
     add_user_notice(sender="System4", content="Update")
 
     data = log_path.read_text(encoding="utf-8")
-    assert "MESSAGE [User] Hello" in data
-    assert "NOTICE [System4] Update" in data
+    assert "MESSAGE [User] (is_user=True" in data
+    assert "NOTICE [System4] (is_user=False" in data
+    assert "Hello" in data
+    assert "Update" in data
 
 
 def test_internal_messages_are_not_logged(tmp_path):

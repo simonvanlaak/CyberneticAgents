@@ -77,9 +77,15 @@ def _append_log_line(message: UiMessage, is_notice: bool) -> None:
         return
     if message.content.startswith("..."):
         return
-    timestamp = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime(message.timestamp))
+    timestamp_struct = time.localtime(message.timestamp)
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S", timestamp_struct)
+    milliseconds = int((message.timestamp - int(message.timestamp)) * 1000)
     prefix = "NOTICE" if is_notice else "MESSAGE"
-    line = f"[{timestamp}] {prefix} [{message.sender}] {message.content}\n"
+    line = (
+        f"[{timestamp}.{milliseconds:03d}] {prefix} [{message.sender}] "
+        f"(is_user={message.is_user} len={len(message.content)} ts={message.timestamp:.6f}) "
+        f"{message.content}\n"
+    )
     try:
         with open(_log_file_path, "a", encoding="utf-8") as handle:
             handle.write(line)
