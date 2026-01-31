@@ -112,3 +112,4 @@ Added CLI initial message support and headless mode for faster testing. Split us
 
 ## 2026-01-31
 Initial open-source posting of the project repository.
+To prevent a lot of back and forth when testing I changed the initial test prompt to "I need product discovery research that evaluates how the technology of Multi Agent Systems could be turned into a product and what potential customers exist there. I don't have a specific industry in mind yet. I have 1 month time and a budget of 200 Euros. I have a working technical prototype. Don't ask me more questions, but start creating & implementing a strategy.".

@@ -184,7 +184,9 @@ class SystemBase(RoutedAgent):
         for message in task_result.messages:
             if isinstance(message, ToolCallRequestEvent):
                 for func_call in message.content:
-                    log_line = f"...[{self.agent_id.__str__()}] use tool {func_call.name}"
+                    log_line = (
+                        f"...[{self.agent_id.__str__()}] use tool {func_call.name}"
+                    )
                     print(log_line)
                     add_message(
                         sender=str(self.agent_id),
@@ -330,9 +332,7 @@ class SystemBase(RoutedAgent):
             summary = message.content.replace("\n", " ")
             if len(summary) > 200:
                 summary = f"{summary[:200]}..."
-            detail_line = (
-                f"...[{self.id.__str__()}] message content: {summary}"
-            )
+            detail_line = f"...[{self.id.__str__()}] message content: {summary}"
             print(detail_line)
             add_message(
                 sender=str(self.id),
@@ -380,16 +380,29 @@ class SystemBase(RoutedAgent):
         """Extract structured response with proper error handling."""
         if not result.messages:
             raise ValueError("No chat message received")
-        if not isinstance(result.messages, StructuredMessage):
-            raise ValueError(f"Expected StructuredMessage, got {type(result.messages)}")
-        if not isinstance(result.messages.content, expected_type):
-            try:
-                # Try to parse as JSON if it's a string
-                if isinstance(result.messages.content, str):
-                    return expected_type.model_validate_json(result.messages.content)
-                raise ValueError(
-                    f"Expected {expected_type.__name__}, got {type(result.messages.content)}"
-                )
-            except Exception as e:
-                raise ValueError(f"Failed to parse response: {str(e)}")
-        return result.messages.content
+
+        structured_message = None
+        for message in reversed(result.messages):
+            if isinstance(message, StructuredMessage):
+                structured_message = message
+                break
+
+        if structured_message is None:
+            last_message = self._get_last_message(result)
+            if isinstance(last_message.content, str):
+                try:
+                    return expected_type.model_validate_json(last_message.content)
+                except Exception as e:
+                    raise ValueError(f"Failed to parse response: {str(e)}")
+            raise ValueError("No StructuredMessage found in task result")
+
+        if isinstance(structured_message.content, expected_type):
+            return structured_message.content
+        try:
+            if isinstance(structured_message.content, str):
+                return expected_type.model_validate_json(structured_message.content)
+            raise ValueError(
+                f"Expected {expected_type.__name__}, got {type(structured_message.content)}"
+            )
+        except Exception as e:
+            raise ValueError(f"Failed to parse response: {str(e)}")

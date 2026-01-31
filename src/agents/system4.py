@@ -103,9 +103,13 @@ class System4(SystemBase):
                 ),
             ]
         )
-        if not any(tool.name == ContactUserTool.__name__ for tool in self.available_tools):
+        if not any(
+            tool.name == ContactUserTool.__name__ for tool in self.available_tools
+        ):
             self.available_tools.append(ContactUserTool(self.agent_id))
-        if not any(tool.name == InformUserTool.__name__ for tool in self.available_tools):
+        if not any(
+            tool.name == InformUserTool.__name__ for tool in self.available_tools
+        ):
             self.available_tools.append(InformUserTool(self.agent_id))
         self.tools = self.available_tools
 
@@ -347,7 +351,7 @@ class System4(SystemBase):
 
     async def create_strategy_tool(self, content: str) -> Tuple[bool, Exception | None]:
         try:
-            await self._publish_message_to_agent(
+            await self.send_message(
                 StrategyRequestMessage(source=self.name, content=content), self.id
             )
             return (True, None)
@@ -358,7 +362,7 @@ class System4(SystemBase):
         self, initiative_id: int, content: str
     ) -> Tuple[bool, Exception | None]:
         try:
-            await self._publish_message_to_agent(
+            await self.send_message(
                 InitiativeReviewMessage(
                     source=self.name, content=content, initiative_id=initiative_id
                 ),
