@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import io
+import os
+import subprocess
 import sys
 from typing import Sequence
 
@@ -212,3 +214,18 @@ def test_help_command_prints_start(capsys: pytest.CaptureFixture[str]) -> None:
     captured = capsys.readouterr()
     assert exit_code == 0
     assert "Boot the VSM runtime." in captured.out
+
+
+def test_python_module_start_uses_stub(monkeypatch: pytest.MonkeyPatch) -> None:
+    env = os.environ.copy()
+    env["CYBERAGENT_TEST_NO_RUNTIME"] = "1"
+    result = subprocess.run(
+        [sys.executable, "-m", "src.cli.cyberagent", "start"],
+        check=False,
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=5,
+    )
+    assert result.returncode == 0
+    assert "Runtime start stubbed" in result.stdout

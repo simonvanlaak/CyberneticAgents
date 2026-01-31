@@ -42,6 +42,7 @@ from src.runtime import get_runtime, stop_runtime
 KEYRING_SERVICE = "cyberagent-cli"
 SYSTEM4_AGENT_ID = AgentId(type="System4", key="root")
 LOGS_DIR = Path("logs")
+TEST_START_ENV = "CYBERAGENT_TEST_NO_RUNTIME"
 
 
 @dataclass(frozen=True)
@@ -155,6 +156,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 
 async def _handle_start(args: argparse.Namespace) -> int:
+    if os.environ.get(TEST_START_ENV) == "1":
+        print("Runtime start stubbed (test mode).")
+        return 0
     await run_headless_session(initial_message=args.message)
     return 0
 
@@ -319,10 +323,6 @@ def _lookup_subparser(
     return subparsers_action.choices.get(name)
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
-
-
 def _filter_logs(
     lines: Sequence[str], pattern: str | None, limit: int
 ) -> Sequence[str]:
@@ -391,3 +391,7 @@ _HANDLERS = {
     "config": _handle_config,
     "login": _handle_login,
 }
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
