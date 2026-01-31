@@ -1,70 +1,75 @@
 # Agent CLI Interaction Requirements for CyberneticAgents
 
-## Overview
-The CyberneticAgents platform should expose a robust command‑line interface (CLI) that allows users and automated agents to interact programmatically with the system. This document outlines the functional and non‑functional requirements for the CLI.
+## Purpose
+The CLI is intended to make **agentic engineering of the Viable System Model (VSM)** as simple and transparent as possible. It should provide a thin, user‑focused interface that delegates all system‑level actions (entity creation, policy management, direct agent control) to the VSM itself. The CLI only **suggests** actions to the VSM (system4) and reports on system activity.
 
-## Functional Requirements
+## Core Functional Requirements
 
-1. **Authentication & Authorization**
-   - Support login via API token, OAuth2, or 1Password CLI integration.
-   - Allow role‑based access control (admin, user, read‑only).
-   - Provide a `logout` command to revoke local credentials.
+1. **Start / Stop the VSM**
+   - `cyberagent start` – Boot the VSM runtime.
+   - `cyberagent stop` – Gracefully shut down the VSM.
+   - `cyberagent status` – Show current state (running, stopped, errors) **and** display the VSM’s purpose, strategy, current initiative, and top‑level task summary.
 
-2. **Core Commands**
-   - `ca agents list` – List all registered agents with status, version, and tags.
-   - `ca agents show <agent-id>` – Detailed view of a single agent.
-   - `ca agents start <agent-id>` / `stop` – Control agent lifecycle.
-   - `ca agents logs <agent-id> [--follow]` – Retrieve recent logs, optional live tail.
-   - `ca agents config get/set <agent-id> <key> [value]` – Inspect or modify configuration.
-   - `ca agents exec <agent-id> -- <command>` – Run arbitrary commands inside an agent’s container.
-   - `ca jobs submit <definition.yaml>` – Submit a job definition for execution.
-   - `ca jobs status <job-id>` – Query job progress and results.
-   - `ca tasks schedule <cron|every|at> <payload>` – Create scheduled tasks.
-   - `ca tasks list` – List scheduled tasks.
-   - `ca tasks delete <task-id>` – Remove a scheduled task.
 
-3. **Output Formats**
-   - JSON (`--json`) for machine consumption.
-   - Human‑readable tables (`--table`) as default.
-   - Optional YAML (`--yaml`).
+2. **Messaging with system4**
+   - `cyberagent suggest <json|yaml>` – Send a suggestion payload to system4. The payload describes a desired change (e.g., create an agent, modify a policy) but **does not execute it directly**.
+   - `cyberagent inbox` – Pull pending messages addressed to the CLI user from system4. This is a pull‑based command; no background notification service is required.
+   - `cyberagent watch` – Continuously poll `inbox` and stream new messages until interrupted (useful for live monitoring during development).
 
-4. **Error Handling**
-   - Consistent exit codes (0 success, 1 auth error, 2 validation, 3 execution failure, …).
-   - Human‑friendly error messages with `--verbose` for stack traces.
+3. **Observability / Logging**
+   - `cyberagent logs` – Show a chronological view of all inter‑agent messages processed by the VSM, with timestamps, source, destination, and payload details.
+   - `cyberagent logs --filter <criteria>` – Filter logs by agent, message type, or time range.
+   - `cyberagent logs --follow` – Tail logs in real time, similar to `tail -f`.
 
-5. **Scripting & Automation**
-   - Provide a `--quiet` flag to suppress non‑essential output.
-   - Allow chaining with standard shell pipelines.
-   - Support environment variable interpolation for tokens and config values.
+4. **Configuration (Read‑Only)**
+   - `cyberagent config view` – Display the current VSM configuration of systems (read‑only). Editing is prohibited; changes must be proposed via `cyberagent suggest`.
+
+5. **Output Formats**
+   - Default human‑readable tables.
+   - `--json` for machine‑friendly consumption.
+   - `--yaml` optional for compatibility with existing VSM specs.
 
 ## Non‑Functional Requirements
 
-- **Security**: All communication over HTTPS; secrets never written to stdout unless explicitly requested.
-- **Performance**: Typical command latency < 500 ms for read‑only ops, < 2 s for actions that involve container orchestration.
+- **Security**: All CLI‑to‑VSM communication occurs over TLS. Authentication is performed once via `cyberagent login` (token stored securely in the OS keyring). No secrets are ever written to stdout.
+- **Performance**: Commands return within 300 ms for read‑only queries; start/stop operations may take up to a few seconds.
 - **Portability**: Works on Linux, macOS, and Windows (via WSL or native binary).
-- **Extensibility**: Plug‑in architecture so new sub‑commands can be added without modifying the core binary.
-- **Documentation**: Auto‑generated `--help` for each command and a markdown reference in the docs directory.
-- **Testing**: Unit tests covering > 90 % of command paths, integration tests against a local dev cluster.
+- **Simplicity**: Minimal set of commands focused on the workflow described above; no hidden side‑effects.
+- **Extensibility**: Plug‑in architecture allowing future commands that still respect the “suggest‑only” principle.
+- **Documentation**: Each command provides `--help`; a full markdown reference lives in this docs directory.
+- **Testing**: Unit tests cover > 90 % of command paths; integration tests verify end‑to‑end interaction with a local VSM instance.
 
 ## Example Usage
 ```bash
-# Authenticate using a 1Password secret
-ca login --token $(op read "op://MyVault/CyberneticAgents/token")
+# Start the VSM
+ca vsm start
 
-# List agents in JSON for a script
-ca agents list --json > agents.json
+# Propose creation of a new monitoring agent (system4 will decide)
+cat <<EOF | ca suggest --json
+{
+  "action": "create_agent",
+  "spec": {
+    "name": "monitor",
+    "type": "observer",
+    "config": {"interval": "5s"}
+  }
+}
+EOF
 
-# Restart a specific agent and follow its logs
-ca agents restart agent-42 && ca agents logs agent-42 --follow
+# Check for responses from system4
+cyberagent inbox
 
-# Schedule a daily health‑check task
-ca tasks schedule every --everyMs 86400000 --payload '{"kind":"systemEvent","text":"Health check"}'
+# Watch live messages while developing
+cyberagent watch
+
+# Inspect inter‑agent traffic logs
+cyberagent logs --follow
 ```
 
 ## Open Issues
-- Decide on default token storage (keyring vs config file).
-- Define schema for `definition.yaml` job specifications.
-- Evaluate integration with the existing OpenClaw `sessions_spawn` mechanism for on‑demand agent runs.
+- Define the exact schema for suggestion payloads accepted by system4.
+- Determine the polling interval for `cyberagent inbox` and `cyberagent watch` (configurable?).
+- Clarify how error handling and retry logic should be exposed to the CLI user.
 
 ---
-*Document created by OpenClaw assistant on 2026‑01‑31.*
+*Document updated by OpenClaw assistant on 2026‑01‑31.*

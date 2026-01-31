@@ -15,4 +15,6 @@ black==26.1.0
 langfuse
 python-dotenv
 tiktoken
+PyYAML>=6.0
+keyring>=24.0
 pytest-asyncio

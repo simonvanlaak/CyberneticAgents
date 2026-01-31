@@ -77,4 +77,8 @@ def get_runtime() -> SingleThreadedAgentRuntime:
 
 async def stop_runtime() -> None:
     """Stop the runtime gracefully."""
-    await get_runtime().stop_when_idle()
+    global _runtime
+    if _runtime is None:
+        return
+    await _runtime.stop_when_idle()
+    _runtime = None

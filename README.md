@@ -47,6 +47,12 @@ python main.py
 python main.py --headless "hello"
 ```
 
+## Headless CLI (experimental)
+
+- The Textual UI is disabled for now; use `cyberagent start` to boot the VSM in headless mode instead of the old UI entry point.
+- `cyberagent status` shows the active strategy/task hierarchy, while `cyberagent suggest` lets you pipe JSON/YAML payloads into System 4.
+- Observability helpers (`cyberagent logs`, `cyberagent inbox`, `cyberagent watch`) and the `cyberagent login` command (which stores a keyring-backed token) round out the current CLI surface.
+
 ## Project Structure (Current)
 
 ```
