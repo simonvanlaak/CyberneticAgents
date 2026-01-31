@@ -184,3 +184,4 @@ def create_system(system_id: str):
         raise ValueError(
             f"Failed to add role for user {system_id} in domain {system_namespace}"
         )
+    return system_id

@@ -1,3 +1,5 @@
+import uuid
+
 from src.db_utils import get_db
 from src.init_db import init_db
 from src.models.purpose import Purpose, get_or_create_default_purpose
@@ -5,7 +7,7 @@ from src.models.team import Team
 
 
 def _create_team_id() -> int:
-    team = Team(name=f"purpose_team_{id(object())}")
+    team = Team(name=f"purpose_team_{uuid.uuid4().hex}")
     db = next(get_db())
     db.add(team)
     db.commit()

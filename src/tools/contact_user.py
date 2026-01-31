@@ -72,7 +72,7 @@ class ContactUserTool(BaseTool):
         if answer is None:
             return FunctionExecutionResult(
                 content="No answer received yet.",
-                name=self.tool_name,
+                name=self.name,
                 call_id=call_id,
                 is_error=True,
             )
@@ -98,7 +98,9 @@ class ContactUserTool(BaseTool):
             if response_message is None:
                 response_content = "Message sent."
             else:
-                response_content = getattr(response_message, "content", str(response_message))
+                response_content = getattr(
+                    response_message, "content", str(response_message)
+                )
             return FunctionExecutionResult(
                 call_id=call_id,
                 content=response_content,

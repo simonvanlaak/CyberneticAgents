@@ -1,0 +1,7 @@
+[MASTER]
+persistent = no
+ignored-modules = chat_app,streamlit_ui
+
+[MESSAGES CONTROL]
+disable = C,R,W
+

@@ -8,6 +8,11 @@ opentelemetry-sdk
 opentelemetry-exporter-otlp-proto-http
 opentelemetry-instrumentation-openai
 traceloop-sdk
-mermaid-py
 textual==0.62.0
 pre-commit==4.5.1
+pylint==3.3.3
+black==26.1.0
+langfuse
+python-dotenv
+tiktoken
+pytest-asyncio

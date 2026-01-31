@@ -7,7 +7,12 @@ import pytest
 from autogen_core import AgentId, MessageContext
 
 from src.agents.messages import InitiativeAssignMessage
-from src.agents.system3 import System3, TasksAssignResponse, TasksCreateResponse
+from src.agents.system3 import (
+    System3,
+    TaskCreateResponse,
+    TasksAssignResponse,
+    TasksCreateResponse,
+)
 from src.models.initiative import Initiative
 from src.models.task import Task
 
@@ -35,30 +40,36 @@ class TestSystem3RefactoredImplementation:
             message_id="test_msg_1",
         )
 
+        class DummyInitiative:
+            def __init__(self, initiative_id: int, name: str, description: str):
+                self.id = initiative_id
+                self.name = name
+                self.description = description
+                self.status = ""
+                self.updated = False
+
+            def set_status(self, status):  # noqa: ANN001
+                self.status = str(status)
+
+            def update(self):
+                self.updated = True
+
         # Mock the database operations
         with (
             patch("src.models.initiative.get_initiative") as mock_get_initiative,
-            patch("src.models.initiative.Initiative.set_status") as mock_set_status,
-            patch("src.models.initiative.Initiative.update") as mock_update,
             patch("src.models.task.Task.add") as mock_task_add,
-            patch("src.agents.system3.System._get_systems_by_type") as mock_get_systems,
+            patch("src.models.task.Task.to_prompt", return_value=["{}"]),
+            patch.object(system3, "_get_systems_by_type") as mock_get_systems,
         ):
             # Create mock initiative
-            mock_initiative = MagicMock(spec=Initiative)
-            mock_initiative.id = 1
-            mock_initiative.name = "Test Initiative"
-            mock_initiative.description = "Test Description"
-            mock_initiative.__dict__ = {
-                "id": 1,
-                "name": "Test Initiative",
-                "description": "Test Description",
-            }
+            mock_initiative = DummyInitiative(1, "Test Initiative", "Test Description")
             mock_get_initiative.return_value = mock_initiative
 
-            # Mock systems
-            mock_systems = MagicMock()
-            mock_systems.__dict__ = {"systems": []}
-            mock_get_systems.return_value = mock_systems
+            class DummySystems:
+                def __init__(self):
+                    self.systems = []
+
+            mock_get_systems.return_value = DummySystems()
 
             # Mock the run method for both phases
             system3.run = AsyncMock()
@@ -68,16 +79,8 @@ class TestSystem3RefactoredImplementation:
             # Phase 1: Task creation (structured output)
             mock_tasks_response = TasksCreateResponse(
                 tasks=[
-                    type(
-                        "TaskCreateResponse",
-                        (),
-                        {"name": "Task 1", "content": "Do task 1"},
-                    )(),
-                    type(
-                        "TaskCreateResponse",
-                        (),
-                        {"name": "Task 2", "content": "Do task 2"},
-                    )(),
+                    TaskCreateResponse(name="Task 1", content="Do task 1"),
+                    TaskCreateResponse(name="Task 2", content="Do task 2"),
                 ]
             )
 
@@ -91,17 +94,18 @@ class TestSystem3RefactoredImplementation:
                 ),
                 inner_messages=[],
             )
-            system3._get_structured_message.return_value = mock_tasks_response
+            # Provide task creation response first, then assignment response.
+            mock_assign_response = TasksAssignResponse(
+                assignments=[(1, 101), (2, 102)]  # system_id, task_id pairs
+            )
+            system3._get_structured_message.side_effect = [
+                mock_tasks_response,
+                mock_assign_response,
+            ]
 
             # Phase 2: Tool decision phase
             # Simulate that the tool was NOT called (so we need structured assignment)
             system3._was_tool_called.return_value = False
-
-            # Mock the second run call (task assignment)
-            mock_assign_response = TasksAssignResponse(
-                assignments=[(1, 101), (2, 102)]  # system_id, task_id pairs
-            )
-            system3._get_structured_message.return_value = mock_assign_response
 
             # Mock assign_task method
             system3.assign_task = AsyncMock()
@@ -113,8 +117,8 @@ class TestSystem3RefactoredImplementation:
 
             # Phase 1 verification: Initiative was fetched and updated
             mock_get_initiative.assert_called_once_with(1)
-            mock_set_status.assert_called_once()
-            assert mock_update.call_count >= 1
+            assert mock_initiative.status
+            assert mock_initiative.updated is True
 
             # Phase 2 verification: Tasks were created
             assert system3.run.call_count >= 1
@@ -144,16 +148,39 @@ class TestSystem3RefactoredImplementation:
             message_id="test_msg_2",
         )
 
+        class DummyInitiative:
+            def __init__(self, initiative_id: int, name: str):
+                self.id = initiative_id
+                self.name = name
+                self.status = ""
+                self.updated = False
+
+            def set_status(self, status):  # noqa: ANN001
+                self.status = str(status)
+
+            def update(self):
+                self.updated = True
+
         # Mock the database operations
-        with patch("src.models.initiative.get_initiative") as mock_get_initiative:
+        with (
+            patch("src.models.initiative.get_initiative") as mock_get_initiative,
+            patch("src.models.task.Task.add") as mock_task_add,
+            patch("src.models.task.Task.to_prompt", return_value=["{}"]),
+            patch.object(system3, "_get_systems_by_type") as mock_get_systems,
+        ):
             # Create mock initiative
-            mock_initiative = MagicMock(spec=Initiative)
-            mock_initiative.id = 2
-            mock_initiative.__dict__ = {"id": 2, "name": "Test Initiative 2"}
+            mock_initiative = DummyInitiative(2, "Test Initiative 2")
             mock_get_initiative.return_value = mock_initiative
+
+            class DummySystems:
+                def __init__(self):
+                    self.systems = []
+
+            mock_get_systems.return_value = DummySystems()
 
             # Mock the run method
             system3.run = AsyncMock()
+            system3._get_structured_message = MagicMock()
             system3._was_tool_called = MagicMock()
 
             # Simulate that the tool WAS called
@@ -168,6 +195,11 @@ class TestSystem3RefactoredImplementation:
                     content="Tool called", source="System3/controller1"
                 ),
                 inner_messages=[],
+            )
+
+            # Provide minimal task creation response for phase 1.
+            system3._get_structured_message.return_value = TasksCreateResponse(
+                tasks=[TaskCreateResponse(name="Task 1", content="Do task 1")]
             )
 
             # Call the handler

@@ -89,7 +89,7 @@ class TestSystem3Integration:
 
 @pytest.mark.asyncio
 async def test_system3_current_issue():
-    """Test to demonstrate the current issue with System3."""
+    """Test System3 handles missing initiatives without touching the DB."""
     system3 = System3("System3/controller1")
 
     # Create initiative message (this is what System4 would send)
@@ -107,15 +107,10 @@ async def test_system3_current_issue():
         message_id="test_msg_1",
     )
 
-    # This should fail with current implementation
-    try:
-        await system3.handle_initiative_assign_message(initiative_message, context)
-        assert False, "Expected AttributeError due to missing initiative attribute"
-    except AttributeError as e:
-        print(f"Expected error: {e}")
-        print(
-            "This confirms the issue - InitiativeAssignMessage doesn't have 'initiative' attribute"
-        )
+    # Mock DB access so the test does not require real tables.
+    with patch("src.models.initiative.get_initiative", return_value=None):
+        with pytest.raises(ValueError, match="Initiative with id 1 not found"):
+            await system3.handle_initiative_assign_message(initiative_message, context)
 
 
 @pytest.mark.asyncio

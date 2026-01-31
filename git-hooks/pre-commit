@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Prefer venv if present so hooks use project deps
+PYTHON_BIN="python3"
+if [[ -x ".venv/bin/python" ]]; then
+  PYTHON_BIN=".venv/bin/python"
+fi
+
+# Staged Python files
+staged_py_files=$(git diff --cached --name-only --diff-filter=ACM | rg '\.py$' || true)
+
+if [[ -n "${staged_py_files}" ]]; then
+  echo "Running black --check on staged Python files..."
+  for file in ${staged_py_files}; do
+    ${PYTHON_BIN} -m black --check "${file}"
+  done
+else
+  echo "No staged Python files for black."
+fi
+
+# Staged test files only
+staged_test_files=$(git diff --cached --name-only --diff-filter=ACM | rg '^tests/.*\.py$' || true)
+
+if [[ -n "${staged_test_files}" ]]; then
+  echo "Running pytest on staged test files..."
+  ${PYTHON_BIN} -m pytest -v ${staged_test_files}
+else
+  echo "No staged test files for pytest."
+fi

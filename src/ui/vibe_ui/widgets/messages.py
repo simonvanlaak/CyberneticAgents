@@ -67,8 +67,9 @@ class UserMessage(Static):
 
 
 def _get_markdown_stream(markdown: Markdown) -> "BaseMarkdownStream":
-    if MarkdownStream is not None and hasattr(Markdown, "get_stream"):
-        return Markdown.get_stream(markdown)
+    get_stream = getattr(markdown, "get_stream", None)
+    if MarkdownStream is not None and callable(get_stream):
+        return get_stream()
     return _FallbackMarkdownStream(markdown)
 
 
@@ -107,7 +108,7 @@ class StreamingMessageBase(Static):
             )
         return self._markdown
 
-    def _ensure_stream(self) -> MarkdownStream:
+    def _ensure_stream(self) -> BaseMarkdownStream:
         if self._stream is None:
             self._stream = _get_markdown_stream(self._get_markdown())
         return self._stream
