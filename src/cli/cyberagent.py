@@ -31,15 +31,15 @@ from autogen_core import AgentId
 
 from src.agents.messages import UserMessage
 from src.cli.headless import run_headless_session
-from src.cli_session import get_answered_questions, get_pending_questions
 from src.cli.status import main as status_main
+from src.cli_session import get_answered_questions, get_pending_questions
 from src.db_utils import get_db
 from src.init_db import init_db
 from src.models.team import Team
 from src.rbac.enforcer import get_enforcer
 from src.registry import register_systems
 from src.runtime import get_runtime, stop_runtime
-from src.team_state import get_or_create_last_team_id, write_last_team_id
+from src.team_state import get_or_create_last_team_id, mark_team_active
 
 KEYRING_SERVICE = "cyberagent-cli"
 SYSTEM4_AGENT_ID = AgentId(type="System4", key="root")
@@ -48,6 +48,11 @@ RUNTIME_PID_FILE = Path("logs/cyberagent.pid")
 SERVE_COMMAND = "serve"
 TEST_START_ENV = "CYBERAGENT_TEST_NO_RUNTIME"
 TEST_START_ENV = "CYBERAGENT_TEST_NO_RUNTIME"
+SUGGEST_COMMAND = 'python -m src.cli.cyberagent suggest --payload "Describe the task"'
+START_COMMAND = "python -m src.cli.cyberagent start"
+INBOX_COMMAND = "python -m src.cli.cyberagent inbox"
+WATCH_COMMAND = "python -m src.cli.cyberagent watch"
+STATUS_COMMAND = "python -m src.cli.cyberagent status"
 
 
 @dataclass(frozen=True)
@@ -172,6 +177,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 async def _handle_start(args: argparse.Namespace) -> int:
     if os.environ.get(TEST_START_ENV) == "1":
         print("Runtime start stubbed (test mode).")
+        print(f"Next: run {SUGGEST_COMMAND} to give the agents a task.")
         return 0
     init_db()
     team_id = get_or_create_last_team_id()
@@ -190,6 +196,7 @@ async def _handle_start(args: argparse.Namespace) -> int:
     RUNTIME_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
     RUNTIME_PID_FILE.write_text(str(proc.pid), encoding="utf-8")
     print(f"Runtime starting in background (pid {proc.pid}).")
+    print(f"Next: run {SUGGEST_COMMAND} to give the agents a task.")
     return 0
 
 
@@ -215,6 +222,23 @@ def _handle_suggest(args: argparse.Namespace) -> int:
         parsed = _parse_suggestion_args(args)
     except ValueError as exc:
         print(f"Invalid payload: {exc}", file=sys.stderr)
+        print(
+            "Format tips:",
+            file=sys.stderr,
+        )
+        print(
+            f"- Inline text or JSON: {SUGGEST_COMMAND}",
+            file=sys.stderr,
+        )
+        print(
+            "- File payload: python -m src.cli.cyberagent suggest --file payload.json",
+            file=sys.stderr,
+        )
+        print(
+            "- YAML payload: python -m src.cli.cyberagent suggest "
+            "--file payload.yaml --format yaml",
+            file=sys.stderr,
+        )
         return 2
     asyncio.run(_send_suggestion(parsed))
     return 0
@@ -225,6 +249,7 @@ def _handle_inbox(args: argparse.Namespace) -> int:
     answered = get_answered_questions() if args.answered else []
     if not pending and not answered:
         print("No messages in inbox.")
+        print(f"Next: run {WATCH_COMMAND} to wait, or {SUGGEST_COMMAND}.")
         return 0
     if pending:
         print("Pending questions:")
@@ -259,10 +284,12 @@ async def _handle_watch(args: argparse.Namespace) -> int:
 def _handle_logs(args: argparse.Namespace) -> int:
     if not LOGS_DIR.exists():
         print("No logs directory found.")
+        print(f"Next: run {START_COMMAND} to boot the runtime.")
         return 0
     log_files = sorted(LOGS_DIR.glob("*.log"), key=os.path.getmtime)
     if not log_files:
         print("No log files to inspect.")
+        print(f"Next: run {START_COMMAND} or check status with {STATUS_COMMAND}.")
         return 0
     target = log_files[-1]
     lines = target.read_text(encoding="utf-8", errors="ignore").splitlines()
@@ -295,6 +322,7 @@ def _handle_config(args: argparse.Namespace) -> int:
         teams = session.query(Team).order_by(Team.name).all()
         if not teams:
             print("No teams configured.")
+            print(f"Next: run {START_COMMAND} to initialize the runtime.")
             return 0
         for team in teams:
             print(f"Team: {team.name} (id={team.id})")
@@ -328,7 +356,7 @@ async def _handle_serve(args: argparse.Namespace) -> int:
     team_id = os.environ.get("CYBERAGENT_ACTIVE_TEAM_ID")
     if team_id:
         try:
-            write_last_team_id(int(team_id))
+            mark_team_active(int(team_id))
             print(f"Starting headless runtime for team {team_id}.")
         except ValueError:
             print(f"Invalid team id '{team_id}' configured.", file=sys.stderr)
@@ -417,7 +445,11 @@ async def _send_suggestion(parsed: ParsedSuggestion) -> None:
     enforcer.clear_policy()
     runtime = get_runtime()
     message = UserMessage(content=parsed.payload_text, source="User")
-    await runtime.send_message(message=message, recipient=SYSTEM4_AGENT_ID)
+    await runtime.send_message(
+        message=message,
+        recipient=SYSTEM4_AGENT_ID,
+        sender=AgentId(type="UserAgent", key="root"),
+    )
     print("Suggestion delivered to System4.")
     await stop_runtime()
 

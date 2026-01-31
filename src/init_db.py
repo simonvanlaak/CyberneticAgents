@@ -3,9 +3,10 @@ Common database components shared across all modules
 """
 
 import os
+from datetime import datetime
 from urllib.parse import urlparse
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 
@@ -13,9 +14,7 @@ from sqlalchemy.orm import sessionmaker
 os.makedirs("data", exist_ok=True)
 
 # SQLite database setup
-DATABASE_URL = os.environ.get(
-    "CYBERAGENT_DB_URL", "sqlite:///data/CyberneticAgents.db"
-)
+DATABASE_URL = os.environ.get("CYBERAGENT_DB_URL", "sqlite:///data/CyberneticAgents.db")
 engine = create_engine(DATABASE_URL, echo=False)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -36,6 +35,22 @@ def init_db():
 
     # Create all tables
     Base.metadata.create_all(bind=engine)
+    _ensure_team_last_active_column()
+
+
+def _ensure_team_last_active_column() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.connect() as connection:
+        columns = connection.execute(text("PRAGMA table_info(teams);")).fetchall()
+        column_names = {column[1] for column in columns}
+        if "last_active_at" in column_names:
+            return
+        connection.execute(text("ALTER TABLE teams ADD COLUMN last_active_at DATETIME"))
+        connection.execute(
+            text("UPDATE teams SET last_active_at = :now WHERE last_active_at IS NULL"),
+            {"now": datetime.utcnow().isoformat()},
+        )
 
 
 def configure_database(database_url: str) -> None:

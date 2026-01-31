@@ -38,9 +38,8 @@ from src.models.system import (
     get_systems_by_type,
 )
 from src.models.team import get_team
-from src.team_state import get_or_create_last_team_id
+from src.team_state import get_or_create_last_team_id, mark_team_active
 from src.tools.tool_router import get_tools
-from src.ui_state import add_message
 
 SYSTEM_TYPES = {
     1: "operation",
@@ -95,6 +94,7 @@ class SystemBase(RoutedAgent):
         else:
             self.team_id = get_or_create_last_team_id()
         ensure_default_systems_for_team(self.team_id)
+        mark_team_active(self.team_id)
         print(f"Initializing {self.name}")
         super().__init__(self.name)
         self.trace_context = trace_context or {}
@@ -121,6 +121,7 @@ class SystemBase(RoutedAgent):
         message_specific_prompts: List[str] = [],
         output_content_type: type[BaseModel] | None = None,
     ) -> TaskResult:
+        mark_team_active(self.team_id)
         self._agent._reflect_on_tool_use = output_content_type is not None
         if output_content_type is None:
             self._agent._model_client = get_model_client(self.agent_id, False)
@@ -207,31 +208,16 @@ class SystemBase(RoutedAgent):
                         f"...[{self.agent_id.__str__()}] use tool {func_call.name}"
                     )
                     print(log_line)
-                    add_message(
-                        sender=str(self.agent_id),
-                        content=log_line,
-                        is_user=False,
-                    )
             elif isinstance(message, ToolCallExecutionEvent):
                 for func_result in message.content:
                     log_line = f"...[{func_result.name}]: {func_result.content}"
                     print(log_line)
-                    add_message(
-                        sender=str(self.agent_id),
-                        content=log_line,
-                        is_user=False,
-                    )
             else:
                 log_line = (
                     f"...[{self.agent_id.__str__()}]: {message.__class__.__name__} - "
                     f"{message.to_text()[:50]}"
                 )
                 print(log_line)
-                add_message(
-                    sender=str(self.agent_id),
-                    content=log_line,
-                    is_user=False,
-                )
         # attach trace context to response using proper W3C format
         if task_result.messages[-1].metadata is None:
             task_result.messages[-1].metadata = {}
@@ -353,19 +339,6 @@ class SystemBase(RoutedAgent):
                 summary = f"{summary[:200]}..."
             detail_line = f"...[{self.id.__str__()}] message content: {summary}"
             print(detail_line)
-            add_message(
-                sender=str(self.id),
-                content=detail_line,
-                is_user=False,
-            )
-        add_message(
-            sender=str(self.id),
-            content=(
-                f"{self.id.__str__()} -> {message.__class__.__name__} -> "
-                f"{agent_id.type}/{topic_source}"
-            ),
-            is_user=False,
-        )
         return await self.publish_message(
             message=message,
             topic_id=TopicId(topic_type, topic_source),
