@@ -1,6 +1,6 @@
 # CyberneticAgents
 
-A VSM-inspired multi-agent system built on AutoGen Core + AgentChat, with Casbin RBAC and a Textual TUI. The project models Systems 1/3/4/5 as agent roles and routes messages through tools guarded by RBAC policies, with optional Langfuse tracing.
+A VSM-inspired multi-agent system built on AutoGen Core + AgentChat with Casbin RBAC. The project models Systems 1/3/4/5 as agent roles and routes messages through tools guarded by RBAC policies, with optional Langfuse tracing.
 
 ## What This Is (Current State)
 
@@ -8,7 +8,7 @@ A VSM-inspired multi-agent system built on AutoGen Core + AgentChat, with Casbin
 - **VSM agent roles**: System 1, 3, 4, 5 (System 2 is defined in RBAC types but not implemented yet)
 - **RBAC enforcement** via Casbin for tool use and cross-agent actions
 - **Task/initiative/policy data model** backed by SQLite (SQLAlchemy)
-- **Textual TUI** and headless CLI mode for interacting with the system
+- **CLI-first interaction** for working with the system
 - **Optional tracing** with Langfuse via OpenTelemetry
 
 ## Quick Start
@@ -40,16 +40,16 @@ LANGFUSE_BASE_URL=https://cloud.langfuse.com
 ### 3) Run
 
 ```bash
-# Textual TUI
+# Interactive CLI session
 python main.py
 
-# Headless (no TUI)
-python main.py --headless "hello"
+# Send an initial message
+python main.py --message "hello"
 ```
 
-## Headless CLI (experimental)
+## CLI (primary)
 
-- The Textual UI is disabled for now; use `cyberagent start` to boot the VSM in headless mode instead of the old UI entry point.
+- Use `cyberagent start` to boot the VSM runtime in the background for CLI workflows.
 - `cyberagent status` shows the active strategy/task hierarchy, while `cyberagent suggest` lets you pipe JSON/YAML payloads into System 4.
 - Observability helpers (`cyberagent logs`, `cyberagent inbox`, `cyberagent watch`) and the `cyberagent login` command (which stores a keyring-backed token) round out the current CLI surface.
 
@@ -57,7 +57,7 @@ python main.py --headless "hello"
 
 ```
 CyberneticAgents/
-├── main.py                     # Entry point (TUI + headless)
+├── main.py                     # Entry point (CLI)
 ├── .env.example                # Example env config
 ├── data/                       # Runtime databases (created locally)
 │   ├── CyberneticAgents.db     # SQLAlchemy app data
@@ -67,7 +67,6 @@ CyberneticAgents/
 │   ├── prompts/                # System prompts (1-5)
 │   ├── rbac/                   # Casbin enforcer + model
 │   ├── tools/                  # RBAC-guarded tools
-│   ├── ui/                     # Textual TUI
 │   ├── models/                 # SQLAlchemy models
 │   ├── registry.py             # Agent factory registration
 │   ├── runtime.py              # Runtime + tracing setup
@@ -83,7 +82,7 @@ CyberneticAgents/
 - `UserAgent` receives user input and forwards it to System 4.
 - System agents coordinate tasks and policies through tools.
 - Tools validate actions via RBAC (Casbin) before executing.
-- Messages and tool usage are logged into the UI, with optional tracing.
+- Messages and tool usage are logged to stdout and runtime logs, with optional tracing.
 
 ## Development
 
@@ -104,7 +103,7 @@ pre-commit run --all-files
 
 - Implement System 2 (coordination) agent
 - Expand tool coverage and RBAC policies
-- Improve UI workflow and observability
+- Improve CLI workflow and observability
 
 ## License
 

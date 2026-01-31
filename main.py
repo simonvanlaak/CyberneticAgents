@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-Main Application Entry Point (TUI)
+Main Application Entry Point (CLI)
 
-Textual-based interface for interacting with the multi-agent runtime.
+CLI-based interface for interacting with the multi-agent runtime.
 """
 
-import argparse
 import argparse
 import asyncio
 import sys

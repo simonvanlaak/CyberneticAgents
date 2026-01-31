@@ -1,32 +1,40 @@
 # Cybernetic Agents Testing Framework
 
-This directory contains the comprehensive testing framework for the Cybernetic Agents system. The test structure mirrors the source code structure for better organization and maintainability.
+This directory contains the testing framework for the Cybernetic Agents system. The test structure is organized by component, roughly mirroring `src/`.
 
 ## Test Structure
 
 ```
 tests/
-├── __init__.py                # Test package initialization
-├── conftest.py               # Pytest configuration and fixtures
-├── README.md                 # This file
-├── fixtures/                 # Test fixtures and utilities
-│   ├── __init__.py
-│   ├── test_data.py          # Test data generators
-│   └── mock_objects.py       # Mock objects for testing
-├── rbac/                     # RBAC component tests
-│   ├── __init__.py
-│   ├── test_enforcer.py      # Casbin enforcer tests
-│   ├── test_namespace.py     # Namespace extraction tests
-│   └── test_permissions.py   # Permission checking tests
-├── tools/                    # Tools component tests
-│   ├── __init__.py
-│   ├── test_delegate.py      # Delegate tool tests
-│   ├── test_escalate.py      # Escalate tool tests
-│   ├── test_rbac_helper.py   # RBAC tool helper tests
-│   └── test_system_create.py # System creation tool tests
-├── test_runtime.py          # Runtime tests
-├── test_vsm_agent.py        # VSM agent tests
-└── test_registry.py          # Agent registry tests
+├── __init__.py                         # Test package initialization
+├── README.md                           # This file
+├── fixtures/                           # Fixture helpers (currently placeholder)
+│   └── __init__.py
+├── agents/                             # Agent behavior tests
+│   ├── test_system1.py
+│   ├── test_system3.py
+│   ├── test_system3_refactored.py
+│   ├── test_system3_sequential.py
+│   ├── test_system4_self_tools.py
+│   ├── test_system4_sequential.py
+│   ├── test_system4_strategy_flow.py
+│   ├── test_system5_validation.py
+│   ├── test_system_base_reflection.py
+│   └── test_user_system4_communication.py
+├── cli/                                # CLI tests
+│   ├── test_cyberagent.py
+│   └── test_status_cli.py
+├── models/                             # Model tests
+│   ├── test_purpose.py
+│   ├── test_strategy_initiative_add.py
+│   └── test_system_lookup.py
+├── registry/                           # Registry tests
+│   └── test_register_systems.py
+├── tools/                              # Tools tests
+│   └── test_contact_user_tools.py
+├── test_cli_session.py
+├── test_logging_utils.py
+└── test_system_base_structured_message.py
 ```
 
 ## Testing Philosophy
@@ -37,8 +45,8 @@ This project follows strict TDD principles:
 
 1. **Write tests first** - Before implementing any feature
 2. **Run tests frequently** - Ensure all tests pass before committing
-3. **Test coverage** - Minimum 80% coverage required for all new code
-4. **Test organization** - All test files must mirror the source structure
+3. **Test coverage** - Maintain or improve coverage for new code
+4. **Test organization** - Keep tests organized by component
 
 ### Test Types
 
@@ -53,13 +61,9 @@ This project follows strict TDD principles:
 - `test_<component>_<feature>.py` - For specific features
 - `test_<component>.py` - For general component tests
 
-### Test Classes
+### Test Classes (Optional)
 - `Test<Component><Feature>` - For feature-specific tests
 - `Test<Component>` - For general component tests
-
-### Test Methods
-- `test_<scenario>_<expected_result>` - Descriptive test names
-- `test_<method>_<condition>` - For method-specific tests
 
 ## Test Requirements
 
@@ -108,27 +112,7 @@ python -m pytest tests/ -x
 
 ## Test Fixtures
 
-### Common Fixtures
-
-- `clean_enforcer`: Provides a clean Casbin enforcer instance
-- `clean_runtime`: Provides a clean runtime instance
-- `mock_agent_id`: Provides a mock agent ID
-- `mock_vsm_agent`: Provides a mock VSM agent
-- `event_loop`: Provides an event loop for async tests
-
-### Using Fixtures
-
-```python
-import pytest
-
-from casbin import Enforcer
-
-class TestRBACEnforcer:
-    def test_enforcer_initialization(self, clean_enforcer: Enforcer):
-        """Test enforcer initialization."""
-        assert clean_enforcer is not None
-        assert clean_enforcer.get_policy() == []
-```
+Shared fixtures can live under `tests/fixtures/` or in a `conftest.py` when needed.
 
 ## Test Examples
 

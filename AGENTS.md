@@ -88,6 +88,7 @@ Hidden/cached dirs omitted (e.g., `.git`, `.venv`, `.pytest_cache`, `__pycache__
 ```
 .
 ├── AGENTS.md
+├── LICENSE
 ├── README.md
 ├── main.py
 ├── requirements.txt
@@ -99,19 +100,18 @@ Hidden/cached dirs omitted (e.g., `.git`, `.venv`, `.pytest_cache`, `__pycache__
 ├── logs/
 ├── src/
 │   ├── agents/
+│   ├── cli/
 │   ├── models/
 │   ├── prompts/
 │   ├── rbac/
 │   ├── tools/
-│   └── ui/
-├── tests/
+└── tests/
 │   ├── agents/
+│   ├── cli/
 │   ├── fixtures/
 │   ├── models/
 │   ├── registry/
 │   └── tools/
-└── third_party/
-    └── mistral-vibe/
 ```
 
 

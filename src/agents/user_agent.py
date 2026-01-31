@@ -5,7 +5,6 @@ from src.agents.messages import UserMessage
 from src.cli_session import get_pending_question, resolve_pending_question
 from src.cli_session import enqueue_pending_question
 from src.agents.system4 import System4
-from src.ui_state import add_message, add_user_notice
 
 
 class UserAgent(RoutedAgent):
@@ -19,7 +18,6 @@ class UserAgent(RoutedAgent):
         self, message: UserMessage, ctx: MessageContext
     ) -> None:
         print(f"[user]: {message.content}", flush=True)
-        add_message(sender="User", content=message.content, is_user=True)
         resolved = resolve_pending_question(message.content)
         if resolved:
             message.content = (
@@ -50,30 +48,9 @@ class UserAgent(RoutedAgent):
                 "1",
                 "yes",
             }
-            inform_user_flag = str(message.metadata.get("inform_user", "")).lower() in {
-                "true",
-                "1",
-                "yes",
-            }
             if ask_user_flag and message.metadata.get("question_id") is None:
                 asked_by = str(ctx.sender) if ctx.sender else None
                 enqueue_pending_question(message.content, asked_by=asked_by)
-            if ask_user_flag:
-                add_message(
-                    sender=str(ctx.sender) if ctx.sender else "Unknown",
-                    content=message.content,
-                    is_user=False,
-                )
-            elif inform_user_flag or not ask_user_flag:
-                add_user_notice(
-                    sender=str(ctx.sender) if ctx.sender else "Unknown",
-                    content=message.content,
-                )
-        else:
-            add_user_notice(
-                sender=str(ctx.sender) if ctx.sender else "Unknown",
-                content=message.content,
-            )
         pending_question = get_pending_question()
         if pending_question:
             print(f"Pending question (System4): {pending_question.content}")
@@ -82,8 +59,3 @@ class UserAgent(RoutedAgent):
         self, message: TextMessage, ctx: MessageContext
     ) -> None:
         """Fallback handler for task result style messages."""
-        add_message(
-            sender=str(ctx.sender) if ctx.sender else "Unknown",
-            content=message.content,
-            is_user=False,
-        )

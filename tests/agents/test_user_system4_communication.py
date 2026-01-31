@@ -2,7 +2,7 @@
 # Tests for communication between UserAgent and System4
 
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock
 from autogen_agentchat.messages import TextMessage
 from autogen_core import AgentId, MessageContext, TopicId
 from autogen_core._cancellation_token import CancellationToken
@@ -15,7 +15,6 @@ from src.cli_session import (
     enqueue_pending_question,
     get_pending_question,
 )
-from src.ui_state import clear_messages, get_latest_user_notice, get_messages
 
 
 class TestUserAgent:
@@ -182,8 +181,7 @@ async def test_user_agent_updates_pending_question_on_system4_message():
 
 
 @pytest.mark.asyncio
-async def test_user_agent_logs_informational_message():
-    clear_messages()
+async def test_user_agent_informational_message_does_not_enqueue_question():
     clear_pending_questions()
     user_agent = UserAgent("test_user")
     sender = AgentId(type=System4.__name__, key="root")
@@ -202,14 +200,10 @@ async def test_user_agent_logs_informational_message():
     await user_agent.handle_assistant_text_message(message, ctx)
 
     assert get_pending_question() is None
-    notice = get_latest_user_notice()
-    assert notice is not None
-    assert notice.content == "Status update: research in progress."
 
 
 @pytest.mark.asyncio
-async def test_user_agent_records_notice_for_non_question_message():
-    clear_messages()
+async def test_user_agent_non_question_message_does_not_enqueue_question():
     clear_pending_questions()
     user_agent = UserAgent("test_user")
     sender = AgentId(type=System4.__name__, key="root")
@@ -227,15 +221,11 @@ async def test_user_agent_records_notice_for_non_question_message():
     await user_agent.handle_assistant_text_message(message, ctx)
 
     assert get_pending_question() is None
-    notice = get_latest_user_notice()
-    assert notice is not None
-    assert notice.content == "General update without metadata."
 
 
 @pytest.mark.asyncio
 async def test_user_agent_includes_question_context_in_reply():
     clear_pending_questions()
-    clear_messages()
     enqueue_pending_question("What outcome do you want?", asked_by="System4")
     user_agent = UserAgent("test_user")
 
@@ -248,13 +238,10 @@ async def test_user_agent_includes_question_context_in_reply():
         message_id="test-message",
     )
 
-    message = UserMessage(content="Build a TUI-first app.", source="User")
+    message = UserMessage(content="Build a CLI-first app.", source="User")
     await user_agent.handle_user_message(message, ctx)
 
     assert user_agent.publish_message.await_count == 1
     published_message = user_agent.publish_message.await_args[0][0]
     assert "What outcome do you want?" in published_message.content
-    assert "Build a TUI-first app." in published_message.content
-
-    messages = get_messages()
-    assert any(msg.is_user and msg.content == "Build a TUI-first app." for msg in messages)
+    assert "Build a CLI-first app." in published_message.content

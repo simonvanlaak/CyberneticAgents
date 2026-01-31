@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import os
-import time
 
 from autogen_core import AgentId
 
@@ -14,7 +13,6 @@ from src.logging_utils import configure_autogen_logging
 from src.rbac.enforcer import get_enforcer
 from src.registry import register_systems
 from src.runtime import get_runtime, stop_runtime
-from src.ui_state import set_log_file
 
 
 async def run_headless_session(initial_message: str | None = None) -> None:
@@ -28,8 +26,6 @@ async def run_headless_session(initial_message: str | None = None) -> None:
 
     logs_dir = os.path.join(os.getcwd(), "logs")
     os.makedirs(logs_dir, exist_ok=True)
-    log_filename = time.strftime("chat_%Y%m%d_%H%M%S.log")
-    set_log_file(os.path.join(logs_dir, log_filename))
     configure_autogen_logging(logs_dir)
 
     runtime = get_runtime()
