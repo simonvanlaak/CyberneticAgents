@@ -28,7 +28,8 @@ This plan operationalizes the target architecture from `docs/technical/architect
 - [x] Phase 5 — Tools Simplification
 - [x] Phase 6 — Agents Cleanup
 - [x] Phase 7 — CLI & UI
-- [ ] Phase 8 — Remove Legacy Paths
+- [x] Phase 8 — Remove Legacy Paths
+- [ ] Phase 9 — Document New Architecture
 
 ## Phase 0 — Baseline & Safety
 **Purpose:** lock current behavior and reduce risk.
@@ -157,6 +158,24 @@ Actions:
 
 Exit Criteria:
 - Clean tree and passing tests.
+- [x] README references the new layout and entry points.
+- [ ] AGENTS instructions mention the refactor and any new conventions (TBD).
+
+---
+
+## Phase 9 — Document New Architecture
+**Purpose:** make the refactor visible to contributors by updating the main docs and guidance files.
+
+Actions:
+1. Update `README.md` to describe the new `src/cyberagent/` package, mention where CLI, agents, tools, and DB code now live, and refresh any setup or run instructions that referenced the old paths.
+2. Revise `AGENTS.md` (and any linked guide) to call out the new architecture, the enforced TDD workflow, and the location of critical modules (core, services, tools).
+3. Refresh any other docs (e.g., `docs/technical/`, `docs/planned_features/`) that still point at legacy modules, and add quick start commands reflecting the refactor.
+4. Add a short checklist in this doc to capture the doc updates and call out any follow-ups.
+
+Exit Criteria:
+- Contributors can find the current architecture and entry points from README/AGENTS.
+- No mention of deleted paths remains in the primary docs.
+- A follow-up task list exists for future doc cleanups (if needed).
 
 ---
 
