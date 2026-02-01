@@ -32,7 +32,7 @@ def create_cli_executor() -> Optional[EnvDockerCommandLineCodeExecutor]:
     """
 
     # Set up working directory
-    work_dir = Path("docker_cli_executor")
+    work_dir = Path("data/docker_cli_executor")
     work_dir.mkdir(exist_ok=True)
 
     try:
