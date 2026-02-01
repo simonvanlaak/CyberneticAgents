@@ -31,7 +31,7 @@ from src.agents.messages import CapabilityGapMessage
 from src.cyberagent.services import policies as policy_service
 from src.cyberagent.services import systems as system_service
 from src.cyberagent.services import teams as team_service
-from src.team_state import get_or_create_last_team_id, mark_team_active
+from src.cyberagent.core.state import get_or_create_last_team_id, mark_team_active
 
 if TYPE_CHECKING:
     from src.cyberagent.db.models.system import System
@@ -260,11 +260,9 @@ class SystemBase(RoutedAgent):
     async def capability_gap_tool(self, task_id: int, content: str):
         # For now, we'll need to fetch the task from the database
         # This is a temporary fix - in production, we should pass the assignee directly
-        from src.models.task import get_task
+        from src.cyberagent.services import tasks as task_service
 
-        task = get_task(task_id)
-        if task is None:
-            raise ValueError(f"Task with id {task_id} not found")
+        task = task_service.get_task_by_id(task_id)
         if task.assignee is None:
             raise ValueError("Task assignee cannot be None")
         return await self._publish_message_to_agent(

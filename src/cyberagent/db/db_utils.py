@@ -3,12 +3,12 @@
 Database utility functions.
 """
 
-from src.cyberagent.db.init_db import SessionLocal
+from src.cyberagent.db import init_db
 
 
 def get_db():
     """Get a database session"""
-    db = SessionLocal()
+    db = init_db.SessionLocal()
     try:
         yield db
     finally:

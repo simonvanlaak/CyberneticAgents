@@ -27,13 +27,13 @@ from src.cli_session import (
     resolve_pending_question,
     wait_for_answer,
 )
-from src.db_utils import get_db
+from src.cyberagent.db.db_utils import get_db
 from src.enums import Status, SystemType
-from src.init_db import init_db
-from src.models.initiative import Initiative
-from src.models.system import System
-from src.models.task import Task
-from src.models.team import Team
+from src.cyberagent.db.init_db import init_db
+from src.cyberagent.db.models.initiative import Initiative
+from src.cyberagent.db.models.system import System
+from src.cyberagent.db.models.task import Task
+from src.cyberagent.db.models.team import Team
 
 TEST_PROMPT = (
     "I need product discovery research that evaluates how the technology of Multi "
@@ -76,7 +76,9 @@ def _create_team_with_systems() -> tuple[int, int]:
 
 
 @pytest.mark.asyncio
-async def test_product_discovery_feedback_loop_creates_tasks(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_product_discovery_feedback_loop_creates_tasks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     init_db()
     clear_pending_questions()
     team_id, system1_id = _create_team_with_systems()
@@ -187,9 +189,7 @@ async def test_product_discovery_feedback_loop_creates_tasks(monkeypatch: pytest
                 messages=[StructuredMessage(content=response, source=system3.name)]
             )
         return TaskResult(
-            messages=[
-                TextMessage(content="Assigning tasks.", source=system3.name)
-            ]
+            messages=[TextMessage(content="Assigning tasks.", source=system3.name)]
         )
 
     async def system1_run(

@@ -4,7 +4,7 @@ import sqlite3
 from dataclasses import asdict, dataclass
 from typing import Iterable, Optional
 
-from src.init_db import get_database_path, init_db
+from src.cyberagent.db.init_db import get_database_path, init_db
 
 TERMINAL_STATUSES = {"completed", "approved", "rejected"}
 START_COMMAND = "python -m src.cyberagent.cli.cyberagent start"

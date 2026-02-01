@@ -5,7 +5,8 @@ This directory contains the current tool surface used by the agents.
 ## Active tools
 
 - `contact_user.py`: tools for asking the user questions or sending updates.
-- `cli_executor/`: OpenClaw CLI executor and secret injection helpers.
+- OpenClaw CLI executor and secret injection helpers live under
+  `src/cyberagent/tools/cli_executor/`.
 
 ## Notes
 

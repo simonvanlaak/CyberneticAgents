@@ -1,6 +1,6 @@
 import pytest
 from src.registry import register_systems
-from src.runtime import get_runtime
+from src.cyberagent.core.runtime import get_runtime
 
 
 @pytest.mark.asyncio
@@ -17,6 +17,6 @@ async def test_register_systems_idempotent():
     expected_agents = ["System1", "System3", "System4", "System5", "UserAgent"]
 
     for agent_name in expected_agents:
-        assert agent_name in runtime._known_agent_names, (
-            f"Agent {agent_name} should be registered"
-        )
+        assert (
+            agent_name in runtime._known_agent_names
+        ), f"Agent {agent_name} should be registered"

@@ -108,7 +108,9 @@ async def test_system3_current_issue():
     )
 
     # Mock DB access so the test does not require real tables.
-    with patch("src.models.initiative.get_initiative", return_value=None):
+    with patch(
+        "src.cyberagent.services.initiatives._get_initiative", return_value=None
+    ):
         with pytest.raises(ValueError, match="Initiative with id 1 not found"):
             await system3.handle_initiative_assign_message(initiative_message, context)
 

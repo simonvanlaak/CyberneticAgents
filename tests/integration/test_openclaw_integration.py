@@ -33,7 +33,7 @@ def test_dockerfile_builds():
             "-t",
             "openclaw-tools:test",
             "-f",
-            "src/tools/cli_executor/Dockerfile.openclaw-tools",
+            "src/cyberagent/tools/cli_executor/Dockerfile.openclaw-tools",
             ".",
         ],
         capture_output=True,
@@ -50,7 +50,7 @@ def test_dockerfile_builds():
 )
 async def test_openclaw_command_execution(mock_execute):
     """Test that OpenClaw commands can be executed via Docker executor."""
-    from src.tools.cli_executor.openclaw_tool import OpenClawTool
+    from src.cyberagent.tools.cli_executor.openclaw_tool import OpenClawTool
 
     # Mock successful execution
     mock_execute.return_value = type(
@@ -76,7 +76,7 @@ async def test_openclaw_command_execution(mock_execute):
 
 # Test 3: Web search tool works
 @pytest.mark.asyncio
-@patch("src.tools.cli_executor.openclaw_tool.OpenClawTool.execute")
+@patch("src.cyberagent.tools.cli_executor.openclaw_tool.OpenClawTool.execute")
 async def test_web_search_integration(mock_execute):
     """Test that web_search tool can be called through OpenClaw integration."""
     mock_execute.return_value = {
@@ -92,7 +92,7 @@ async def test_web_search_integration(mock_execute):
         },
     }
 
-    from src.tools import OpenClawTool
+    from src.cyberagent.tools.cli_executor.openclaw_tool import OpenClawTool
 
     result = await OpenClawTool(None).execute("web_search", query="test", count=1)
 
@@ -106,7 +106,7 @@ async def test_web_search_integration(mock_execute):
 async def test_rbac_enforcement():
     """Test that RBAC prevents unauthorized tool usage."""
     from src.rbac.enforcer import check_tool_permission
-    from src.tools.cli_executor.openclaw_tool import OpenClawTool
+    from src.cyberagent.tools.cli_executor.openclaw_tool import OpenClawTool
 
     # Mock RBAC to deny access
     with patch("src.rbac.enforcer.check_tool_permission", return_value=False):
@@ -125,8 +125,8 @@ async def test_rbac_enforcement():
 )
 async def test_real_openclaw_execution():
     """Integration test with real Docker executor (requires Docker running)."""
-    from src.tools.cli_executor.factory import create_cli_executor
-    from src.tools.cli_executor.openclaw_tool import OpenClawTool
+    from src.cyberagent.tools.cli_executor.factory import create_cli_executor
+    from src.cyberagent.tools.cli_executor.openclaw_tool import OpenClawTool
 
     executor = create_cli_executor()
     if executor is None:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src import init_db
+from src.cyberagent.db import init_db
 
 
 def pytest_configure() -> None:

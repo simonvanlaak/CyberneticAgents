@@ -8,7 +8,7 @@ from pydantic import BaseModel, model_validator
 
 from src.agent_utils import get_user_agent_id
 from src.cli_session import enqueue_pending_question, wait_for_answer
-from src.runtime import get_runtime
+from src.cyberagent.core.runtime import get_runtime
 
 
 class ContactUserArgsType(BaseModel):

@@ -1,9 +1,9 @@
 import uuid
 
-from src.db_utils import get_db
-from src.init_db import init_db
-from src.models.purpose import Purpose, get_or_create_default_purpose
-from src.models.team import Team
+from src.cyberagent.db.db_utils import get_db
+from src.cyberagent.db.init_db import init_db
+from src.cyberagent.db.models.purpose import Purpose, get_or_create_default_purpose
+from src.cyberagent.db.models.team import Team
 
 
 def _create_team_id() -> int:

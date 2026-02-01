@@ -2,7 +2,7 @@ import os
 
 import pytest
 
-from src.tools.cli_executor import secrets
+from src.cyberagent.tools.cli_executor import secrets
 
 
 def test_get_tool_secrets_uses_hardcoded_mapping(

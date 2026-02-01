@@ -2,10 +2,13 @@ from __future__ import annotations
 
 from uuid import uuid4
 
-from src.db_utils import get_db
+from src.cyberagent.db.db_utils import get_db
 from src.enums import SystemType
-from src.models.system import ensure_default_systems_for_team, get_systems_by_type
-from src.models.team import Team
+from src.cyberagent.db.models.system import (
+    ensure_default_systems_for_team,
+    get_systems_by_type,
+)
+from src.cyberagent.db.models.team import Team
 
 
 def test_ensure_default_systems_for_team_creates_missing() -> None:

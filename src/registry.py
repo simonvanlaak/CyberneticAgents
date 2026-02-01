@@ -10,7 +10,7 @@ from src.agents.system3 import System3
 from src.agents.system4 import System4
 from src.agents.system5 import System5
 from src.agents.user_agent import UserAgent
-from src.runtime import get_runtime
+from src.cyberagent.core.runtime import get_runtime
 
 
 async def register_systems() -> None:

@@ -4,8 +4,7 @@ source = src
 
 [report]
 include =
-    src/runtime.py
-    src/tools/__init__.py
-    src/tools/cli_executor/*
+    src/cyberagent/core/runtime.py
+    src/cyberagent/tools/cli_executor/*
 omit =
     */__pycache__/*

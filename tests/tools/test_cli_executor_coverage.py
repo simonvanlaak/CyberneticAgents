@@ -110,12 +110,6 @@ def test_configure_tracing_no_credentials(monkeypatch: pytest.MonkeyPatch) -> No
     assert core_runtime.configure_tracing() is None
 
 
-def test_runtime_shim_exports() -> None:
-    import src.runtime as runtime_shim
-
-    assert runtime_shim.get_runtime is core_runtime.get_runtime
-
-
 def test_configure_tracing_with_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "public")
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "secret")
@@ -297,7 +291,8 @@ async def test_env_executor_executes_command(monkeypatch: pytest.MonkeyPatch) ->
         return func(*args, **kwargs)
 
     monkeypatch.setattr(
-        "src.tools.cli_executor.docker_env_executor.asyncio.to_thread", _fake_to_thread
+        "src.cyberagent.tools.cli_executor.docker_env_executor.asyncio.to_thread",
+        _fake_to_thread,
     )
 
     output, exit_code = await executor._execute_command(

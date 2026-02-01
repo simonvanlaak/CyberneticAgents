@@ -2,11 +2,16 @@ import json
 import sqlite3
 import uuid
 
-from src.cli.status import TeamView, collect_status, render_status, render_status_json
-from src.db_utils import get_db
-from src.init_db import get_database_path, init_db
-from src.models.purpose import Purpose
-from src.models.team import Team
+from src.cyberagent.cli.status import (
+    TeamView,
+    collect_status,
+    render_status,
+    render_status_json,
+)
+from src.cyberagent.db.db_utils import get_db
+from src.cyberagent.db.init_db import get_database_path, init_db
+from src.cyberagent.db.models.purpose import Purpose
+from src.cyberagent.db.models.team import Team
 
 
 def _create_team_id() -> int:
@@ -132,13 +137,13 @@ def test_status_render_includes_hierarchy():
 def test_status_render_no_data_suggests_start() -> None:
     output = render_status([])
     assert "No data found." in output
-    assert "python -m src.cli.cyberagent start" in output
+    assert "python -m src.cyberagent.cli.cyberagent start" in output
 
 
 def test_status_render_no_purposes_suggests_suggest() -> None:
     output = render_status([TeamView(id=1, name="Empty Team", purposes=[])])
     assert "No purposes found." in output
-    assert "python -m src.cli.cyberagent suggest" in output
+    assert "python -m src.cyberagent.cli.cyberagent suggest" in output
 
 
 def test_status_active_only_filters_completed_tasks():

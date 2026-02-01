@@ -3,9 +3,9 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from src.db_utils import get_db
-from src.models.system import ensure_default_systems_for_team
-from src.models.team import Team
+from src.cyberagent.db.db_utils import get_db
+from src.cyberagent.db.models.system import ensure_default_systems_for_team
+from src.cyberagent.db.models.team import Team
 
 
 def mark_team_active(team_id: int) -> None:

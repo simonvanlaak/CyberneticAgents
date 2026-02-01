@@ -11,7 +11,7 @@ from typing import Sequence
 import pytest
 from autogen_core import AgentId
 
-from src.cli import cyberagent
+from src.cyberagent.cli import cyberagent
 from src.cli_session import AnsweredQuestion, PendingQuestion
 
 
@@ -242,7 +242,7 @@ def test_python_module_start_uses_stub(monkeypatch: pytest.MonkeyPatch) -> None:
     env = os.environ.copy()
     env["CYBERAGENT_TEST_NO_RUNTIME"] = "1"
     result = subprocess.run(
-        [sys.executable, "-m", "src.cli.cyberagent", "start"],
+        [sys.executable, "-m", "src.cyberagent.cli.cyberagent", "start"],
         check=False,
         capture_output=True,
         text=True,
@@ -294,7 +294,9 @@ async def test_send_suggestion_sets_user_sender(
     captured: dict[str, object] = {}
 
     class DummyRuntime:
-        async def send_message(self, message, recipient, sender=None, **kwargs):  # noqa: ANN001
+        async def send_message(
+            self, message, recipient, sender=None, **kwargs
+        ):  # noqa: ANN001
             captured["sender"] = sender
 
     async def fake_register() -> None:

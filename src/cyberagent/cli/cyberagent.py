@@ -33,13 +33,13 @@ from src.agents.messages import UserMessage
 from src.cyberagent.cli.headless import run_headless_session
 from src.cyberagent.cli.status import main as status_main
 from src.cli_session import get_answered_questions, get_pending_questions
-from src.db_utils import get_db
-from src.init_db import init_db
-from src.models.team import Team
+from src.cyberagent.db.db_utils import get_db
+from src.cyberagent.db.init_db import init_db
+from src.cyberagent.db.models.team import Team
 from src.rbac.enforcer import get_enforcer
 from src.registry import register_systems
-from src.runtime import get_runtime, stop_runtime
-from src.team_state import get_or_create_last_team_id, mark_team_active
+from src.cyberagent.core.runtime import get_runtime, stop_runtime
+from src.cyberagent.core.state import get_or_create_last_team_id, mark_team_active
 
 KEYRING_SERVICE = "cyberagent-cli"
 SYSTEM4_AGENT_ID = AgentId(type="System4", key="root")

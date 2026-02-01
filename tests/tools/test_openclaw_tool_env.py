@@ -4,7 +4,7 @@ from typing import Any, Dict
 
 import pytest
 
-from src.tools.cli_executor.openclaw_tool import OpenClawTool
+from src.cyberagent.tools.cli_executor.openclaw_tool import OpenClawTool
 
 
 class DummyExecutor:

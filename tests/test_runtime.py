@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from src import runtime as runtime_module
-from src.tools.cli_executor import factory as factory_module
+from src.cyberagent.core import runtime as runtime_module
+from src.cyberagent.tools.cli_executor import factory as factory_module
 
 
 def test_configure_tracing_returns_none_without_keys(

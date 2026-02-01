@@ -8,11 +8,11 @@ from autogen_core import AgentId
 from src.agents.messages import UserMessage
 from src.agents.user_agent import UserAgent
 from src.cli_session import forward_user_messages, read_stdin_loop
-from src.init_db import init_db
-from src.logging_utils import configure_autogen_logging
+from src.cyberagent.db.init_db import init_db
+from src.cyberagent.core.logging import configure_autogen_logging
 from src.rbac.enforcer import get_enforcer
 from src.registry import register_systems
-from src.runtime import get_runtime, stop_runtime
+from src.cyberagent.core.runtime import get_runtime, stop_runtime
 
 
 async def run_headless_session(initial_message: str | None = None) -> None:

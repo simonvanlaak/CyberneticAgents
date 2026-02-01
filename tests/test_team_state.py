@@ -5,9 +5,9 @@ from uuid import uuid4
 
 from sqlalchemy import func
 
-from src.db_utils import get_db
-from src.models.team import Team
-from src.team_state import get_or_create_last_team_id, mark_team_active
+from src.cyberagent.db.db_utils import get_db
+from src.cyberagent.db.models.team import Team
+from src.cyberagent.core.state import get_or_create_last_team_id, mark_team_active
 
 
 def test_get_or_create_last_team_id_uses_last_active() -> None:

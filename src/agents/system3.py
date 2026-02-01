@@ -19,7 +19,7 @@ from src.cyberagent.services import policies as policy_service
 from src.cyberagent.services import systems as system_service
 from src.cyberagent.services import tasks as task_service
 from src.enums import PolicyJudgement, SystemType
-from src.init_db import init_db
+from src.cyberagent.db.init_db import init_db
 
 
 class PolicyJudgeResponse(BaseModel):

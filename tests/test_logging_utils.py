@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 
-from src.logging_utils import configure_autogen_logging
+from src.cyberagent.core.logging import configure_autogen_logging
 
 
 def _has_file_handler(logger: logging.Logger, log_path: Path) -> bool:

@@ -68,16 +68,15 @@ def get_database_path() -> str:
     parsed = urlparse(DATABASE_URL)
     if parsed.scheme != "sqlite":
         raise ValueError("Database path is only available for sqlite databases.")
-    if parsed.path:
-        if parsed.path == "/:memory:":
+    raw_path = parsed.path or ""
+    if raw_path:
+        if raw_path == "/:memory:":
             return ":memory:"
-        normalized = os.path.normpath(parsed.path)
-        if normalized.startswith("//"):
-            while normalized.startswith("//"):
-                normalized = normalized[1:]
+        normalized = os.path.normpath(raw_path)
+        if raw_path.startswith("//"):
             return normalized
         if normalized.startswith("/"):
-            return normalized[1:]
+            return normalized.lstrip("/")
         return normalized
     return "data/CyberneticAgents.db"
 
