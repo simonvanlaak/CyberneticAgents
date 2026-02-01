@@ -13,7 +13,7 @@ The agentskills spec will be used to provide the agent with information on avail
 skills:
 - web_search via https://github.com/joshsisto/brave-search-cli
 - web_fetch via Readability
-
+- some form of Personal Knowledge Management (I prefer obsidian) that can be read to get knowledge on the user, I have my obsidian in a private github, so cloning a private / public repo and reading its files would be good as a skill.
 
 
 - [ ] Should we have one docker container for all tools? Or one for each tool?
