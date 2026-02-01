@@ -42,7 +42,7 @@ This document describes the target architecture for CyberneticAgents and a phase
 │   └── architecture_perfect_plan.md
 ├── data/                          # Runtime DBs (gitignored)
 ├── logs/                          # Runtime logs (gitignored)
-└── requirements.txt
+└── package.json
 ```
 
 ## Module Responsibilities

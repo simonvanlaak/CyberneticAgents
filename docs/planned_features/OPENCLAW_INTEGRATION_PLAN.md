@@ -80,10 +80,10 @@ Make OpenClaw's existing CLI tools and skills available to all AutoGen VSM agent
 FROM python:3.11-slim
 
 # Install OpenClaw and dependencies
-RUN pip install openclaw
+RUN npm install -g openclaw@latest
 
 # Install common skills
-RUN npm install -g @openclaw/weather @openclaw/github @openclaw/coding-agent
+# Optional: install extra OpenClaw skills here
 
 # Install system dependencies for skills
 RUN apt-get update && apt-get install -y \
@@ -338,7 +338,7 @@ async def execute(self, tool_name: str, agent_id: str, **kwargs):
 ### Example: Adding Weather Skill
 ```dockerfile
 # Dockerfile.openclaw-tools (src/tools/cli_executor)
-RUN npm install -g @openclaw/weather
+# Optional: install extra OpenClaw skills here
 ```
 
 ```python

@@ -1,10 +1,11 @@
 # CyberneticAgents Dockerfile for OpenClaw Tools
 # ---------------------------------------------
 # Base image
-FROM python:3.11-slim
+FROM node:22-slim
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
+    ca-certificates \
     curl \
     git \
     ffmpeg \
@@ -13,11 +14,11 @@ RUN apt-get update && apt-get install -y \
 # Create app directory
 WORKDIR /app
 
-# Install Python dependencies
-COPY requirements.txt .
-RUN pip install --upgrade pip && \
-    pip install -r requirements.txt && \
-    pip install openclaw
+# Install OpenClaw CLI
+RUN npm install -g openclaw@latest
+
+# Optional: verify CLI install
+RUN openclaw --version
 
 # Default command (override at runtime)
 CMD ["web_search"]
