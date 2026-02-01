@@ -90,15 +90,10 @@ def update_policy_prompt(system_id: str, content: str) -> PolicyPrompt | None:
         if not policy:
             return None
 
-        # Create updated policy object
-        updated_policy = PolicyPrompt(system_id=system_id, content=content)
-
-        # Delete old and add new
-        session.delete(policy)
-        session.add(updated_policy)
+        policy.content = content
         session.commit()
-
-        return updated_policy
+        session.refresh(policy)
+        return policy
     except Exception as e:
         session.rollback()
         raise e
