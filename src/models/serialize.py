@@ -1,20 +1,6 @@
-from __future__ import annotations
+"""Compatibility shim for src.cyberagent.domain.serialize."""
 
-from typing import Any
+from src.cyberagent.domain.serialize import *  # noqa: F401,F403
+from src.cyberagent.domain import serialize as _serialize
 
-
-def model_to_dict(model: Any) -> dict[str, Any]:
-    """
-    Convert a SQLAlchemy model to a JSON-friendly dict.
-
-    Strips SQLAlchemy instance state and normalizes Enum-like values.
-    """
-    payload: dict[str, Any] = {}
-    for key, value in model.__dict__.items():
-        if key.startswith("_sa_instance_state"):
-            continue
-        if hasattr(value, "value"):
-            payload[key] = value.value
-        else:
-            payload[key] = value
-    return payload
+__all__ = [name for name in dir(_serialize) if not name.startswith("_")]

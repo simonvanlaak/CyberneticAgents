@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from types import SimpleNamespace
 from typing import Any, Dict, List
@@ -7,7 +8,7 @@ from typing import Any, Dict, List
 import pytest
 from autogen_core import CancellationToken
 
-from src import runtime
+from src.cyberagent.core import runtime as core_runtime
 from src.tools.cli_executor import factory, secrets
 from src.tools.cli_executor.docker_env_executor import EnvDockerCommandLineCodeExecutor
 from src.tools.cli_executor.openclaw_tool import OpenClawTool
@@ -25,6 +26,19 @@ class _FakeExecutor:
     async def execute_code_blocks(self, code_blocks, cancellation_token):
         self.code_blocks = code_blocks
         return SimpleNamespace(exit_code=0, output=self.output)
+
+
+class _FakeContainer:
+    def __init__(self, exit_code: int, output: str) -> None:
+        self._exit_code = exit_code
+        self._output = output
+        self.last_command: List[str] | None = None
+        self.last_env: Dict[str, str] | None = None
+
+    def exec_run(self, command: List[str], **kwargs: Any) -> SimpleNamespace:
+        self.last_command = command
+        self.last_env = kwargs.get("environment")
+        return SimpleNamespace(exit_code=self._exit_code, output=self._output.encode())
 
 
 class _FakeRuntime:
@@ -91,7 +105,13 @@ def test_configure_tracing_no_credentials(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
     monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
 
-    assert runtime.configure_tracing() is None
+    assert core_runtime.configure_tracing() is None
+
+
+def test_runtime_shim_exports() -> None:
+    import src.runtime as runtime_shim
+
+    assert runtime_shim.get_runtime is core_runtime.get_runtime
 
 
 def test_configure_tracing_with_credentials(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -99,19 +119,19 @@ def test_configure_tracing_with_credentials(monkeypatch: pytest.MonkeyPatch) -> 
     monkeypatch.setenv("LANGFUSE_SECRET_KEY", "secret")
     monkeypatch.setenv("LANGFUSE_BASE_URL", "https://langfuse.test")
 
-    monkeypatch.setattr(runtime, "Langfuse", _FakeLangfuse)
-    monkeypatch.setattr(runtime, "BatchSpanProcessor", _FakeBatchSpanProcessor)
-    monkeypatch.setattr(runtime, "TracerProvider", _FakeTracerProvider)
-    monkeypatch.setattr(runtime, "OTLPSpanExporter", _FakeExporter)
+    monkeypatch.setattr(core_runtime, "Langfuse", _FakeLangfuse)
+    monkeypatch.setattr(core_runtime, "BatchSpanProcessor", _FakeBatchSpanProcessor)
+    monkeypatch.setattr(core_runtime, "TracerProvider", _FakeTracerProvider)
+    monkeypatch.setattr(core_runtime, "OTLPSpanExporter", _FakeExporter)
 
     seen: Dict[str, object] = {}
 
     def _record(provider: object) -> None:
         seen["provider"] = provider
 
-    monkeypatch.setattr(runtime.trace, "set_tracer_provider", _record)
+    monkeypatch.setattr(core_runtime.trace, "set_tracer_provider", _record)
 
-    provider = runtime.configure_tracing()
+    provider = core_runtime.configure_tracing()
 
     assert provider is seen["provider"]
 
@@ -123,27 +143,27 @@ def test_get_runtime_uses_factory(monkeypatch: pytest.MonkeyPatch) -> None:
         created["executor"] = "exec"
         return "exec"
 
-    monkeypatch.setattr(runtime, "SingleThreadedAgentRuntime", _FakeRuntime)
-    monkeypatch.setattr(runtime, "create_cli_executor", _fake_factory)
-    runtime._runtime = None
-    runtime._cli_executor = None
+    monkeypatch.setattr(core_runtime, "SingleThreadedAgentRuntime", _FakeRuntime)
+    monkeypatch.setattr(core_runtime, "create_cli_executor", _fake_factory)
+    core_runtime._runtime = None
+    core_runtime._cli_executor = None
 
-    runtime_instance = runtime.get_runtime()
+    runtime_instance = core_runtime.get_runtime()
 
     assert isinstance(runtime_instance, _FakeRuntime)
     assert runtime_instance.started is True
     assert created["executor"] == "exec"
-    runtime._runtime = None
-    runtime._cli_executor = None
+    core_runtime._runtime = None
+    core_runtime._cli_executor = None
 
 
 @pytest.mark.asyncio
 async def test_stop_runtime_resets() -> None:
-    runtime._runtime = _FakeRuntime()
+    core_runtime._runtime = _FakeRuntime()
 
-    await runtime.stop_runtime()
+    await core_runtime.stop_runtime()
 
-    assert runtime._runtime is None
+    assert core_runtime._runtime is None
 
 
 def test_create_cli_executor_uses_env(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -156,6 +176,20 @@ def test_create_cli_executor_uses_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
     assert executor is not None
     assert executor.image == "example/image:tag"
+
+
+def test_create_cli_executor_default_image(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("OPENCLAW_TOOLS_IMAGE", raising=False)
+    monkeypatch.setattr(
+        factory, "EnvDockerCommandLineCodeExecutor", _FakeDockerExecutor
+    )
+
+    executor = factory.create_cli_executor()
+
+    assert executor is not None
+    assert (
+        executor.image == "ghcr.io/simonvanlaak/cyberneticagents-openclaw-tools:latest"
+    )
 
 
 def test_create_cli_executor_handles_failure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -238,3 +272,28 @@ async def test_env_executor_requires_running() -> None:
 
     with pytest.raises(ValueError):
         await executor._execute_command(["echo", "hi"], CancellationToken())
+
+
+@pytest.mark.asyncio
+async def test_env_executor_executes_command(monkeypatch: pytest.MonkeyPatch) -> None:
+    executor = _make_env_executor()
+    executor.set_exec_env({"KEY": "VALUE"})
+    executor._container = _FakeContainer(0, "ok")
+    executor._running = True
+    executor._loop = asyncio.get_running_loop()
+    executor._cancellation_futures = []
+
+    async def _fake_to_thread(func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    monkeypatch.setattr(
+        "src.tools.cli_executor.docker_env_executor.asyncio.to_thread", _fake_to_thread
+    )
+
+    output, exit_code = await executor._execute_command(
+        ["echo", "hi"], CancellationToken()
+    )
+
+    assert exit_code == 0
+    assert output == "ok"
+    assert executor._container.last_env == {"KEY": "VALUE"}

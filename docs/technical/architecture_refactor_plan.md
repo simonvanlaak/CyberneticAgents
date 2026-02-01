@@ -23,7 +23,7 @@ This plan operationalizes the target architecture from `docs/technical/architect
 - [x] Phase 0 — Baseline & Safety
 - [x] Phase 1 — Create `src/cyberagent/` Package Root
 - [x] Phase 2 — Core + DB Infrastructure Moves
-- [ ] Phase 3 — Domain vs DB Split
+- [x] Phase 3 — Domain vs DB Split
 - [ ] Phase 4 — Services Layer
 - [ ] Phase 5 — Tools Simplification
 - [ ] Phase 6 — Agents Cleanup
