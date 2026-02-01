@@ -89,6 +89,28 @@ def test_get_runtime_starts_singleton(monkeypatch: pytest.MonkeyPatch) -> None:
     assert first.start_count == 1
 
 
+def test_create_cli_executor_uses_configured_image(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expected_image = "ghcr.io/example/openclaw-tools:latest"
+    monkeypatch.setenv("OPENCLAW_TOOLS_IMAGE", expected_image)
+
+    captured: dict[str, object] = {}
+
+    class DummyExecutor:
+        def __init__(self, *args, **kwargs) -> None:
+            captured["image"] = kwargs.get("image")
+
+    monkeypatch.setattr(
+        runtime_module, "EnvDockerCommandLineCodeExecutor", DummyExecutor
+    )
+
+    executor = runtime_module.create_cli_executor()
+
+    assert executor is not None
+    assert captured["image"] == expected_image
+
+
 @pytest.mark.asyncio
 async def test_stop_runtime_clears_instance() -> None:
     class DummyRuntime:

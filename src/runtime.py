@@ -5,6 +5,8 @@ Central runtime manager for the VSM multi-agent system.
 
 import base64
 import os
+from pathlib import Path
+from typing import Optional
 
 from autogen_core import SingleThreadedAgentRuntime
 from langfuse import Langfuse
@@ -14,8 +16,41 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
+from src.tools.cli_executor.docker_env_executor import EnvDockerCommandLineCodeExecutor
+
 # Singleton runtime instance
 _runtime: SingleThreadedAgentRuntime | None = None
+_cli_executor: EnvDockerCommandLineCodeExecutor | None = None
+
+
+def create_cli_executor() -> Optional[EnvDockerCommandLineCodeExecutor]:
+    """
+    Create a code executor for OpenClaw tools.
+
+    Returns:
+        Code executor instance or None if AutoGen not available
+    """
+
+    # Set up working directory
+    work_dir = Path("docker_cli_executor")
+    work_dir.mkdir(exist_ok=True)
+
+    try:
+        image = os.getenv(
+            "OPENCLAW_TOOLS_IMAGE",
+            "ghcr.io/simonvanlaak/cyberneticagents-openclaw-tools:latest",
+        )
+        return EnvDockerCommandLineCodeExecutor(
+            work_dir=work_dir,
+            image=image,
+            container_name="cybernetic-agents-cli-executor",
+            auto_remove=True,  # Clean up after execution
+            # Note: volumes and docker_socket_path not supported in this AutoGen version
+            # File access will work through work_dir mounting
+        )
+
+    except Exception:
+        return None
 
 
 def configure_tracing():
@@ -69,8 +104,10 @@ def configure_tracing():
 def get_runtime() -> SingleThreadedAgentRuntime:
     """Get the singleton runtime instance with OpenTelemetry tracing."""
     global _runtime
+    global _cli_executor
     if _runtime is None:
         _runtime = SingleThreadedAgentRuntime(tracer_provider=configure_tracing())
+        _cli_executor = create_cli_executor()
         _runtime.start()
     return _runtime
 

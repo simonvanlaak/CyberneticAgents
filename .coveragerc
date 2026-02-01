@@ -1,0 +1,11 @@
+[run]
+branch = True
+source = src
+
+[report]
+include =
+    src/runtime.py
+    src/tools/__init__.py
+    src/tools/cli_executor/*
+omit =
+    */__pycache__/*
