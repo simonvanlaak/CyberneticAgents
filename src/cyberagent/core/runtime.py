@@ -14,7 +14,7 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
-from src.tools.cli_executor.factory import create_cli_executor
+from src.cyberagent.tools.cli_executor.factory import create_cli_executor
 
 # Singleton runtime instance
 _runtime: SingleThreadedAgentRuntime | None = None

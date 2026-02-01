@@ -25,7 +25,7 @@ This plan operationalizes the target architecture from `docs/technical/architect
 - [x] Phase 2 — Core + DB Infrastructure Moves
 - [x] Phase 3 — Domain vs DB Split
 - [x] Phase 4 — Services Layer
-- [ ] Phase 5 — Tools Simplification
+- [x] Phase 5 — Tools Simplification
 - [ ] Phase 6 — Agents Cleanup
 - [ ] Phase 7 — CLI & UI
 - [ ] Phase 8 — Remove Legacy Paths

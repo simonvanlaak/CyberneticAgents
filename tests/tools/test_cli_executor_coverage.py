@@ -9,9 +9,11 @@ import pytest
 from autogen_core import CancellationToken
 
 from src.cyberagent.core import runtime as core_runtime
-from src.tools.cli_executor import factory, secrets
-from src.tools.cli_executor.docker_env_executor import EnvDockerCommandLineCodeExecutor
-from src.tools.cli_executor.openclaw_tool import OpenClawTool
+from src.cyberagent.tools.cli_executor import factory, secrets
+from src.cyberagent.tools.cli_executor.docker_env_executor import (
+    EnvDockerCommandLineCodeExecutor,
+)
+from src.cyberagent.tools.cli_executor.openclaw_tool import OpenClawTool
 
 
 class _FakeExecutor:
@@ -212,6 +214,8 @@ def test_tool_secrets_present(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BRAVE_API_KEY", "token")
 
     assert secrets.get_tool_secrets("web_search") == {"BRAVE_API_KEY": "token"}
+
+    assert secrets.get_tool_secrets("unknown_tool") == {}
 
 
 def test_openclaw_build_cli_args() -> None:
