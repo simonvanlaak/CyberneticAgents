@@ -27,7 +27,7 @@ This plan operationalizes the target architecture from `docs/technical/architect
 - [x] Phase 4 — Services Layer
 - [x] Phase 5 — Tools Simplification
 - [x] Phase 6 — Agents Cleanup
-- [ ] Phase 7 — CLI & UI
+- [x] Phase 7 — CLI & UI
 - [ ] Phase 8 — Remove Legacy Paths
 
 ## Phase 0 — Baseline & Safety

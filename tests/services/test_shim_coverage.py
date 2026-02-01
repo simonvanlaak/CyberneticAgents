@@ -13,6 +13,10 @@ def test_cli_executor_shims() -> None:
     new_factory = importlib.import_module("src.cyberagent.tools.cli_executor.factory")
     assert old_factory.create_cli_executor is new_factory.create_cli_executor
 
+    old_cli = importlib.import_module("src.cli.cyberagent")
+    new_cli = importlib.import_module("src.cyberagent.cli.cyberagent")
+    assert old_cli.build_parser is new_cli.build_parser
+
     old_secrets = importlib.import_module("src.tools.cli_executor.secrets")
     new_secrets = importlib.import_module("src.cyberagent.tools.cli_executor.secrets")
     assert old_secrets.get_tool_secrets is new_secrets.get_tool_secrets

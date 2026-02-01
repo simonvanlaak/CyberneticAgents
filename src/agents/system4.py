@@ -379,8 +379,8 @@ class System4(SystemBase):
             return (False, e)
 
     async def _select_next_initiative(
-        self, message, ctx, prompts, strategy: Strategy
-    ) -> Initiative:
+        self, message, ctx, prompts, strategy: "Strategy"
+    ) -> "Initiative":
         # Identify initative to start first
         assign_initiative_prompts = prompts + [
             "## STRATEGY",

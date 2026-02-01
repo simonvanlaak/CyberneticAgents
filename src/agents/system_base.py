@@ -341,7 +341,7 @@ class SystemBase(RoutedAgent):
             topic_id=TopicId(topic_type, topic_source),
         )
 
-    def _get_systems_by_type(self, type: int) -> List[System]:
+    def _get_systems_by_type(self, type: int) -> List["System"]:
         if not self.team_id:
             raise ValueError("Team id is not set for this agent.")
         return system_service.get_systems_by_type(self.team_id, type)
