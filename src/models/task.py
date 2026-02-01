@@ -5,13 +5,14 @@ Task model and database operations
 import json
 from typing import List, Optional
 
-from sqlalchemy import ForeignKey, Integer, String, Text
+from sqlalchemy import Enum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import mapped_column, relationship
 from sqlalchemy.orm.base import Mapped
 
 from src.db_utils import get_db
 from src.enums import Status
 from src.init_db import Base
+from src.models.serialize import model_to_dict
 
 
 class Task(Base):
@@ -24,7 +25,7 @@ class Task(Base):
     initiative_id: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("initiatives.id")
     )
-    status: Mapped[Status] = mapped_column(Status, default=Status.PENDING)
+    status: Mapped[Status] = mapped_column(Enum(Status), default=Status.PENDING)
     assignee: Mapped[Optional[str]] = mapped_column(String(100))  # AgentId as string
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
@@ -38,16 +39,19 @@ class Task(Base):
         self.status = Status(status)
 
     def to_prompt(self) -> List[str]:
-        return [json.dumps(self.dict(), indent=4)]
+        return [json.dumps(model_to_dict(self), indent=4, default=str)]
 
     def update(self):
         db = next(get_db())
+        db.merge(self)
         db.commit()
 
     def add(self):
         db = next(get_db())
         db.add(self)
         db.commit()
+        db.refresh(self)
+        db.expunge(self)
         return self.id
 
 

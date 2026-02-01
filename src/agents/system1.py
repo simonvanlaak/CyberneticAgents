@@ -35,8 +35,12 @@ class System1(SystemBase):
         task.set_status(Status.IN_PROGRESS)
         task.update()
         response = await self.run([message], ctx)
-        latest_message = response.chat_message
-        result = latest_message.to_model_text()
+        latest_message = self._get_last_message(response)
+        result = (
+            latest_message.to_model_text()
+            if hasattr(latest_message, "to_model_text")
+            else str(latest_message)
+        )
         task.result = result
         task.set_status(Status.COMPLETED)
         task.update()
@@ -44,8 +48,8 @@ class System1(SystemBase):
             TaskReviewMessage(
                 task_id=message.task_id,
                 content=result,
-                assignee_agent_id_str=self.agent_id,
-                source=self.name,
+                assignee_agent_id_str=str(self.agent_id),
+                source=str(self.agent_id),
             ),
             self.task_requestor,
         )

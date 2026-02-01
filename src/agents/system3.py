@@ -14,8 +14,9 @@ from src.agents.messages import (
     TaskReviewMessage,
 )
 from src.agents.system_base import SystemBase
-from src.enums import PolicyJudgement, Status
+from src.enums import PolicyJudgement, Status, SystemType
 from src.models import policy
+from src.init_db import init_db
 from src.models.system import get_system
 from src.models.task import Task, get_task
 
@@ -70,6 +71,7 @@ class System3(SystemBase):
     async def handle_initiative_assign_message(
         self, message: InitiativeAssignMessage, ctx: MessageContext
     ) -> None:
+        init_db()
         # Fetch initiative from database using initiative_id
         from src.models.initiative import get_initiative
 
@@ -80,6 +82,30 @@ class System3(SystemBase):
         initiative.set_status(Status.IN_PROGRESS)
         initiative.update()
 
+        initiative_payload = {
+            "id": getattr(initiative, "id", None),
+            "team_id": getattr(initiative, "team_id", None),
+            "strategy_id": getattr(initiative, "strategy_id", None),
+            "status": initiative.status.value
+            if hasattr(initiative, "status") and hasattr(initiative.status, "value")
+            else str(getattr(initiative, "status", "")),
+            "name": getattr(initiative, "name", ""),
+            "description": getattr(initiative, "description", ""),
+            "result": getattr(initiative, "result", None),
+        }
+        systems = self._get_systems_by_type(SystemType.OPERATION)
+        systems_list = systems.systems if hasattr(systems, "systems") else systems
+        systems_payload = [
+            {
+                "id": system.id,
+                "name": system.name,
+                "type": system.type.value
+                if hasattr(system.type, "value")
+                else str(system.type),
+                "agent_id_str": system.agent_id_str,
+            }
+            for system in systems_list
+        ]
         message_specific_prompts = [
             "## INITIATIVE ASSIGNMENT",
             "You have received an initiative assignment. Your task is to:",
@@ -87,9 +113,9 @@ class System3(SystemBase):
             "2. Project Planning: Turn an abstract initiative into distinct tasks.",
             "3. Assign Tasks: Assign tasks to the System 1 agents with the required capabilities.",
             "### INITIATIVE",
-            json.dumps(initiative.__dict__, indent=4),
+            json.dumps(initiative_payload, indent=4),
             "## AVAILABLE SYSTEM 1s",
-            json.dumps(self._get_systems_by_type(1).__dict__, indent=4),
+            json.dumps(systems_payload, indent=4),
         ]
         break_down_tasks_assignment = message_specific_prompts
         break_down_tasks_assignment.extend(
@@ -195,7 +221,7 @@ class System3(SystemBase):
         if not task.assignee:
             raise ValueError("Task has no assignee")
         policy_chunk = policy.get_system_policy_prompts(task.assignee)
-        system_5_id = self._get_systems_by_type(type=5)[0].get_agent_id()
+        system_5_id = self._get_systems_by_type(SystemType.POLICY)[0].get_agent_id()
         # break down policies into chunks of 5
         if len(policy_chunk) == 0:
             # TODO: send a policy suggestion here
@@ -255,8 +281,8 @@ class System3(SystemBase):
         await self._publish_message_to_agent(
             TaskAssignMessage(
                 task_id=task_id,
-                assignee_agent_id_str=assignee,
-                source=self.name,
+                assignee_agent_id_str=assignee.agent_id_str,
+                source=str(self.agent_id),
                 content=task.name,
             ),
             assignee.get_agent_id(),

@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.db_utils import get_db
 from src.init_db import Base
+from src.models.serialize import model_to_dict
 from src.models.system import get_system_from_agent_id
 
 
@@ -26,10 +27,11 @@ class Policy(Base):
     system = relationship("System", back_populates="policies")
 
     def to_prompt(self) -> List[str]:
-        return [json.dumps(self.dict(), indent=4)]
+        return [json.dumps(model_to_dict(self), indent=4, default=str)]
 
     def update(self):
         db = next(get_db())
+        db.merge(self)
         db.commit()
 
 

@@ -5,7 +5,7 @@ Initiative model and database operations
 import json
 from typing import List, Optional
 
-from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy import Enum, ForeignKey, Integer, String
 from sqlalchemy.orm import mapped_column, relationship
 from sqlalchemy.orm.base import Mapped
 
@@ -14,6 +14,7 @@ from src.db_utils import get_db
 from src.enums import Status
 from src.init_db import Base
 from src.models.task import Task
+from src.models.serialize import model_to_dict
 
 
 # Database models
@@ -27,7 +28,7 @@ class Initiative(Base):
     strategy_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("strategies.id"), nullable=False
     )
-    status: Mapped[Status] = mapped_column(Status, default=Status.PENDING)
+    status: Mapped[Status] = mapped_column(Enum(Status), default=Status.PENDING)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(String(5000), nullable=False)
     result: Mapped[Optional[str]] = mapped_column(String(5000))
@@ -47,7 +48,7 @@ class Initiative(Base):
         )
 
     def to_prompt(self) -> List[str]:
-        return [json.dumps(self.__dict__, indent=4)]
+        return [json.dumps(model_to_dict(self), indent=4, default=str)]
 
     def get_tasks(self) -> List[Task]:
         db = next(get_db())
@@ -60,15 +61,17 @@ class Initiative(Base):
         db = next(get_db())
         db.add(self)
         db.flush()
-        new_id = self.id
         db.commit()
-        return new_id
+        db.refresh(self)
+        db.expunge(self)
+        return self.id
 
     def set_status(self, status: str) -> None:
         self.status = Status(status)
 
     def update(self):
         db = next(get_db())
+        db.merge(self)
         db.commit()
 
 

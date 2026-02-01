@@ -3,10 +3,11 @@
 Enum definitions for the CyberneticAgents system.
 """
 
+from enum import Enum as PyEnum
 from sqlalchemy import Enum
 
 
-class Status(Enum):
+class Status(PyEnum):
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
@@ -14,15 +15,15 @@ class Status(Enum):
     REJECTED = "rejected"
 
 
-class PolicyJudgement(Enum):
+class PolicyJudgement(PyEnum):
     VAGUE = "Vague"
     VIOLATED = "Violated"
     SATISFIED = "Satisfied"
 
 
-class SystemType(Enum):
-    OPERATION = 1
-    COORDINATION_2 = 2
-    CONTROL = 3
-    INTELLIGENCE = 4
-    POLICY = 5
+class SystemType(PyEnum):
+    OPERATION = "operation"
+    COORDINATION_2 = "coordination"
+    CONTROL = "control"
+    INTELLIGENCE = "intelligence"
+    POLICY = "policy"

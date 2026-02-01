@@ -4,9 +4,11 @@ import sqlite3
 from dataclasses import asdict, dataclass
 from typing import Iterable, Optional
 
-from src.init_db import init_db
+from src.init_db import get_database_path, init_db
 
 TERMINAL_STATUSES = {"completed", "approved", "rejected"}
+START_COMMAND = "python -m src.cli.cyberagent start"
+SUGGEST_COMMAND = "python -m src.cli.cyberagent suggest --payload \"Describe the task\""
 
 
 @dataclass(frozen=True)
@@ -51,16 +53,24 @@ class TeamView:
     purposes: list[PurposeView]
 
 
-def _is_active(status: Optional[str], active_only: bool) -> bool:
+def _status_value(status: Optional[object]) -> str:
+    if status is None:
+        return "unknown"
+    if isinstance(status, str):
+        return status
+    return getattr(status, "value", str(status))
+
+
+def _is_active(status: Optional[object], active_only: bool) -> bool:
     if not active_only:
         return True
     if status is None:
         return True
-    return str(status) not in TERMINAL_STATUSES
+    return _status_value(status) not in TERMINAL_STATUSES
 
 
 def _connect_db() -> sqlite3.Connection:
-    conn = sqlite3.connect("data/CyberneticAgents.db")
+    conn = sqlite3.connect(get_database_path())
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -164,8 +174,8 @@ def collect_status(team_id: Optional[int], active_only: bool) -> list[TeamView]:
         conn.close()
 
 
-def _format_status(status: Optional[str]) -> str:
-    return str(status) if status is not None else "unknown"
+def _format_status(status: Optional[object]) -> str:
+    return _status_value(status)
 
 
 def _append_lines(lines: list[str], extra_lines: Iterable[str]) -> None:
@@ -174,18 +184,25 @@ def _append_lines(lines: list[str], extra_lines: Iterable[str]) -> None:
 
 def render_status(teams: list[TeamView]) -> str:
     if not teams:
-        return "No data found."
+        return "\n".join(
+            [
+                "No data found.",
+                f"Next: run {START_COMMAND} to boot the runtime.",
+            ]
+        )
     lines: list[str] = []
     for team in teams:
         lines.append(f"Team {team.id}: {team.name}")
         if not team.purposes:
             lines.append("  No purposes found.")
+            lines.append(f"  Next: run {SUGGEST_COMMAND} to give the agents a task.")
             continue
         for purpose in team.purposes:
             lines.append(f"  Purpose {purpose.id}: {purpose.name}")
             lines.append(f"    Content: {purpose.content}")
             if not purpose.strategies:
                 lines.append("    No strategies found.")
+                lines.append(f"    Next: run {SUGGEST_COMMAND} to define a strategy.")
                 continue
             for strategy in purpose.strategies:
                 lines.append(
@@ -195,6 +212,9 @@ def render_status(teams: list[TeamView]) -> str:
                 lines.append(f"      Description: {strategy.description}")
                 if not strategy.initiatives:
                     lines.append("      No initiatives found.")
+                    lines.append(
+                        f"      Next: run {SUGGEST_COMMAND} to create initiatives."
+                    )
                     continue
                 for initiative in strategy.initiatives:
                     lines.append(
@@ -204,6 +224,9 @@ def render_status(teams: list[TeamView]) -> str:
                     lines.append(f"        Description: {initiative.description}")
                     if not initiative.tasks:
                         lines.append("        No tasks found.")
+                        lines.append(
+                            f"        Next: run {SUGGEST_COMMAND} to request tasks."
+                        )
                         continue
                     task_lines = [
                         (

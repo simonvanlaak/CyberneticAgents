@@ -82,6 +82,7 @@ Hooks behavior:
 - `pre-commit`: runs `black --check` on staged Python files and `pytest` on staged test files.
 - `pre-push`: runs the full test suite (`python3 -m pytest tests/ -v`).
 
+You have to always pass git-hooks, never use --no-verify.
 
 ## Directory Structure (1 level deep)
 Hidden/cached dirs omitted (e.g., `.git`, `.venv`, `.pytest_cache`, `__pycache__`).

@@ -2,9 +2,9 @@ import json
 import sqlite3
 import uuid
 
-from src.cli.status import collect_status, render_status, render_status_json
+from src.cli.status import TeamView, collect_status, render_status, render_status_json
 from src.db_utils import get_db
-from src.init_db import init_db
+from src.init_db import get_database_path, init_db
 from src.models.purpose import Purpose
 from src.models.team import Team
 
@@ -20,7 +20,7 @@ def _create_team_id() -> int:
 def _insert_strategy(
     team_id: int, purpose_id: int, name: str, description: str, status: str
 ) -> int:
-    conn = sqlite3.connect("data/CyberneticAgents.db")
+    conn = sqlite3.connect(get_database_path())
     try:
         cursor = conn.execute(
             "INSERT INTO strategies "
@@ -37,7 +37,7 @@ def _insert_strategy(
 def _insert_initiative(
     team_id: int, strategy_id: int, name: str, description: str, status: str
 ) -> int:
-    conn = sqlite3.connect("data/CyberneticAgents.db")
+    conn = sqlite3.connect(get_database_path())
     try:
         cursor = conn.execute(
             "INSERT INTO initiatives "
@@ -59,7 +59,7 @@ def _insert_task(
     status: str,
     assignee: str | None,
 ) -> int:
-    conn = sqlite3.connect("data/CyberneticAgents.db")
+    conn = sqlite3.connect(get_database_path())
     try:
         cursor = conn.execute(
             "INSERT INTO tasks "
@@ -127,6 +127,18 @@ def test_status_render_includes_hierarchy():
         in output
     )
     assert f"Task {task_two_id} [completed] (assignee: -) - Task Two" in output
+
+
+def test_status_render_no_data_suggests_start() -> None:
+    output = render_status([])
+    assert "No data found." in output
+    assert "python -m src.cli.cyberagent start" in output
+
+
+def test_status_render_no_purposes_suggests_suggest() -> None:
+    output = render_status([TeamView(id=1, name="Empty Team", purposes=[])])
+    assert "No purposes found." in output
+    assert "python -m src.cli.cyberagent suggest" in output
 
 
 def test_status_active_only_filters_completed_tasks():

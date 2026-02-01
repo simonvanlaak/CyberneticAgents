@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-echo "Running full test suite..."
-python3 -m pytest tests/ -v
+echo "Running full test suite with coverage (min 70%)..."
+python3 -m pytest tests/ -v --cov=src --cov-report=term-missing --cov-fail-under=70

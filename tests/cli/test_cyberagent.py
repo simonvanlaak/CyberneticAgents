@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Sequence
 
 import pytest
+from autogen_core import AgentId
 
 from src.cli import cyberagent
 from src.cli_session import AnsweredQuestion, PendingQuestion
@@ -80,6 +81,21 @@ def test_parse_suggestion_json_payload() -> None:
     parsed = cyberagent._parse_suggestion_args(args)
     assert parsed.payload_object == {"foo": "bar"}
     assert '"foo": "bar"' in parsed.payload_text
+
+
+def test_handle_suggest_invalid_payload_prints_guidance(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    args = argparse.Namespace(payload=None, file=None, format="json")
+    fake_stdin = io.StringIO("")
+    fake_stdin.isatty = lambda: True
+    monkeypatch.setattr(sys, "stdin", fake_stdin)
+    exit_code = cyberagent._handle_suggest(args)
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "Invalid payload" in captured.err
+    assert "--payload" in captured.err
+    assert "--file" in captured.err
 
 
 def test_handle_inbox_prints_entries(
@@ -235,6 +251,7 @@ def test_python_module_start_uses_stub(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     assert result.returncode == 0
     assert "Runtime start stubbed" in result.stdout
+    assert "cyberagent suggest" in result.stdout
 
 
 def test_start_spawns_serve_process(
@@ -268,3 +285,35 @@ def test_start_spawns_serve_process(
     assert recorded["cmd"][3] == cyberagent.SERVE_COMMAND
     assert recorded["env"]["CYBERAGENT_ACTIVE_TEAM_ID"] == "7"
     assert target_pid.read_text(encoding="utf-8") == "4242"
+
+
+@pytest.mark.asyncio
+async def test_send_suggestion_sets_user_sender(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class DummyRuntime:
+        async def send_message(self, message, recipient, sender=None, **kwargs):  # noqa: ANN001
+            captured["sender"] = sender
+
+    async def fake_register() -> None:
+        return None
+
+    async def fake_stop() -> None:
+        return None
+
+    class DummyEnforcer:
+        def clear_policy(self) -> None:
+            return None
+
+    monkeypatch.setattr(cyberagent, "get_runtime", lambda: DummyRuntime())
+    monkeypatch.setattr(cyberagent, "register_systems", fake_register)
+    monkeypatch.setattr(cyberagent, "stop_runtime", fake_stop)
+    monkeypatch.setattr(cyberagent, "get_enforcer", lambda: DummyEnforcer())
+    monkeypatch.setattr(cyberagent, "init_db", lambda: None)
+
+    parsed = cyberagent.ParsedSuggestion(payload_text="hi", payload_object="hi")
+    await cyberagent._send_suggestion(parsed)
+
+    assert captured["sender"] == AgentId(type="UserAgent", key="root")

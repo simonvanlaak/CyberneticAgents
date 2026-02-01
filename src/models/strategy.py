@@ -5,13 +5,14 @@ Strategy model and database operations
 import json
 from typing import List
 
-from sqlalchemy import ForeignKey, Integer, String, and_
+from sqlalchemy import Enum, ForeignKey, Integer, String, and_
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.db_utils import get_db
 from src.enums import Status
 from src.init_db import Base
 from src.models.initiative import Initiative
+from src.models.serialize import model_to_dict
 
 
 # Database models
@@ -23,7 +24,7 @@ class Strategy(Base):
         Integer, ForeignKey("teams.id"), nullable=False
     )
     purpose_id: Mapped[int] = mapped_column(Integer, ForeignKey("purposes.id"))
-    status: Mapped[Status] = mapped_column(Status, default=Status.PENDING)
+    status: Mapped[Status] = mapped_column(Enum(Status), default=Status.PENDING)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[int] = mapped_column(String(5000), nullable=False)
     result: Mapped[int] = mapped_column(String(5000))
@@ -44,19 +45,21 @@ class Strategy(Base):
         self.status = Status(status)
 
     def to_prompt(self) -> List[str]:
-        return [json.dumps(self.__dict__, indent=4)]
+        return [json.dumps(model_to_dict(self), indent=4, default=str)]
 
     def update(self):
         db = next(get_db())
+        db.merge(self)
         db.commit()
 
     def add(self) -> int:
         db = next(get_db())
         db.add(self)
         db.flush()
-        new_id = self.id
         db.commit()
-        return new_id
+        db.refresh(self)
+        db.expunge(self)
+        return self.id
 
 def get_strategy(strategy_id: int) -> Strategy:
     db = next(get_db())

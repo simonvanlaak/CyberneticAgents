@@ -10,6 +10,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.db_utils import get_db
 from src.init_db import Base
+from src.models.serialize import model_to_dict
 from src.models.strategy import Strategy
 
 
@@ -28,7 +29,7 @@ class Purpose(Base):
     strategies = relationship("Strategy", back_populates="purpose")
 
     def to_prompt(self) -> List[str]:
-        return [json.dumps(self.__dict__, indent=4)]
+        return [json.dumps(model_to_dict(self), indent=4, default=str)]
 
     def get_strategies(self) -> List[Strategy]:
         db = next(get_db())
@@ -39,15 +40,17 @@ class Purpose(Base):
 
     def update(self):
         db = next(get_db())
+        db.merge(self)
         db.commit()
 
     def add(self) -> int:
         db = next(get_db())
         db.add(self)
         db.flush()
-        new_id = self.id
         db.commit()
-        return new_id
+        db.refresh(self)
+        db.expunge(self)
+        return self.id
 
 
 def get_purpose(purpose_id: int) -> Purpose:
@@ -70,6 +73,8 @@ def get_or_create_default_purpose(team_id: int) -> Purpose:
             .first()
         )
         if purpose:
+            db.refresh(purpose)
+            db.expunge(purpose)
             return purpose
         purpose = Purpose(
             team_id=team_id,
@@ -78,6 +83,8 @@ def get_or_create_default_purpose(team_id: int) -> Purpose:
         )
         db.add(purpose)
         db.commit()
+        db.refresh(purpose)
+        db.expunge(purpose)
         return purpose
     finally:
         db.close()
