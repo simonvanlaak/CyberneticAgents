@@ -117,3 +117,22 @@ Disable TUI again, in order to go back to cli. The big benefit of going cli firs
 Implemented tools start,stop,status,suggest,inbox,watch,logs,config,login,help and serve
 
 Next step is to make sure test coverage reaches 70% (not far off) and then restructure the projects code architecture as outlined in the plan in the docs. This ensures we are moving forward with a clean project.
+
+# 2026-02-01
+I continued thinking about this project and came to the conclusion that a key aspect is ensuring viablitiy of the system.
+Viability in this context, is that the user keeps using the CyberneticAgents (CAs) and feels like that the value created is grater than the cost.
+With token cost being relatively high, a key objective of the CAs needs to be to ensure that it understand what brings value to the user.
+This is the default / hard coded purpose of the root team. And it needs to continuesly identify the users problems / needs in order to formulate strategies in creating value. While at the same time monitoring the costs.
+Onboarding is a critical step here, I noticed that I stopped using most of the LLM tools in the first day, because I'm tired of onboarding and setup. 
+Especially open source tools need a lot of setup, because you need to bring your own key etc. So I decided to change the focus of the project on clean onboarding for now.
+I thought the best way for the user to onboard the CAs is to give them access to a lot of information that is already written down, then the agents can analyze that to get a quick understanding of the user nedes without requiring a lot of user input.
+The best way to get access to that information is to 1. research the user online and 2. get access to a Personal Knowledge Management (PKM) tool (like Obsidian or Notion).
+Thus the next focus is to, give the agents access to the Web and PKMs.
+The approach to tooling should be a very easily expandible one, which can easily utilize existing tools.
+The openclaw ecosystem is great for this because it provides a lot of agent friendly tools already and is a fast growing community.
+The next step then is to have openclaw tools / skills work with CAs.
+
+However, tools require secrets. Most tools require some kind of API KEY and I want to make sure that we don't run into any security issues here. So I want to start with a clean secret management.
+
+- [ ] Should we have one docker container for all tools? Or one for each tool?
+- [ ] We need to split up the tools that are being offered by openclaw into different FunctionTools for the agents.

@@ -5,7 +5,7 @@ __pycache__/
 *.so
 .Python
 *.pyc
-
+.pytest_db/
 # Virtual environments
 venv/
 # Runtime artifacts
