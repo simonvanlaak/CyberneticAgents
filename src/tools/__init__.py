@@ -1,7 +1,5 @@
 """
-OpenClaw Tools Package
-
-Provides access to OpenClaw CLI tools and skills for AutoGen agents.
+Tooling for agent interactions and OpenClaw execution.
 """
 
 from .cli_executor.openclaw_tool import OpenClawTool

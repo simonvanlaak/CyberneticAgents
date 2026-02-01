@@ -24,7 +24,7 @@ This document describes the target architecture for CyberneticAgents and a phase
 │   │   ├── prompts/               # Prompt templates (by system)
 │   │   ├── rbac/                  # Enforcer, policies, RBAC adapters
 │   │   ├── services/              # Orchestration services (strategy, tasks)
-│   │   ├── tools/                 # Agent tools (system_create, delegate, etc.)
+│   │   ├── tools/                 # Agent tools (contact_user, OpenClaw CLI)
 │   │   ├── ui/                    # Optional TUI/GUI components (if present)
 │   │   └── utils/                 # Shared helpers (small, dependency-light)
 │   └── vendor/                    # Third-party vendored code (if needed)

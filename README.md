@@ -6,7 +6,7 @@ A VSM-inspired multi-agent system built on AutoGen Core + AgentChat with Casbin 
 
 - **Multi-agent runtime** using AutoGen Core + AgentChat
 - **VSM agent roles**: System 1, 3, 4, 5 (System 2 is defined in RBAC types but not implemented yet)
-- **RBAC enforcement** via Casbin for tool use and cross-agent actions
+- **RBAC enforcement** via Casbin for cross-agent actions
 - **Task/initiative/policy data model** backed by SQLite (SQLAlchemy)
 - **CLI-first interaction** for working with the system
 - **Optional tracing** with Langfuse via OpenTelemetry
@@ -66,7 +66,7 @@ CyberneticAgents/
 │   ├── agents/                 # System 1/3/4/5 + UserAgent
 │   ├── prompts/                # System prompts (1-5)
 │   ├── rbac/                   # Casbin enforcer + model
-│   ├── tools/                  # RBAC-guarded tools
+│   ├── tools/                  # Contact-user + OpenClaw CLI executor
 │   ├── models/                 # SQLAlchemy models
 │   ├── registry.py             # Agent factory registration
 │   ├── runtime.py              # Runtime + tracing setup
@@ -80,8 +80,8 @@ CyberneticAgents/
 
 - `main.py` initializes databases and registers agent factories.
 - `UserAgent` receives user input and forwards it to System 4.
-- System agents coordinate tasks and policies through tools.
-- Tools validate actions via RBAC (Casbin) before executing.
+- System agents coordinate tasks and policies via internal workflows and OpenClaw tooling.
+- OpenClaw tools are executed through a Docker CLI executor when configured.
 - Messages and tool usage are logged to stdout and runtime logs, with optional tracing.
 
 ## Development

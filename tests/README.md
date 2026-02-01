@@ -137,63 +137,8 @@ class TestRBACEnforcer:
 
 ### Integration Test Example
 
-```python
-# tests/test_vsm_agent.py
-import pytest
-from unittest.mock import AsyncMock, patch
-
-from src.vsm_agent import VSMSystemAgent
-from src.tools.delegate import DelegateRequest
-
-class TestVSMSystemAgentIntegration:
-    async def test_agent_message_handling(self):
-        """Test complete message handling workflow."""
-        # Setup
-        agent = VSMSystemAgent("test_agent")
-        request = DelegateRequest(
-            content="Test task",
-            sender="test_sender",
-            target_agent_id="test_target"
-        )
-
-        # Execute
-        response = await agent.handle_delegate(request, MessageContext())
-
-        # Verify
-        assert response.content == "Expected response"
-        assert response.is_error is False
-```
-
-### Mocking Example
-
-```python
-# tests/tools/test_delegate.py
-import pytest
-from unittest.mock import AsyncMock, patch
-
-from src.tools.delegate import Delegate
-from autogen_core import AgentId
-
-class TestDelegateTool:
-    async def test_delegate_execution(self):
-        """Test delegate tool execution."""
-        agent_id = AgentId("test_agent", "test_agent_id")
-
-        # Mock dependencies
-        with patch('src.tools.delegate.send_message_to_agent', new_callable=AsyncMock) as mock_send:
-            mock_send.return_value = DelegateResponse("Success", False)
-
-            # Create and run delegate tool
-            delegate = Delegate(agent_id)
-            result = await delegate.run(
-                DelegateArgsType(target_agent_id="target_agent", task="Test task"),
-                CancellationToken()
-            )
-
-            # Verify
-            assert result.result[0].content == "Success"
-            assert result.is_error is False
-```
+The integration suite focuses on agent workflows and OpenClaw tool execution.
+Legacy delegate/escalate tool examples have been removed.
 
 ## Test Data and Fixtures
 
@@ -211,18 +156,11 @@ The `tests/fixtures/test_data.py` module provides:
 ```python
 from tests.fixtures.test_data import (
     SAMPLE_SYSTEM_IDS,
-    create_mock_delegate_request,
     generate_test_system_ids
 )
 
 # Get sample system IDs
 system_1_id = SAMPLE_SYSTEM_IDS[SystemTypes.SYSTEM_1_OPERATIONS]
-
-# Create mock request
-request = create_mock_delegate_request(
-    content="Test task",
-    sender="test_sender"
-)
 
 # Generate test system IDs
 test_ids = generate_test_system_ids(namespace="test", count=3)
@@ -369,7 +307,7 @@ class TestNamespaceIsolation:
         clean_enforcer.add_policy(
             "namespace1_operations_worker",
             "namespace1",
-            "Delegate",
+            "ContactUserTool",
             "namespace1_control_root"
         )
 
@@ -377,7 +315,7 @@ class TestNamespaceIsolation:
         allowed = clean_enforcer.enforce(
             "namespace1_operations_worker",
             "namespace2",
-            "Delegate",
+            "ContactUserTool",
             "namespace2_control_root"
         )
 

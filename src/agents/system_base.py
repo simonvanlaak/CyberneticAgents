@@ -39,7 +39,6 @@ from src.models.system import (
 )
 from src.models.team import get_team
 from src.team_state import get_or_create_last_team_id, mark_team_active
-from src.tools.tool_router import get_tools
 
 SYSTEM_TYPES = {
     1: "operation",
@@ -100,7 +99,7 @@ class SystemBase(RoutedAgent):
         self.trace_context = trace_context or {}
         self.identity_prompt = identity_prompt
         self.responsibility_prompts = responsibility_prompts
-        self.available_tools = get_tools(self.agent_id)
+        self.available_tools = []
         self.tools = self.available_tools
         # Create a valid Python identifier for the AssistantAgent
         # Replace slashes with underscores for the agent name
