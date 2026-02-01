@@ -79,3 +79,19 @@ def test_determine_system_type_defaults_and_matches() -> None:
     )
     assert determine_system_type("root_5policy_sys5") == SystemTypes.SYSTEM_5_POLICY
     assert determine_system_type("unknown_agent") == SystemTypes.SYSTEM_1_OPERATIONS
+
+
+def test_load_llm_config_mistral_requires_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "mistral")
+    monkeypatch.delenv("MISTRAL_API_KEY", raising=False)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+
+    with pytest.raises(ValueError, match="MISTRAL_API_KEY"):
+        load_llm_config()
+
+
+def test_determine_system_type_system1_match() -> None:
+    assert (
+        determine_system_type("root_1operations_sys1")
+        == SystemTypes.SYSTEM_1_OPERATIONS
+    )

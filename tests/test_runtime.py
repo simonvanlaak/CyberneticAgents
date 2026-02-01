@@ -103,3 +103,12 @@ async def test_stop_runtime_clears_instance() -> None:
     await runtime_module.stop_runtime()
 
     assert runtime_module._runtime is None
+
+
+@pytest.mark.asyncio
+async def test_stop_runtime_noop_when_none() -> None:
+    runtime_module._runtime = None
+
+    await runtime_module.stop_runtime()
+
+    assert runtime_module._runtime is None
