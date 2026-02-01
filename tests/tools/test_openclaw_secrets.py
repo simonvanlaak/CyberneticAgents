@@ -28,3 +28,7 @@ def test_get_tool_secrets_returns_empty_for_unknown_tool(
     result = secrets.get_tool_secrets("unknown")
 
     assert result == {}
+
+
+def test_tool_secret_env_vars_contains_web_search() -> None:
+    assert secrets.TOOL_SECRET_ENV_VARS["web_search"] == ["BRAVE_API_KEY"]

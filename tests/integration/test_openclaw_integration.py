@@ -125,7 +125,7 @@ async def test_rbac_enforcement():
 )
 async def test_real_openclaw_execution():
     """Integration test with real Docker executor (requires Docker running)."""
-    from src.runtime import create_cli_executor
+    from src.tools.cli_executor.factory import create_cli_executor
     from src.tools.cli_executor.openclaw_tool import OpenClawTool
 
     executor = create_cli_executor()

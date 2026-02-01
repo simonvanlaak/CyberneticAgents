@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from src import runtime as runtime_module
+from src.tools.cli_executor import factory as factory_module
 
 
 def test_configure_tracing_returns_none_without_keys(
@@ -102,10 +103,10 @@ def test_create_cli_executor_uses_configured_image(
             captured["image"] = kwargs.get("image")
 
     monkeypatch.setattr(
-        runtime_module, "EnvDockerCommandLineCodeExecutor", DummyExecutor
+        factory_module, "EnvDockerCommandLineCodeExecutor", DummyExecutor
     )
 
-    executor = runtime_module.create_cli_executor()
+    executor = factory_module.create_cli_executor()
 
     assert executor is not None
     assert captured["image"] == expected_image

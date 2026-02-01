@@ -100,6 +100,16 @@ def test_parse_result_non_json() -> None:
     assert result["output"] == "raw"
 
 
+def test_parse_result_json() -> None:
+    tool = OpenClawTool(NoEnvExecutor())
+    result = tool._parse_result(
+        type("obj", (object,), {"exit_code": 0, "output": '{"ok": true}'})
+    )
+
+    assert result["success"] is True
+    assert result["output"] == {"ok": True}
+
+
 def test_parse_result_error() -> None:
     tool = OpenClawTool(NoEnvExecutor())
     result = tool._parse_result(
