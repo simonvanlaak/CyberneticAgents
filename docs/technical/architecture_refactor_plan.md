@@ -22,7 +22,7 @@ This plan operationalizes the target architecture from `docs/technical/architect
 ## Migration Checklist
 - [x] Phase 0 — Baseline & Safety
 - [x] Phase 1 — Create `src/cyberagent/` Package Root
-- [ ] Phase 2 — Core + DB Infrastructure Moves
+- [x] Phase 2 — Core + DB Infrastructure Moves
 - [ ] Phase 3 — Domain vs DB Split
 - [ ] Phase 4 — Services Layer
 - [ ] Phase 5 — Tools Simplification

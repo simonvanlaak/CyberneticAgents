@@ -1,6 +1,82 @@
-"""Compatibility shim for src.runtime."""
+# -*- coding: utf-8 -*-
+"""
+Central runtime manager for the VSM multi-agent system.
+"""
 
-from src import runtime as _runtime
-from src.runtime import *  # noqa: F401,F403
+import base64
+import os
 
-__all__ = [name for name in dir(_runtime) if not name.startswith("_")]
+from autogen_core import SingleThreadedAgentRuntime
+from langfuse import Langfuse
+from opentelemetry import trace
+from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.sdk.trace import TracerProvider
+from opentelemetry.sdk.trace.export import BatchSpanProcessor
+
+from src.tools.cli_executor.factory import create_cli_executor
+
+# Singleton runtime instance
+_runtime: SingleThreadedAgentRuntime | None = None
+_cli_executor = None
+
+
+def configure_tracing():
+    """Configure OpenTelemetry tracing with Langfuse integration."""
+    public_key = os.environ.get("LANGFUSE_PUBLIC_KEY", "")
+    secret_key = os.environ.get("LANGFUSE_SECRET_KEY", "")
+
+    if not public_key or not secret_key:
+        print("Langfuse credentials not found, running without tracing")
+        return None
+
+    try:
+        langfuse = Langfuse()
+
+        if langfuse.auth_check():
+            print("Langfuse client is authenticated and ready!")
+        else:
+            print("Authentication failed. Please check your credentials and host.")
+            return None
+
+        tracer_provider = TracerProvider(
+            resource=Resource({"service.name": "cybernetic-agents"})
+        )
+
+        auth_string = base64.b64encode(f"{public_key}:{secret_key}".encode()).decode()
+
+        langfuse_endpoint = os.environ.get(
+            "LANGFUSE_BASE_URL", "https://cloud.langfuse.com"
+        )
+        otlp_exporter = OTLPSpanExporter(
+            endpoint=f"{langfuse_endpoint}/api/public/otel/v1/traces",
+            headers={"Authorization": f"Basic {auth_string}"},
+        )
+
+        tracer_provider.add_span_processor(BatchSpanProcessor(otlp_exporter))
+        trace.set_tracer_provider(tracer_provider)
+
+        return tracer_provider
+    except Exception as e:
+        print(f"Failed to configure tracing: {e}. Running without tracing.")
+        return None
+
+
+def get_runtime() -> SingleThreadedAgentRuntime:
+    """Get the singleton runtime instance with OpenTelemetry tracing."""
+    global _runtime
+    global _cli_executor
+    if _runtime is None:
+        _runtime = SingleThreadedAgentRuntime(tracer_provider=configure_tracing())
+        _cli_executor = create_cli_executor()
+        _runtime.start()
+    return _runtime
+
+
+async def stop_runtime() -> None:
+    """Stop the runtime gracefully."""
+    global _runtime
+    if _runtime is None:
+        return
+    await _runtime.stop_when_idle()
+    _runtime = None
