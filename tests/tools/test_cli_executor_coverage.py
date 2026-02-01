@@ -266,6 +266,12 @@ def test_env_executor_injects_env() -> None:
     assert executor._build_exec_env() == {"KEY": "VALUE"}
 
 
+def test_env_executor_builds_empty_env() -> None:
+    executor = _make_env_executor()
+
+    assert executor._build_exec_env() == {}
+
+
 @pytest.mark.asyncio
 async def test_env_executor_requires_running() -> None:
     executor = _make_env_executor()
