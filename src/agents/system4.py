@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import TYPE_CHECKING, List, Tuple
 
 from autogen_agentchat.messages import TextMessage
 from autogen_core import MessageContext, message_handler
@@ -17,12 +17,16 @@ from src.agents.messages import (
     UserMessage,
 )
 from src.agents.system_base import SystemBase
+from src.cyberagent.services import initiatives as initiative_service
+from src.cyberagent.services import purposes as purpose_service
+from src.cyberagent.services import strategies as strategy_service
+from src.cyberagent.services import systems as system_service
 from src.enums import SystemType
-from src.models.initiative import Initiative, get_initiative
-from src.models.purpose import get_or_create_default_purpose
-from src.models.strategy import Strategy, get_strategy, get_teams_active_strategy
-from src.models.system import get_system, get_system_by_type
 from src.tools.contact_user import ContactUserTool, InformUserTool
+
+if TYPE_CHECKING:
+    from src.cyberagent.db.models.initiative import Initiative
+    from src.cyberagent.db.models.strategy import Strategy
 
 
 class InitiativeCreateResponse(BaseModel):
@@ -131,8 +135,8 @@ class System4(SystemBase):
             message.content,
             "## CURRENT STRATEGY",
             *(
-                get_teams_active_strategy(self.team_id).to_prompt()
-                if get_teams_active_strategy(self.team_id)
+                strategy_service.get_teams_active_strategy(self.team_id).to_prompt()
+                if strategy_service.get_teams_active_strategy(self.team_id)
                 else ["No active strategy found."]
             ),
             "## ASSIGNMENT",
@@ -180,24 +184,23 @@ class System4(SystemBase):
         strategy_response = self._get_structured_message(
             response, StrategyCreateResponse
         )
-        purpose = get_or_create_default_purpose(self.team_id)
-        strategy = Strategy(
+        purpose = purpose_service.get_or_create_default_purpose(self.team_id)
+        strategy = strategy_service.create_strategy(
             team_id=self.team_id,
             purpose_id=purpose.id,
             name=strategy_response.name,
             description=strategy_response.description,
             result="",
         )
-        strategy_id = strategy.add()
+        strategy_id = strategy.id
         initiatives = []
         for initiative_response in strategy_response.initiatives:
-            initiative = Initiative(
+            initiative = initiative_service.create_initiative(
                 team_id=self.team_id,
+                strategy_id=strategy_id,
                 name=initiative_response.name,
                 description=initiative_response.description,
-                strategy_id=strategy_id,
             )
-            initiative.add()
             initiatives.append(initiative)
 
         try:
@@ -212,7 +215,9 @@ class System4(SystemBase):
 
         await self._publish_message_to_agent(
             initiative.get_assign_message(),
-            get_system_by_type(self.team_id, SystemType.CONTROL).get_agent_id(),
+            system_service.get_system_by_type(
+                self.team_id, SystemType.CONTROL
+            ).get_agent_id(),
         )
         return ConfirmationMessage(
             content=f"Initiative {initiative.name}:{initiative.description} started.",
@@ -226,11 +231,8 @@ class System4(SystemBase):
     ) -> InitiativeAssignMessage | None:
         """Review completed initiatives and adjust strategies."""
         # Fetch initiative from database using initiative_id
-        initiative = get_initiative(message.initiative_id)
-        if not initiative:
-            raise ValueError(f"Initiative with id {message.initiative_id} not found")
-
-        current_strategy = get_strategy(initiative.strategy_id)
+        initiative = initiative_service.get_initiative_by_id(message.initiative_id)
+        current_strategy = strategy_service.get_strategy(initiative.strategy_id)
         message_specific_prompts = [
             "## INITIATIVE REVIEW",
             "An initiative has been completed by System3. Review the results and determine:",
@@ -262,19 +264,21 @@ class System4(SystemBase):
         strategy_adjustments = self._get_structured_message(
             response, StrategyAdjustResponse
         )
-        if strategy_adjustments.name:
-            current_strategy.name = strategy_adjustments.name
-        if strategy_adjustments.description:
-            current_strategy.description = strategy_adjustments.description
-        current_strategy.update()
+        strategy_service.update_strategy_fields(
+            current_strategy,
+            name=strategy_adjustments.name,
+            description=strategy_adjustments.description,
+        )
         if len(strategy_adjustments.initiatives) > 0:
             for initiative_adjustment in strategy_adjustments.initiatives:
-                initiative = get_initiative(initiative_adjustment.id)
-                if initiative_adjustment.name:
-                    initiative.name = initiative_adjustment.name
-                if initiative_adjustment.description:
-                    initiative.description = initiative_adjustment.description
-                initiative.update()
+                initiative = initiative_service.get_initiative_by_id(
+                    initiative_adjustment.id
+                )
+                initiative_service.update_initiative_fields(
+                    initiative,
+                    name=initiative_adjustment.name,
+                    description=initiative_adjustment.description,
+                )
 
         # Check for significant knowledge gained and pass to system 5
         get_user_input = message_specific_prompts + [
@@ -323,8 +327,8 @@ class System4(SystemBase):
     async def assign_initiative_tool(self, initiative_id: int, system3_id: int):
         """Assign initiative to System3 for execution."""
         await self._publish_message_to_agent(
-            get_initiative(initiative_id).get_assign_message(),
-            get_system(system3_id).get_agent_id(),
+            initiative_service.get_initiative_by_id(initiative_id).get_assign_message(),
+            system_service.get_system(system3_id).get_agent_id(),
         )
 
     async def suggest_policy_tool(self, policy_id: int, suggestion: str):
@@ -332,7 +336,9 @@ class System4(SystemBase):
             PolicySuggestionMessage(
                 policy_id=policy_id, content=suggestion, source=self.name
             ),
-            get_system_by_type(self.team_id, SystemType.POLICY).get_agent_id(),
+            system_service.get_system_by_type(
+                self.team_id, SystemType.POLICY
+            ).get_agent_id(),
         )
 
     async def contact_user_tool(self, content: str, wait_for_response: bool = False):

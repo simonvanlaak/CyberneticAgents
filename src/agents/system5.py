@@ -10,9 +10,9 @@ from src.agents.messages import (
     StrategyReviewMessage,
 )
 from src.agents.system_base import SystemBase
-from src.models.policy import get_policy
-from src.models.strategy import get_strategy
-from src.models.task import get_task
+from src.cyberagent.services import policies as policy_service
+from src.cyberagent.services import strategies as strategy_service
+from src.cyberagent.services import tasks as task_service
 
 
 class System5(SystemBase):
@@ -123,8 +123,8 @@ class System5(SystemBase):
         Analyzes the ambiguous policy and provides clarification or updates the policy
         to resolve the ambiguity, then communicates the resolution back to System3.
         """
-        task = get_task(message.task_id)
-        policy = get_policy(message.policy_id)
+        task = task_service.get_task_by_id(message.task_id)
+        policy = policy_service.get_policy_by_id(message.policy_id)
         message_specific_prompts = [
             "## POLICY CLARIFICATION REQUEST",
             "System3 has requested clarification on a policy that is unclear or ambiguous.",
@@ -165,7 +165,9 @@ class System5(SystemBase):
         """
         policy_prompt = []
         if message.policy_id:
-            policy_prompt = get_policy(message.policy_id).to_prompt()
+            policy_prompt = policy_service.get_policy_by_id(
+                message.policy_id
+            ).to_prompt()
         message_specific_prompts = [
             "## POLICY SUGGESTION REVIEW",
             "You have received a policy change suggestion from another system.",
@@ -205,7 +207,7 @@ class System5(SystemBase):
         Evaluates strategy alignment with organizational identity and makes
         decisions to approve, reject, or request modifications to strategies.
         """
-        strategy = get_strategy(message.strategy_id)
+        strategy = strategy_service.get_strategy(message.strategy_id)
         message_specific_prompts = [
             "## STRATEGY REVIEW",
             "System4 has submitted a strategy for your review and approval.",

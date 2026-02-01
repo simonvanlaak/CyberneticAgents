@@ -14,11 +14,12 @@ from src.agents.messages import (
     TaskReviewMessage,
 )
 from src.agents.system_base import SystemBase
-from src.enums import PolicyJudgement, Status, SystemType
-from src.models import policy
+from src.cyberagent.services import initiatives as initiative_service
+from src.cyberagent.services import policies as policy_service
+from src.cyberagent.services import systems as system_service
+from src.cyberagent.services import tasks as task_service
+from src.enums import PolicyJudgement, SystemType
 from src.init_db import init_db
-from src.models.system import get_system
-from src.models.task import Task, get_task
 
 
 class PolicyJudgeResponse(BaseModel):
@@ -72,23 +73,17 @@ class System3(SystemBase):
         self, message: InitiativeAssignMessage, ctx: MessageContext
     ) -> None:
         init_db()
-        # Fetch initiative from database using initiative_id
-        from src.models.initiative import get_initiative
-
-        initiative = get_initiative(message.initiative_id)
-        if not initiative:
-            raise ValueError(f"Initiative with id {message.initiative_id} not found")
-
-        initiative.set_status(Status.IN_PROGRESS)
-        initiative.update()
+        initiative = initiative_service.start_initiative(message.initiative_id)
 
         initiative_payload = {
             "id": getattr(initiative, "id", None),
             "team_id": getattr(initiative, "team_id", None),
             "strategy_id": getattr(initiative, "strategy_id", None),
-            "status": initiative.status.value
-            if hasattr(initiative, "status") and hasattr(initiative.status, "value")
-            else str(getattr(initiative, "status", "")),
+            "status": (
+                initiative.status.value
+                if hasattr(initiative, "status") and hasattr(initiative.status, "value")
+                else str(getattr(initiative, "status", ""))
+            ),
             "name": getattr(initiative, "name", ""),
             "description": getattr(initiative, "description", ""),
             "result": getattr(initiative, "result", None),
@@ -99,9 +94,11 @@ class System3(SystemBase):
             {
                 "id": system.id,
                 "name": system.name,
-                "type": system.type.value
-                if hasattr(system.type, "value")
-                else str(system.type),
+                "type": (
+                    system.type.value
+                    if hasattr(system.type, "value")
+                    else str(system.type)
+                ),
                 "agent_id_str": system.agent_id_str,
             }
             for system in systems_list
@@ -143,13 +140,12 @@ class System3(SystemBase):
         )
         tasks = []
         for task_response in tasks_create_response.tasks:
-            task = Task(
+            task = task_service.create_task(
                 team_id=self.team_id,
                 initiative_id=message.initiative_id,
                 name=task_response.name,
                 content=task_response.content,
             )
-            task.add()
             tasks.append(task)
 
         assign_tasks_assignment = message_specific_prompts
@@ -194,7 +190,7 @@ class System3(SystemBase):
     async def handle_capability_gap_message(
         self, message: CapabilityGapMessage, ctx: MessageContext
     ) -> None:
-        task = get_task(message.task_id)
+        task = task_service.get_task_by_id(message.task_id)
         if task.assignee is None:
             raise ValueError("Task assignee cannot be None")
 
@@ -217,10 +213,10 @@ class System3(SystemBase):
     async def handle_task_review_message(
         self, message: TaskReviewMessage, ctx: MessageContext
     ) -> None:
-        task = get_task(message.task_id)
+        task = task_service.get_task_by_id(message.task_id)
         if not task.assignee:
             raise ValueError("Task has no assignee")
-        policy_chunk = policy.get_system_policy_prompts(task.assignee)
+        policy_chunk = policy_service.get_system_policy_prompts(task.assignee)
         system_5_id = self._get_systems_by_type(SystemType.POLICY)[0].get_agent_id()
         # break down policies into chunks of 5
         if len(policy_chunk) == 0:
@@ -257,7 +253,7 @@ class System3(SystemBase):
                     )
                     # response of system 5 will be handled in a different message handler
                 elif case.judgement == PolicyJudgement.SATISFIED:
-                    task.set_status(Status.APPROVED)
+                    task_service.approve_task(task)
                     # check if system should get another task assigned
                 elif case.judgement == PolicyJudgement.VAGUE:
                     await self._publish_message_to_agent(
@@ -274,10 +270,9 @@ class System3(SystemBase):
                     raise ValueError("Invalid policy judgement")
 
     async def assign_task(self, system_id: int, task_id: int):
-        assignee = get_system(system_id)
-        task = get_task(task_id)
-        task.assignee = assignee.agent_id_str
-        task.update()
+        assignee = system_service.get_system(system_id)
+        task = task_service.get_task_by_id(task_id)
+        task_service.assign_task(task, assignee.agent_id_str)
         await self._publish_message_to_agent(
             TaskAssignMessage(
                 task_id=task_id,
