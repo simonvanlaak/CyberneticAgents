@@ -133,6 +133,15 @@ The openclaw ecosystem is great for this because it provides a lot of agent frie
 The next step then is to have openclaw tools / skills work with CAs.
 
 However, tools require secrets. Most tools require some kind of API KEY and I want to make sure that we don't run into any security issues here. So I want to start with a clean secret management.
+I have implemented such a secret management via 1password cli and having all tools run in docker containers.
+The running of tools in docker containers also ensures some sandboxing and prevents the agents from breaking themselves accidentally.
+However the docker image for this container isn't completed yet. I have planned this in more detail in docs/planned_features/agent_skills.md
 
-- [ ] Should we have one docker container for all tools? Or one for each tool?
-- [ ] We need to split up the tools that are being offered by openclaw into different FunctionTools for the agents.
+I have written & posted the first blog post today, also in this project at docs/blog-posts/2026-02-01 introducing cybernetic agents.md
+I have reached out to people who have posted online about similar ideas on using the VSM for multi agent systems and have asked them for feedback on my project as well as if they are interested to collaborate on this.
+
+I have removed the old tools that we don't need anymore.
+I have fixed the failing tests.
+I have ran a full refactor on the project to ensure architecture stays clean.
+
+The next step is to implement the docs/planned_features/agent_skills.md plan and enable web search & web fetch capabilities.
