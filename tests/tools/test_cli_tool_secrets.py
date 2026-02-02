@@ -45,6 +45,20 @@ def test_tool_secret_env_vars_contains_web_search() -> None:
     assert secrets.TOOL_SECRET_ENV_VARS["web_search"] == ["BRAVE_API_KEY"]
 
 
+def test_tool_secret_env_vars_cover_known_tools() -> None:
+    expected = {
+        "web_search",
+        "web-search",
+        "web_fetch",
+        "web-fetch",
+        "file_reader",
+        "file-reader",
+        "git_readonly_sync",
+        "git-readonly-sync",
+    }
+    assert expected.issubset(secrets.TOOL_SECRET_ENV_VARS.keys())
+
+
 def test_get_tool_secrets_loads_from_onepassword(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -7,8 +7,15 @@ import subprocess
 from typing import Dict, Iterable, List
 
 TOOL_SECRET_ENV_VARS: Dict[str, List[str]] = {
+    # Tool names used by skills (and common variants).
     "web_search": ["BRAVE_API_KEY"],
+    "web-search": ["BRAVE_API_KEY"],
+    "web_fetch": [],
+    "web-fetch": [],
+    "file_reader": [],
+    "file-reader": [],
     "git_readonly_sync": [],
+    "git-readonly-sync": [],
 }
 VAULT_NAME = "CyberneticAgents"
 FIELD_LABEL = "credential"
