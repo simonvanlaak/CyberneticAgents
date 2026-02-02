@@ -38,7 +38,11 @@ def pytest_configure() -> None:
 def _clear_active_team_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CYBERAGENT_ACTIVE_TEAM_ID", raising=False)
     monkeypatch.delenv("OP_SERVICE_ACCOUNT_TOKEN", raising=False)
+    skill_db = Path("data") / "skill_permissions.db"
+    if skill_db.exists():
+        skill_db.unlink()
     enforcer = getattr(skill_permissions_enforcer, "_global_enforcer", None)
     if enforcer is not None:
         enforcer.clear_policy()
         enforcer.save_policy()
+    skill_permissions_enforcer._global_enforcer = None
