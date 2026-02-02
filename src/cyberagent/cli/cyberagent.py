@@ -2,14 +2,13 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from datetime import datetime
 import getpass
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
@@ -32,10 +31,13 @@ except ImportError:
 from autogen_core import AgentId
 
 from src.agents.messages import UserMessage
-from src.cyberagent.cli.headless import run_headless_session
-from src.cyberagent.cli.suggestion_queue import enqueue_suggestion
-from src.cyberagent.cli.status import main as status_main
 from src.cli_session import get_answered_questions, get_pending_questions
+from src.cyberagent.cli import onboarding as onboarding_cli
+from src.cyberagent.cli.headless import run_headless_session
+from src.cyberagent.cli.status import main as status_main
+from src.cyberagent.cli.suggestion_queue import enqueue_suggestion
+from src.cyberagent.core.runtime import get_runtime, stop_runtime
+from src.cyberagent.core.state import get_last_team_id, mark_team_active
 from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.init_db import init_db
 from src.cyberagent.db.models.team import Team
@@ -48,8 +50,6 @@ from src.cyberagent.tools.cli_executor.skill_loader import (
 from src.cyberagent.tools.cli_executor.skill_runtime import DEFAULT_SKILLS_ROOT
 from src.rbac.enforcer import get_enforcer
 from src.registry import register_systems
-from src.cyberagent.core.runtime import get_runtime, stop_runtime
-from src.cyberagent.core.state import get_last_team_id, mark_team_active
 
 KEYRING_SERVICE = "cyberagent-cli"
 SYSTEM4_AGENT_ID = AgentId(type="System4", key="root")
@@ -343,21 +343,7 @@ def _handle_status(args: argparse.Namespace) -> int:
 
 
 def _handle_onboarding(args: argparse.Namespace) -> int:
-    init_db()
-    session = next(get_db())
-    try:
-        team = session.query(Team).order_by(Team.id).first()
-        if team is None:
-            team = Team(name="default_team", last_active_at=datetime.utcnow())
-            session.add(team)
-            session.commit()
-            print(f"Created default team: {team.name} (id={team.id}).")
-        else:
-            print(f"Team already exists: {team.name} (id={team.id}).")
-    finally:
-        session.close()
-    print(f"Next: run {SUGGEST_COMMAND} to give the agents a task.")
-    return 0
+    return onboarding_cli.handle_onboarding(args, SUGGEST_COMMAND)
 
 
 def _handle_suggest(args: argparse.Namespace) -> int:
