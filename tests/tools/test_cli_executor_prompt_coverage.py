@@ -208,6 +208,7 @@ def test_create_cli_executor_handles_failure(monkeypatch: pytest.MonkeyPatch) ->
 def test_tool_secrets_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("BRAVE_API_KEY", raising=False)
     monkeypatch.setenv("OP_SERVICE_ACCOUNT_TOKEN", "token")
+    monkeypatch.setattr(secrets, "_load_secret_from_1password", lambda **_: None)
 
     with pytest.raises(ValueError):
         secrets.get_tool_secrets("web_search")

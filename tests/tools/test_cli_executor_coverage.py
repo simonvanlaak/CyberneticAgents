@@ -289,6 +289,7 @@ def test_maybe_set_docker_host_from_context_skips_unreadable_socket(
 def test_tool_secrets_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("BRAVE_API_KEY", raising=False)
     monkeypatch.setenv("OP_SERVICE_ACCOUNT_TOKEN", "token")
+    monkeypatch.setattr(secrets, "_load_secret_from_1password", lambda **_: None)
 
     with pytest.raises(ValueError):
         secrets.get_tool_secrets("web_search")

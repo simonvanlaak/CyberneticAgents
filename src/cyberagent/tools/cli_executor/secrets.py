@@ -1,12 +1,17 @@
 """Secrets resolution for CLI tool execution."""
 
+import json
 import os
+import shutil
+import subprocess
 from typing import Dict, Iterable, List
 
 TOOL_SECRET_ENV_VARS: Dict[str, List[str]] = {
     "web_search": ["BRAVE_API_KEY"],
     "git_readonly_sync": [],
 }
+VAULT_NAME = "CyberneticAgents"
+FIELD_LABEL = "credential"
 
 
 def get_tool_secrets(
@@ -37,7 +42,22 @@ def get_tool_secrets(
             "Run the process via `op run` with a service account token or session."
         )
 
-    missing = [key for key in required if not os.getenv(key)]
+    secrets_map: Dict[str, str] = {}
+    missing: list[str] = []
+    for key in required:
+        value = os.getenv(key)
+        if value:
+            secrets_map[key] = value
+            continue
+        loaded = _load_secret_from_1password(
+            vault_name=VAULT_NAME,
+            item_name=key,
+            field_label=FIELD_LABEL,
+        )
+        if loaded:
+            secrets_map[key] = loaded
+        else:
+            missing.append(key)
     if missing:
         missing_str = ", ".join(missing)
         raise ValueError(
@@ -45,7 +65,7 @@ def get_tool_secrets(
             "Ensure your 1Password vault items use these exact secret names."
         )
 
-    return {key: os.environ[key] for key in required}
+    return secrets_map
 
 
 def _merge_required_env(
@@ -59,9 +79,44 @@ def _merge_required_env(
 
 
 def _has_onepassword_auth() -> bool:
-    if os.getenv("OP_SERVICE_ACCOUNT_TOKEN"):
-        return True
-    for key, value in os.environ.items():
-        if key.startswith("OP_SESSION_") and value:
-            return True
-    return False
+    return bool(os.getenv("OP_SERVICE_ACCOUNT_TOKEN"))
+
+
+def _load_secret_from_1password(
+    vault_name: str, item_name: str, field_label: str
+) -> str | None:
+    if not shutil.which("op"):
+        return None
+    if not _has_onepassword_auth():
+        return None
+    result = subprocess.run(
+        [
+            "op",
+            "item",
+            "get",
+            item_name,
+            "--vault",
+            vault_name,
+            "--fields",
+            f"label={field_label}",
+            "--reveal",
+            "--format",
+            "json",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0 or not result.stdout:
+        return None
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(payload, list) and payload:
+        value = payload[0].get("value") if isinstance(payload[0], dict) else None
+        return value if isinstance(value, str) and value else None
+    if isinstance(payload, dict):
+        value = payload.get("value")
+        return value if isinstance(value, str) and value else None
+    return None

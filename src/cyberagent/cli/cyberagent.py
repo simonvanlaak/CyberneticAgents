@@ -100,6 +100,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers.add_parser("stop", help="Gracefully stop the runtime.")
+    subparsers.add_parser("restart", help="Restart the runtime.")
     subparsers.add_parser(
         "onboarding",
         help="Initialize the default team.",
@@ -330,6 +331,11 @@ async def _handle_stop(_: argparse.Namespace) -> int:
     await stop_runtime()
     print("Runtime stopped.")
     return 0
+
+
+async def _handle_restart(args: argparse.Namespace) -> int:
+    await _handle_stop(args)
+    return await _handle_start(args)
 
 
 def _handle_status(args: argparse.Namespace) -> int:
@@ -868,6 +874,7 @@ async def _stop_runtime_with_timeout() -> None:
 
 _HANDLERS = {
     "start": _handle_start,
+    "restart": _handle_restart,
     "stop": _handle_stop,
     "status": _handle_status,
     "onboarding": _handle_onboarding,

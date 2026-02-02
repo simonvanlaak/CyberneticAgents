@@ -21,6 +21,7 @@ from src.cli_session import AnsweredQuestion, PendingQuestion
     "command,label",
     [
         (["start"], "start"),
+        (["restart"], "restart"),
         (["stop"], "stop"),
         (["status"], "status"),
         (["onboarding"], "onboarding"),
@@ -62,6 +63,27 @@ def test_start_command_uses_background_spawn(monkeypatch: pytest.MonkeyPatch) ->
     exit_code = cyberagent.main(["start", "--message", "ready"])
     assert exit_code == 0
     assert called["headless"] is False
+
+
+def test_restart_command_calls_stop_then_start(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    async def fake_stop(_: argparse.Namespace) -> int:
+        calls.append("stop")
+        return 0
+
+    async def fake_start(_: argparse.Namespace) -> int:
+        calls.append("start")
+        return 0
+
+    monkeypatch.setattr(cyberagent, "_handle_stop", fake_stop)
+    monkeypatch.setattr(cyberagent, "_handle_start", fake_start)
+
+    exit_code = cyberagent.main(["restart"])
+    assert exit_code == 0
+    assert calls == ["stop", "start"]
 
 
 def test_status_command_delegates_to_status_main(
