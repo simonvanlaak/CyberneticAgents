@@ -513,7 +513,7 @@ def _normalize_log_levels(level_args: Sequence[str] | None) -> set[str] | None:
             if not token:
                 continue
             if token not in allowed:
-                return None
+                raise ValueError(f"Unknown log level: {token}")
             normalized.add(token)
     return normalized
 
@@ -521,8 +521,9 @@ def _normalize_log_levels(level_args: Sequence[str] | None) -> set[str] | None:
 def _resolve_log_levels(
     level_args: Sequence[str] | None, errors_only: bool
 ) -> set[str] | None:
-    levels = _normalize_log_levels(level_args)
-    if levels is None:
+    try:
+        levels = _normalize_log_levels(level_args)
+    except ValueError:
         return None
     if errors_only:
         error_levels = {"ERROR", "CRITICAL"}
