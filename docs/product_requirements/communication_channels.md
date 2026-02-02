@@ -37,15 +37,18 @@ An individual building with CyberneticAgents who wants rapid feedback while away
 3. **Low Friction**: Minimal setup once; onboarding should guide the user.
 4. **Graceful Degradation**: If a channel is offline, the user still sees the message.
 
-## MVP Scope (Framework + CLI)
-### Framework
-- Define a channel abstraction and routing contract for message ingress/egress.
-- Support a unified inbox that can aggregate messages across channels.
-- Provide clear metadata for channel, session, and sender in each inbox entry.
+## MVP Scope (Phase 1: CLI Only)
+**Status**: Completed.
 
-### CLI
+### Phase 1 Scope
+- Inbox uses a channel metadata schema (no channel registry yet).
+- Default session is `cli-main`.
 - Inbox shows new questions and answers.
 - A reply in CLI continues the conversation.
+
+### Clarifications (Phase 1)
+- The channel abstraction is limited to the inbox data model and CLI wiring.
+- A full routing/ingress interface is deferred to Phase 2.
 
 ## Shared Inbox (Product Definition)
 The Inbox is a single feed that aggregates:
@@ -70,9 +73,9 @@ Each entry should include:
 3. **Privacy**: Which messages can safely be mirrored across channels?
 
 ## Roadmap
-1. **Phase 1**: Framework + CLI, shared Inbox, minimal setup.
-2. **Phase 2**: Telegram or Email/Slack, more advanced notification preferences.
-3. **Phase 3**: Multi‑user teams and shared inboxes.
+1. **Phase 1**: CLI‑only inbox framework with channel/session metadata. ✅ Completed.
+2. **Phase 2**: CLI + Telegram with shared Inbox, routing contract, and optional channel onboarding.
+3. **Phase 3**: Email/Slack and multi‑user teams with shared inboxes.
 
 ## Success Metrics
 1. % of users who connect at least one external channel.

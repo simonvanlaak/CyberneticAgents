@@ -13,12 +13,17 @@ import urllib.request
 
 from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.init_db import get_database_path, init_db
+from src.cyberagent.db.models.procedure import Procedure
+from src.cyberagent.db.models.system import ensure_default_systems_for_team
+from src.cyberagent.db.models.system import get_system_by_type
 from src.cyberagent.db.models.team import Team
+from src.cyberagent.services import procedures as procedures_service
 from src.cyberagent.tools.cli_executor.skill_loader import (
     SkillDefinition,
     load_skill_definitions,
 )
 from src.cyberagent.tools.cli_executor.skill_runtime import DEFAULT_SKILLS_ROOT
+from src.enums import SystemType
 
 LOGS_DIR = Path("logs")
 TECH_ONBOARDING_STATE_FILE = Path("logs/technical_onboarding.json")
@@ -27,6 +32,137 @@ NETWORK_SKILL_NAMES = {"web-fetch", "web-search", "git-readonly-sync"}
 TOOL_SECRET_DOC_HINTS = {
     "BRAVE_API_KEY": "src/tools/skills/web-search/SKILL.md",
 }
+DEFAULT_PROCEDURES = [
+    {
+        "name": "First Run Discovery",
+        "description": (
+            "Capture initial user context, documents, and interview insights to "
+            "establish a baseline purpose and strategy."
+        ),
+        "risk_level": "low",
+        "impact": "high",
+        "rollback_plan": "Revert to prior purpose/strategy and re-interview the user.",
+        "tasks": [
+            {
+                "name": "Collect user identity and disambiguation links",
+                "description": (
+                    "Gather user name and confirm public profile links to avoid "
+                    "misidentification."
+                ),
+                "position": 1,
+            },
+            {
+                "name": "Collect user documents and sources",
+                "description": (
+                    "Request access to relevant docs (Notion, Obsidian, files) and "
+                    "confirm what should be analyzed."
+                ),
+                "position": 2,
+            },
+            {
+                "name": "Analyze documents for needs and active work",
+                "description": (
+                    "Summarize current projects, goals, constraints, and pain points "
+                    "from provided materials."
+                ),
+                "position": 3,
+            },
+            {
+                "name": "Prepare discovery interview plan",
+                "description": "Draft focused questions based on known context.",
+                "position": 4,
+            },
+            {
+                "name": "Conduct discovery interview",
+                "description": "Run the interview and capture answers verbatim.",
+                "position": 5,
+            },
+            {
+                "name": "Propose initial purpose and strategy",
+                "description": (
+                    "Draft purpose, objectives, and KPIs based on the interview."
+                ),
+                "position": 6,
+            },
+        ],
+    },
+    {
+        "name": "Purpose Adjustment Review",
+        "description": (
+            "Review recent work and knowledge to refine purpose and strategy."
+        ),
+        "risk_level": "low",
+        "impact": "medium",
+        "rollback_plan": "Restore last approved purpose and log adjustments.",
+        "tasks": [
+            {
+                "name": "Review recent initiatives and tasks",
+                "description": (
+                    "Summarize completed work since the last review and key outcomes."
+                ),
+                "position": 1,
+            },
+            {
+                "name": "Compare new knowledge to current purpose",
+                "description": (
+                    "Identify gaps or changes in user needs vs the current purpose."
+                ),
+                "position": 2,
+            },
+            {
+                "name": "Identify recurring tasks for automation",
+                "description": (
+                    "List repeatable work that could be automated or templated."
+                ),
+                "position": 3,
+            },
+            {
+                "name": "Propose purpose/strategy updates",
+                "description": (
+                    "Draft recommended updates and user follow-up questions."
+                ),
+                "position": 4,
+            },
+        ],
+    },
+    {
+        "name": "Product Discovery Research Loop",
+        "description": (
+            "Continuously update the discovery framework using best practices."
+        ),
+        "risk_level": "low",
+        "impact": "medium",
+        "rollback_plan": "Revert to the last vetted framework and note changes.",
+        "tasks": [
+            {
+                "name": "Research interview best practices",
+                "description": (
+                    "Gather current guidance on user interviews and discovery."
+                ),
+                "position": 1,
+            },
+            {
+                "name": "Review internal discovery notes",
+                "description": (
+                    "Analyze existing research syntheses and onboarding learnings."
+                ),
+                "position": 2,
+            },
+            {
+                "name": "Synthesize discovery framework updates",
+                "description": (
+                    "Update the interview flow/guide with actionable steps."
+                ),
+                "position": 3,
+            },
+            {
+                "name": "Publish updated framework summary",
+                "description": ("Record changes and share with System4 and System5."),
+                "position": 4,
+            },
+        ],
+    },
+]
 
 
 def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
@@ -46,8 +182,43 @@ def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
             print(f"Team already exists: {team.name} (id={team.id}).")
     finally:
         session.close()
+    _seed_default_procedures(team.id)
     print(f"Next: run {suggest_command} to give the agents a task.")
     return 0
+
+
+def _seed_default_procedures(team_id: int) -> None:
+    ensure_default_systems_for_team(team_id)
+    system4 = get_system_by_type(team_id, SystemType.INTELLIGENCE)
+    system5 = get_system_by_type(team_id, SystemType.POLICY)
+
+    session = next(get_db())
+    try:
+        existing_names = {
+            procedure.name
+            for procedure in session.query(Procedure)
+            .filter(Procedure.team_id == team_id)
+            .all()
+        }
+    finally:
+        session.close()
+
+    for template in DEFAULT_PROCEDURES:
+        if template["name"] in existing_names:
+            continue
+        procedure = procedures_service.create_procedure_draft(
+            team_id=team_id,
+            name=template["name"],
+            description=template["description"],
+            risk_level=template["risk_level"],
+            impact=template["impact"],
+            rollback_plan=template["rollback_plan"],
+            created_by_system_id=system4.id,
+            tasks=template["tasks"],
+        )
+        procedures_service.approve_procedure(
+            procedure_id=procedure.id, approved_by_system_id=system5.id
+        )
 
 
 def run_technical_onboarding_checks() -> bool:

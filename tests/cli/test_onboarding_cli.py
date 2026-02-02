@@ -6,13 +6,22 @@ import pytest
 
 from src.cyberagent.cli import onboarding as onboarding_cli
 from src.cyberagent.db.db_utils import get_db
+from src.cyberagent.db.models.procedure import Procedure
+from src.cyberagent.db.models.procedure_run import ProcedureRun
+from src.cyberagent.db.models.procedure_task import ProcedureTask
+from src.cyberagent.db.models.system import System
 from src.cyberagent.db.models.team import Team
 from src.cyberagent.tools.cli_executor.skill_loader import SkillDefinition
+from src.enums import ProcedureStatus
 
 
 def _clear_teams() -> None:
     session = next(get_db())
     try:
+        session.query(ProcedureTask).delete()
+        session.query(ProcedureRun).delete()
+        session.query(Procedure).delete()
+        session.query(System).delete()
         session.query(Team).delete()
         session.commit()
     finally:
@@ -90,6 +99,71 @@ def test_handle_onboarding_requires_technical_checks(
 
     assert exit_code == 1
     assert "technical onboarding" in captured.lower()
+
+
+def test_handle_onboarding_seeds_default_sops(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _clear_teams()
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
+
+    exit_code = onboarding_cli.handle_onboarding(
+        argparse.Namespace(), 'cyberagent suggest "Describe the task"'
+    )
+    captured = capsys.readouterr().out
+    monkeypatch.undo()
+
+    assert exit_code == 0
+    assert "cyberagent suggest" in captured
+
+    session = next(get_db())
+    try:
+        team = session.query(Team).filter(Team.name == "root").first()
+        assert team is not None
+        procedures = session.query(Procedure).filter(Procedure.team_id == team.id).all()
+        procedure_names = {procedure.name for procedure in procedures}
+        assert procedure_names == {
+            "First Run Discovery",
+            "Purpose Adjustment Review",
+            "Product Discovery Research Loop",
+        }
+        assert all(
+            procedure.status == ProcedureStatus.APPROVED for procedure in procedures
+        )
+        for procedure in procedures:
+            tasks = (
+                session.query(ProcedureTask)
+                .filter(ProcedureTask.procedure_id == procedure.id)
+                .order_by(ProcedureTask.position.asc())
+                .all()
+            )
+            assert tasks
+    finally:
+        session.close()
+
+
+def test_handle_onboarding_seeds_default_sops_once() -> None:
+    _clear_teams()
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
+
+    onboarding_cli.handle_onboarding(
+        argparse.Namespace(), 'cyberagent suggest "Describe the task"'
+    )
+    onboarding_cli.handle_onboarding(
+        argparse.Namespace(), 'cyberagent suggest "Describe the task"'
+    )
+    monkeypatch.undo()
+
+    session = next(get_db())
+    try:
+        team = session.query(Team).filter(Team.name == "root").first()
+        assert team is not None
+        count = session.query(Procedure).filter(Procedure.team_id == team.id).count()
+        assert count == 3
+    finally:
+        session.close()
 
 
 def test_technical_onboarding_requires_groq_key(
