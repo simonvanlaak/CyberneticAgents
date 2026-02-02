@@ -118,7 +118,10 @@ async def test_system3_current_issue():
         "src.cyberagent.services.initiatives._get_initiative", return_value=None
     ):
         with pytest.raises(ValueError, match="Initiative with id 1 not found"):
-            await system3.handle_initiative_assign_message(initiative_message, context)
+            await system3.handle_initiative_assign_message(
+                message=initiative_message,
+                ctx=context,
+            )  # type: ignore[call-arg]
 
 
 @pytest.mark.asyncio

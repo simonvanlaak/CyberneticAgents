@@ -68,7 +68,10 @@ async def test_system5_creates_recursion_link(monkeypatch: pytest.MonkeyPatch) -
         source="System3/control1",
     )
 
-    response = await system5.handle_recursion_create_message(message, _make_context())
+    response = await system5.handle_recursion_create_message(
+        message=message,
+        ctx=_make_context(),
+    )  # type: ignore[call-arg]
 
     assert isinstance(response, ConfirmationMessage)
     assert response.is_error is False
@@ -98,7 +101,10 @@ async def test_system5_rejects_cross_team_recursion(
         source="System3/control1",
     )
 
-    response = await system5.handle_recursion_create_message(message, _make_context())
+    response = await system5.handle_recursion_create_message(
+        message=message,
+        ctx=_make_context(),
+    )  # type: ignore[call-arg]
 
     assert response.is_error is True
     assert recursions_service.get_recursion(sub_team_id) is None

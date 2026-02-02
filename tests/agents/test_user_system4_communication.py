@@ -173,7 +173,10 @@ async def test_user_agent_updates_pending_question_on_system4_message():
         source="System4",
         metadata={"ask_user": "true"},
     )
-    await user_agent.handle_assistant_text_message(message, ctx)
+    await user_agent.handle_assistant_text_message(
+        message=message,
+        ctx=ctx,
+    )  # type: ignore[call-arg]
 
     pending = get_pending_question()
     assert pending is not None
@@ -197,7 +200,10 @@ async def test_user_agent_informational_message_does_not_enqueue_question():
         source="System4",
         metadata={"inform_user": "true"},
     )
-    await user_agent.handle_assistant_text_message(message, ctx)
+    await user_agent.handle_assistant_text_message(
+        message=message,
+        ctx=ctx,
+    )  # type: ignore[call-arg]
 
     assert get_pending_question() is None
 
@@ -218,7 +224,10 @@ async def test_user_agent_non_question_message_does_not_enqueue_question():
         content="General update without metadata.",
         source="System4",
     )
-    await user_agent.handle_assistant_text_message(message, ctx)
+    await user_agent.handle_assistant_text_message(
+        message=message,
+        ctx=ctx,
+    )  # type: ignore[call-arg]
 
     assert get_pending_question() is None
 
@@ -239,9 +248,14 @@ async def test_user_agent_includes_question_context_in_reply():
     )
 
     message = UserMessage(content="Build a CLI-first app.", source="User")
-    await user_agent.handle_user_message(message, ctx)
+    await user_agent.handle_user_message(
+        message=message,
+        ctx=ctx,
+    )  # type: ignore[call-arg]
 
     assert user_agent.publish_message.await_count == 1
-    published_message = user_agent.publish_message.await_args[0][0]
+    await_args = user_agent.publish_message.await_args
+    assert await_args is not None
+    published_message = await_args.args[0]
     assert "What outcome do you want?" in published_message.content
     assert "Build a CLI-first app." in published_message.content

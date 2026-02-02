@@ -111,7 +111,10 @@ class TestSystem3RefactoredImplementation:
             system3.assign_task = AsyncMock()
 
             # Call the handler
-            await system3.handle_initiative_assign_message(initiative_message, context)
+            await system3.handle_initiative_assign_message(
+                message=initiative_message,
+                ctx=context,
+            )  # type: ignore[call-arg]
 
             # Verify the sequential processing worked
 
@@ -205,7 +208,10 @@ class TestSystem3RefactoredImplementation:
             )
 
             # Call the handler
-            await system3.handle_initiative_assign_message(initiative_message, context)
+            await system3.handle_initiative_assign_message(
+                message=initiative_message,
+                ctx=context,
+            )  # type: ignore[call-arg]
 
             # Verify that when tool is called, we don't proceed to structured assignment
             system3._was_tool_called.assert_called_with(

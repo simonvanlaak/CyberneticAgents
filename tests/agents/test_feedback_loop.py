@@ -143,11 +143,11 @@ async def test_product_discovery_feedback_loop_creates_tasks(
         )
         await wait_for_answer(question_id, timeout_seconds=2)
         await system4.handle_strategy_request_message(
-            StrategyRequestMessage(
+            message=StrategyRequestMessage(
                 content=chat_messages[-1].content, source="System4/root"
             ),
-            ctx,
-        )
+            ctx=ctx,
+        )  # type: ignore[call-arg]
         return TaskResult(
             messages=[TextMessage(content="User input captured.", source=system4.name)]
         )
@@ -210,7 +210,10 @@ async def test_product_discovery_feedback_loop_creates_tasks(
             cancellation_token=CancellationToken(),
             message_id="system4_to_system3",
         )
-        await system3.handle_initiative_assign_message(message, ctx)
+        await system3.handle_initiative_assign_message(
+            message=message,
+            ctx=ctx,
+        )  # type: ignore[call-arg]
 
     system3_to_system1_called = {"count": 0}
 
@@ -223,7 +226,10 @@ async def test_product_discovery_feedback_loop_creates_tasks(
             cancellation_token=CancellationToken(),
             message_id="system3_to_system1",
         )
-        await system1.handle_assign_task_message(message, ctx)
+        await system1.handle_assign_task_message(
+            message=message,
+            ctx=ctx,
+        )  # type: ignore[call-arg]
 
     collected_reviews: list = []
 
@@ -262,7 +268,10 @@ async def test_product_discovery_feedback_loop_creates_tasks(
         cancellation_token=CancellationToken(),
         message_id="user_prompt",
     )
-    await system4.handle_user_message(user_message, ctx)
+    await system4.handle_user_message(
+        message=user_message,
+        ctx=ctx,
+    )  # type: ignore[call-arg]
     await answer_task
 
     db = next(get_db())

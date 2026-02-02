@@ -3,6 +3,8 @@
 
 import pytest
 from unittest.mock import AsyncMock
+from typing import cast
+
 import src.agents.system4 as system4_module
 from autogen_core import AgentId
 
@@ -15,9 +17,10 @@ from src.agents.system4 import (
     System4,
 )
 from src.agents.messages import (
-    StrategyRequestMessage,
     InitiativeReviewMessage,
+    PolicySuggestionMessage,
     ResearchRequestMessage,
+    StrategyRequestMessage,
     UserMessage,
 )
 
@@ -168,7 +171,7 @@ async def test_suggest_policy_tool_omits_missing_policy(
 
     await system4.suggest_policy_tool(123, "Test suggestion")
 
-    message = captured.get("message")
+    message = cast(PolicySuggestionMessage, captured.get("message"))
     assert message is not None
     assert message.policy_id is None
 

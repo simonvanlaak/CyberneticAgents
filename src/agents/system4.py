@@ -21,6 +21,8 @@ from src.cyberagent.services import initiatives as initiative_service
 from src.cyberagent.services import policies as policy_service
 from src.cyberagent.services import purposes as purpose_service
 from src.cyberagent.services import strategies as strategy_service
+from src.cyberagent.services import procedures as procedures_service
+from src.cyberagent.db.models.system import get_system_from_agent_id
 from src.cyberagent.services import systems as system_service
 from src.enums import SystemType
 from src.tools.contact_user import ContactUserTool, InformUserTool
@@ -120,6 +122,18 @@ class System4(SystemBase):
                     self.review_initiative_tool,
                     "Trigger yourself to review an existing initiative. Returns True when message was successfuly sent, or False with Exception that was thrown.",
                 ),
+                FunctionTool(
+                    self.create_procedure_tool,
+                    "Create a draft standard operating procedure (procedure template).",
+                ),
+                FunctionTool(
+                    self.create_procedure_revision_tool,
+                    "Create a new draft revision of an existing procedure.",
+                ),
+                FunctionTool(
+                    self.search_procedures_tool,
+                    "Search procedures including retired versions.",
+                ),
             ]
         )
         if not any(
@@ -166,6 +180,88 @@ class System4(SystemBase):
         ]
 
         await self.run([message], ctx, message_specific_prompts)
+
+    def create_procedure_tool(
+        self,
+        name: str,
+        description: str,
+        risk_level: str,
+        impact: str,
+        rollback_plan: str,
+        tasks: list[dict[str, object]],
+    ) -> dict[str, object]:
+        """
+        Create a draft procedure template.
+        """
+        system = get_system_from_agent_id(self.agent_id.__str__())
+        if system is None:
+            raise ValueError("System record not found for this agent.")
+        procedure = procedures_service.create_procedure_draft(
+            team_id=self.team_id,
+            name=name,
+            description=description,
+            risk_level=risk_level,
+            impact=impact,
+            rollback_plan=rollback_plan,
+            created_by_system_id=system.id,
+            tasks=tasks,
+        )
+        return {
+            "procedure_id": procedure.id,
+            "version": procedure.version,
+            "status": procedure.status.value,
+        }
+
+    def create_procedure_revision_tool(
+        self,
+        procedure_id: int,
+        name: str,
+        description: str,
+        risk_level: str,
+        impact: str,
+        rollback_plan: str,
+        tasks: list[dict[str, object]] | None = None,
+    ) -> dict[str, object]:
+        """
+        Create a draft revision of an existing procedure.
+        """
+        system = get_system_from_agent_id(self.agent_id.__str__())
+        if system is None:
+            raise ValueError("System record not found for this agent.")
+        procedure = procedures_service.create_procedure_revision(
+            procedure_id=procedure_id,
+            name=name,
+            description=description,
+            risk_level=risk_level,
+            impact=impact,
+            rollback_plan=rollback_plan,
+            created_by_system_id=system.id,
+            tasks=tasks,
+        )
+        return {
+            "procedure_id": procedure.id,
+            "version": procedure.version,
+            "status": procedure.status.value,
+        }
+
+    def search_procedures_tool(
+        self, include_retired: bool = True
+    ) -> list[dict[str, object]]:
+        """
+        List procedures for this team. System4 can include retired procedures.
+        """
+        procedures = procedures_service.search_procedures(
+            team_id=self.team_id, include_retired=include_retired
+        )
+        return [
+            {
+                "procedure_id": proc.id,
+                "name": proc.name,
+                "version": proc.version,
+                "status": proc.status.value,
+            }
+            for proc in procedures
+        ]
 
     @message_handler
     async def handle_strategy_request_message(

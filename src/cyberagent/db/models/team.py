@@ -27,6 +27,7 @@ class Team(Base):
     strategies = relationship("Strategy", back_populates="team")
     purposes = relationship("Purpose", back_populates="team")
     policies = relationship("Policy", back_populates="team")
+    procedures = relationship("Procedure", back_populates="team")
 
     def to_prompt(self) -> List[str]:
         return [json.dumps(model_to_dict(self), indent=4, default=str)]

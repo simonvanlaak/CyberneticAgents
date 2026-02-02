@@ -25,6 +25,17 @@ Base = declarative_base()
 def init_db():
     """Initialize the database and create all tables"""
     # Import models to ensure they're registered with Base
+    from src.cyberagent.db.models.initiative import Initiative
+    from src.cyberagent.db.models.policy import Policy
+    from src.cyberagent.db.models.procedure import Procedure
+    from src.cyberagent.db.models.procedure_run import ProcedureRun
+    from src.cyberagent.db.models.procedure_task import ProcedureTask
+    from src.cyberagent.db.models.purpose import Purpose
+    from src.cyberagent.db.models.recursion import Recursion
+    from src.cyberagent.db.models.strategy import Strategy
+    from src.cyberagent.db.models.system import System
+    from src.cyberagent.db.models.task import Task
+    from src.cyberagent.db.models.team import Team
 
     # Create all tables
     Base.metadata.create_all(bind=engine)

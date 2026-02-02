@@ -26,3 +26,9 @@ class SystemType(PyEnum):
     CONTROL = "control"
     INTELLIGENCE = "intelligence"
     POLICY = "policy"
+
+
+class ProcedureStatus(PyEnum):
+    DRAFT = "draft"
+    APPROVED = "approved"
+    RETIRED = "retired"

@@ -1,5 +1,6 @@
 from autogen_agentchat.base import TaskResult
 from autogen_core import MessageContext, message_handler
+from autogen_core.tools import FunctionTool
 
 from src.agents.messages import (
     CapabilityGapMessage,
@@ -15,6 +16,8 @@ from src.agents.messages import (
 )
 from src.agents.system_base import SystemBase
 from src.cyberagent.services import policies as policy_service
+from src.cyberagent.services import procedures as procedures_service
+from src.cyberagent.db.models.system import get_system_from_agent_id
 from src.cyberagent.services import recursions as recursions_service
 from src.cyberagent.services import strategies as strategy_service
 from src.cyberagent.services import systems as systems_service
@@ -41,9 +44,13 @@ class System5(SystemBase):
             ],
             trace_context=trace_context,
         )
-        # System5 should have NO tools to avoid structured output conflicts
-        # Remove the capability_gap_tool that SystemBase automatically adds
-        self.tools = []
+        self.available_tools = [
+            FunctionTool(
+                self.approve_procedure_tool,
+                "Approve a draft procedure version and retire the prior approved version.",
+            )
+        ]
+        self.tools = self.available_tools
 
     @message_handler
     async def handle_capability_gap_message(
@@ -119,6 +126,22 @@ class System5(SystemBase):
         )
 
         return self._get_structured_message(response, ConfirmationMessage)
+
+    def approve_procedure_tool(self, procedure_id: int) -> dict[str, object]:
+        """
+        Approve a procedure draft version.
+        """
+        system = get_system_from_agent_id(self.agent_id.__str__())
+        if system is None:
+            raise ValueError("System record not found for this agent.")
+        procedure = procedures_service.approve_procedure(
+            procedure_id=procedure_id, approved_by_system_id=system.id
+        )
+        return {
+            "procedure_id": procedure.id,
+            "version": procedure.version,
+            "status": procedure.status.value,
+        }
 
     @message_handler
     async def handle_policy_vague_message(

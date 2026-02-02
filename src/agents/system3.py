@@ -15,9 +15,11 @@ from src.agents.messages import (
 )
 from src.agents.system_base import SystemBase
 from src.cyberagent.services import initiatives as initiative_service
+from src.cyberagent.services import procedures as procedures_service
 from src.cyberagent.services import policies as policy_service
 from src.cyberagent.services import systems as system_service
 from src.cyberagent.services import tasks as task_service
+from src.cyberagent.db.models.system import get_system_from_agent_id
 from src.enums import PolicyJudgement, SystemType
 from src.cyberagent.db.init_db import init_db
 
@@ -65,6 +67,12 @@ class System3(SystemBase):
         self.tools.append(
             FunctionTool(
                 self.assign_task, "Trigger the execution of a task by a system 1."
+            )
+        )
+        self.tools.append(
+            FunctionTool(
+                self.execute_procedure_tool,
+                "Execute an approved procedure by materializing an initiative and tasks.",
             )
         )
 
@@ -282,3 +290,24 @@ class System3(SystemBase):
             ),
             assignee.get_agent_id(),
         )
+
+    def execute_procedure_tool(
+        self, procedure_id: int, strategy_id: int
+    ) -> dict[str, object]:
+        """
+        Execute an approved procedure by creating an initiative and tasks.
+        """
+        system = get_system_from_agent_id(self.agent_id.__str__())
+        if system is None:
+            raise ValueError("System record not found for this agent.")
+        run = procedures_service.execute_procedure(
+            procedure_id=procedure_id,
+            team_id=self.team_id,
+            strategy_id=strategy_id,
+            executed_by_system_id=system.id,
+        )
+        return {
+            "procedure_run_id": run.id,
+            "initiative_id": run.initiative_id,
+            "status": run.status,
+        }

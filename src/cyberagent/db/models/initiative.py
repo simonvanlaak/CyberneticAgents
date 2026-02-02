@@ -32,11 +32,16 @@ class Initiative(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str] = mapped_column(String(5000), nullable=False)
     result: Mapped[Optional[str]] = mapped_column(String(5000))
+    procedure_id: Mapped[Optional[int]] = mapped_column(
+        Integer, ForeignKey("procedures.id")
+    )
+    procedure_version: Mapped[Optional[int]] = mapped_column(Integer)
 
     # Relationships
     team = relationship("Team", back_populates="initiatives")
     strategy = relationship("Strategy", back_populates="initiatives")
     tasks = relationship("Task", back_populates="initiative")
+    procedure = relationship("Procedure")
 
     def get_assign_message(self):
         self.status = Status(Status.PENDING)

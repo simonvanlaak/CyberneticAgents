@@ -1,6 +1,7 @@
 import pytest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
+from typing import cast
 
 from autogen_agentchat.base import TaskResult
 from autogen_agentchat.messages import TextMessage
@@ -87,7 +88,10 @@ async def test_system4_strategy_request_triggers_system3_assignment(monkeypatch)
     )
     message = StrategyRequestMessage(content="Create strategy", source="System5/root")
 
-    await system4.handle_strategy_request_message(message, ctx)
+    await system4.handle_strategy_request_message(
+        message=message,
+        ctx=ctx,
+    )  # type: ignore[call-arg]
 
     system4._publish_message_to_agent.assert_awaited_once()
 
@@ -98,9 +102,9 @@ async def test_system4_strategy_request_includes_response_format(monkeypatch):
     captured: dict[str, object] = {}
 
     async def fake_run(
-        messages, ctx, prompts, output_content_type=None
+        chat_messages, ctx, message_specific_prompts=None, output_content_type=None
     ):  # noqa: ANN001
-        captured["prompts"] = prompts
+        captured["prompts"] = message_specific_prompts or []
         return TaskResult(messages=[TextMessage(content="ok", source="test")])
 
     system4.run = fake_run
@@ -166,9 +170,12 @@ async def test_system4_strategy_request_includes_response_format(monkeypatch):
     )
     message = StrategyRequestMessage(content="Create strategy", source="System5/root")
 
-    await system4.handle_strategy_request_message(message, ctx)
+    await system4.handle_strategy_request_message(
+        message=message,
+        ctx=ctx,
+    )  # type: ignore[call-arg]
 
-    prompts = captured.get("prompts", [])
+    prompts = cast(list[str], captured.get("prompts", []))
     assert "## RESPONSE FORMAT" in prompts
     assert "Only return valid JSON with these fields." in prompts
 
@@ -252,6 +259,9 @@ async def test_system4_strategy_request_falls_back_to_first_initiative(monkeypat
     )
     message = StrategyRequestMessage(content="Create strategy", source="System5/root")
 
-    await system4.handle_strategy_request_message(message, ctx)
+    await system4.handle_strategy_request_message(
+        message=message,
+        ctx=ctx,
+    )  # type: ignore[call-arg]
 
     system4._publish_message_to_agent.assert_awaited_once()
