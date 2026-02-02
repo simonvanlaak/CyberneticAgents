@@ -92,7 +92,7 @@ The communication experience should match OpenClaw’s routing model:
    - `per-peer` (DMs isolated by sender),
    - `per-channel-peer` (channel + sender),
    - `per-account-channel-peer` (account + channel + sender).
-8. **Identity linking (optional)**: The same person can map to a single identity across channels for unified DM sessions.
+8. **Identity linking**: Out of scope until multi‑user support is introduced.
 
 ## Technical Sources (for later implementation)
 - AutoGen Core Message & Communication (RoutedAgent, message handlers, publish/subscribe topics):
