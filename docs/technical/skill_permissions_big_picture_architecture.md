@@ -25,6 +25,12 @@
 - Layer B: System grants (what a specific system can execute).
 - Effective execution permission = `team envelope` AND `system grant`.
 
+### 1.1) VSM Recursion Permission Inheritance
+- System5 may recurse a System1 into a sub-team.
+- The sub-team presents as the original System1 to the parent/root team.
+- The sub-team inherits all permissions from the originating System1.
+- Permission changes to the originating System1 must propagate to the sub-team and all recursive descendants.
+
 ### 2) Root Team Governance
 - Root team is the first default team created at startup.
 - Root team has one System1..System5 set and can grant globally.
@@ -39,6 +45,7 @@
 - `System5` calls service APIs only (no direct Casbin writes).
 - `teams.py` owns envelope CRUD and cascade revoke.
 - `systems.py` owns grant CRUD, max-5 enforcement, and execute checks.
+- Recursion linkage is handled in services/runtime, not by direct Casbin writes.
 
 ### 5) Runtime Enforcement Gate
 - Before any skill execution:
@@ -47,6 +54,7 @@
   3. Evaluate system grant.
   4. Return allow/deny with normalized deny category.
 - Deny category precedence: `team_envelope` > `system_grant`.
+- For recursed sub-teams, also evaluate origin System1 grant in the parent team.
 
 ## Canonical Data Conventions
 - Envelope subject: `team:{team_id}`
@@ -55,6 +63,25 @@
 - Action: `allow`
 
 These keep policy rows readable, queryable, and migration-safe.
+
+### Recursion Linkage (New)
+- Store a stable mapping of `sub_team_id -> origin_system_id + parent_team_id`.
+- Runtime/services must use this mapping to enforce inherited grants.
+
+#### Proposed Persistence (Concrete)
+- New table: `data/recursions` (SQLite via SQLAlchemy)
+  - `sub_team_id` INTEGER PRIMARY KEY
+  - `origin_system_id` INTEGER NOT NULL
+  - `parent_team_id` INTEGER NOT NULL
+  - `created_at` TEXT NOT NULL
+  - `created_by` TEXT NOT NULL
+  - Indexes:
+    - `idx_recursions_origin_system_id` on `origin_system_id`
+    - `idx_recursions_parent_team_id` on `parent_team_id`
+- Invariants:
+  - Each `sub_team_id` maps to exactly one origin System1.
+  - `origin_system_id` must belong to `parent_team_id`.
+  - Recursion is read-only after creation (no reassignment).
 
 ## Core Components and Responsibilities
 
@@ -105,6 +132,7 @@ These keep policy rows readable, queryable, and migration-safe.
 1. Runtime asks `systems.can_execute_skill`.
 2. Service runs envelope check then system-grant check.
 3. Runtime proceeds on allow, denies on failure with structured category.
+4. If `system_id` belongs to a recursed sub-team, service also checks origin System1 grant in the parent team.
 
 ## Error and Observability Contract
 - Deny payload must include:
@@ -122,6 +150,7 @@ These keep policy rows readable, queryable, and migration-safe.
 - No wildcard grants except explicit root-admin behavior.
 - Secrets and permission systems are orthogonal:
   - Permission allow does not bypass required secret checks.
+ - Recursion does not create new permission sources; it reuses origin System1 grants.
 
 ## Rollout Plan
 
@@ -140,6 +169,33 @@ These keep policy rows readable, queryable, and migration-safe.
 ### Phase 4 - Hardening
 - Add integration tests for full flow.
 - Add migration/backfill scripts if existing permissions need normalization.
+
+## Phased Implementation Plan (TDD-Enforced)
+
+### Phase 1: Model + Services Foundations
+- RED: add failing tests for team envelope CRUD, system grant CRUD, max-5 enforcement, and deny precedence.
+- GREEN: implement skill-permissions Casbin model + enforcer wrapper; add service APIs in `teams.py` and `systems.py`.
+- REFACTOR: normalize error payloads and add minimal structured audit logs.
+
+### Phase 2: Runtime Enforcement
+- RED: add failing tests for execution gating and structured deny payloads.
+- GREEN: integrate `can_execute_skill` into CLI skill execution.
+- REFACTOR: align deny category precedence (`team_envelope` then `system_grant`).
+
+### Phase 3: Governance via System5
+- RED: add failing tests for System5 CRUD flows and team-scope constraints.
+- GREEN: implement System5 permission operations using services only.
+- REFACTOR: lock down cross-team mutation checks and logging.
+
+### Phase 4: Recursion Support
+- RED: add failing tests for recursion linkage and inherited grants.
+- GREEN: persist recursion linkage and enforce origin System1 grants for recursed sub-teams.
+- REFACTOR: optimize lookup paths and keep policy writes minimal.
+
+### Phase 5: Hardening and Integration
+- RED: add failing integration tests for root team bypass, cascade revoke, and deep recursion.
+- GREEN: improve data integrity checks and add migration/backfill notes.
+- REFACTOR: finalize observability coverage and ensure performance stays acceptable.
 
 ## Implementation Checklist
 
@@ -193,9 +249,11 @@ These keep policy rows readable, queryable, and migration-safe.
 - Exact root-team identity constant (name vs id convention) for bypass checks.
 - Whether to keep skill permissions in existing `rbac.db` tables or separate adapter storage.
 - Event sink for audit logs (logger only vs persisted audit table).
+- Where to persist recursion linkage (table vs policy metadata).
 
 ## Success Criteria
 - No system executes non-granted skills.
 - No team grants skills outside envelope.
 - Root team global behavior works deterministically.
+- Recursed sub-team permissions always match the originating System1.
 - All permission changes and decisions are auditable.
