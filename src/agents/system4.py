@@ -186,6 +186,13 @@ class System4(SystemBase):
                 "2. Break down the purpose into strategic objectives.",
                 "3. Create initiatives to achieve each objective.",
                 "4. Prioritize initiatives based on impact and feasibility.",
+                "## RESPONSE FORMAT",
+                "Return JSON matching this schema:",
+                '{ "name": "<strategy name>", "description": "<strategy description>", '
+                '"initiatives": ['
+                '{ "name": "<initiative name>", "description": "<initiative description>" }'
+                "] }",
+                "Only return valid JSON with these fields.",
             ]
         )
 
