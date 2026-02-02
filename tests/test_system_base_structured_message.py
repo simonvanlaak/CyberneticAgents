@@ -9,6 +9,7 @@ from pydantic import BaseModel
 sys.modules.setdefault("langfuse", MagicMock())
 
 from src.agents.system_base import SystemBase  # noqa: E402
+from src.enums import SystemType  # noqa: E402
 
 
 class DummySystem(SystemBase):
@@ -19,7 +20,7 @@ class DummySystem(SystemBase):
             responsibility_prompts=["test"],
         )
 
-    def _get_systems_by_type(self, type: int) -> List:
+    def _get_systems_by_type(self, type: SystemType) -> List:
         return []
 
 

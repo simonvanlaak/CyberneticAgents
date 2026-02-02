@@ -127,7 +127,10 @@ async def test_build_skill_tools_rejects_invalid_args_json() -> None:
             return {"success": True}
 
     tools = build_skill_tools(DummyCliTool(), [skill], agent_id="System4/root")
-    runner = tools[0]._func
+    from typing import cast
+    from autogen_core.tools import FunctionTool
+
+    runner = cast(FunctionTool, tools[0])._func
     result = await runner(arguments_json="not-json")
     assert result["success"] is False
     assert "Invalid arguments_json" in result["error"]

@@ -8,6 +8,7 @@ def test_get_system_delegates(monkeypatch):
 
 def test_get_system_by_type_delegates(monkeypatch):
     from src.cyberagent.services import systems as system_service
+    from src.enums import SystemType
 
     monkeypatch.setattr(
         system_service,
@@ -15,11 +16,12 @@ def test_get_system_by_type_delegates(monkeypatch):
         lambda team_id, system_type: "typed",
     )
 
-    assert system_service.get_system_by_type(1, 2) == "typed"
+    assert system_service.get_system_by_type(1, SystemType.CONTROL) == "typed"
 
 
 def test_get_systems_by_type_delegates(monkeypatch):
     from src.cyberagent.services import systems as system_service
+    from src.enums import SystemType
 
     monkeypatch.setattr(
         system_service,
@@ -27,7 +29,7 @@ def test_get_systems_by_type_delegates(monkeypatch):
         lambda team_id, system_type: ["s1"],
     )
 
-    assert system_service.get_systems_by_type(1, 2) == ["s1"]
+    assert system_service.get_systems_by_type(1, SystemType.CONTROL) == ["s1"]
 
 
 def test_ensure_default_systems_for_team_delegates(monkeypatch):

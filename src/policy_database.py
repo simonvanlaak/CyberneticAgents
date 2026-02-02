@@ -90,7 +90,7 @@ def update_policy_prompt(system_id: str, content: str) -> PolicyPrompt | None:
         if not policy:
             return None
 
-        policy.content = content
+        policy.content = content  # type: ignore[assignment]
         session.commit()
         session.refresh(policy)
         return policy

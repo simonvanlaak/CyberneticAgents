@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, List, Tuple
+from typing import List, Protocol, Tuple
 
 from autogen_agentchat.messages import TextMessage
 from autogen_core import MessageContext, message_handler
@@ -29,21 +29,21 @@ from src.cyberagent.services import systems as system_service
 from src.enums import SystemType
 from src.tools.contact_user import ContactUserTool, InformUserTool
 
-if TYPE_CHECKING:
-    from src.cyberagent.db.models.initiative import Initiative
-    from src.cyberagent.db.models.strategy import Strategy
 
-# Legacy test compatibility: keep module-level symbols patchable during migration.
-try:
-    from src.cyberagent.db.models.initiative import Initiative
-    from src.cyberagent.db.models.strategy import Strategy
-except Exception:  # pragma: no cover - fallback only for partial test/runtime setups
+class InitiativeLike(Protocol):
+    id: int
+    name: str
+    description: str
 
-    class Initiative:  # type: ignore[no-redef]
-        pass
+    def to_prompt(self) -> List[str]: ...
 
-    class Strategy:  # type: ignore[no-redef]
-        pass
+    def get_assign_message(self) -> InitiativeAssignMessage: ...
+
+
+class StrategyLike(Protocol):
+    def to_prompt(self) -> List[str]: ...
+
+    def get_initiatives(self) -> List[InitiativeLike]: ...
 
 
 # Legacy monkeypatch compatibility for tests that patch module-level callables.
@@ -509,8 +509,8 @@ class System4(SystemBase):
             return (False, e)
 
     async def _select_next_initiative(
-        self, message, ctx, prompts, strategy: Strategy
-    ) -> Initiative:
+        self, message, ctx, prompts, strategy: StrategyLike
+    ) -> InitiativeLike:
         # Identify initative to start first
         assign_initiative_prompts = prompts + [
             "## STRATEGY",
@@ -535,4 +535,6 @@ class System4(SystemBase):
             # Here we would probably need to send a message either to Sytem 5 or the user.
             raise NotImplementedError()
         # Instruct System 3 to start the initiative
-        return strategy.get_initiative(initiative_response.initiative_id)
+        return initiative_service.get_initiative_by_id(
+            initiative_response.initiative_id
+        )
