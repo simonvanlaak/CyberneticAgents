@@ -42,11 +42,11 @@ def main() -> None:
 
     import requests
 
-    params: dict[str, str] = {"q": args.query}
+    params: dict[str, object] = {"q": args.query}
     if args.count is not None:
-        params["count"] = str(args.count)
+        params["count"] = args.count
     if args.offset is not None:
-        params["offset"] = str(args.offset)
+        params["offset"] = args.offset
     if args.freshness is not None:
         params["freshness"] = args.freshness
 
@@ -55,7 +55,9 @@ def main() -> None:
         "X-Subscription-Token": api_key,
     }
 
-    response = requests.get(API_URL, headers=headers, params=params)
+    from typing import Any, cast
+
+    response = requests.get(API_URL, headers=headers, params=cast(Any, params))
     response.raise_for_status()
     print(json.dumps(response.json()))
 

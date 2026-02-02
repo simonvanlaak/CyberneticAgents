@@ -24,7 +24,9 @@ from src.cyberagent.services import policies as policy_service
 from src.cyberagent.services import purposes as purpose_service
 from src.cyberagent.services import strategies as strategy_service
 from src.cyberagent.services import procedures as procedures_service
+from src.cyberagent.db.models.initiative import Initiative as Initiative  # noqa: F401
 from src.cyberagent.db.models.system import get_system_from_agent_id
+from src.cyberagent.db.models.strategy import Strategy as Strategy  # noqa: F401
 from src.cyberagent.services import systems as system_service
 from src.enums import SystemType
 from src.tools.contact_user import ContactUserTool, InformUserTool

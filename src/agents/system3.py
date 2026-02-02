@@ -96,7 +96,10 @@ class System3(SystemBase):
             "description": getattr(initiative, "description", ""),
             "result": getattr(initiative, "result", None),
         }
-        systems_list = self._get_systems_by_type(SystemType.OPERATION)
+        from typing import Any
+
+        systems: Any = self._get_systems_by_type(SystemType.OPERATION)
+        systems_list = systems.systems if hasattr(systems, "systems") else systems
         systems_payload = [
             {
                 "id": system.id,
