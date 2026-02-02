@@ -29,7 +29,8 @@ This plan operationalizes the target architecture from `docs/technical/architect
 - [x] Phase 6 — Agents Cleanup
 - [x] Phase 7 — CLI & UI
 - [x] Phase 8 — Remove Legacy Paths
-- [ ] Phase 9 — Document New Architecture
+- [x] Phase 9 — Document New Architecture
+- [ ] Phase 10 - Run all tests & git push
 
 ## Phase 0 — Baseline & Safety
 **Purpose:** lock current behavior and reduce risk.
@@ -172,12 +173,51 @@ Actions:
 3. Refresh any other docs (e.g., `docs/technical/`, `docs/planned_features/`) that still point at legacy modules, and add quick start commands reflecting the refactor.
 4. Add a short checklist in this doc to capture the doc updates and call out any follow-ups.
 
+Phase 9 checklist (current snapshot):
+- [x] Update `README.md` project structure to reflect the current hybrid layout (`src/cyberagent/*` plus remaining legacy modules under `src/`).
+- [x] Update `AGENTS.md` key components and import examples to use current module locations (for example `src/cyberagent/core/runtime.py` instead of `src/runtime.py`).
+- [x] Sweep `docs/planned_features/` and `docs/technical/` for stale path references and either update or mark them as historical.
+- [x] Add a "known transitional modules" note in docs for still-active legacy paths (`src/agents/`, `src/tools/`, `src/rbac/`, `src/registry.py`).
+- [x] Re-run path checks after doc edits:
+  ```bash
+  rg -n "src/(runtime\\.py|logging_utils\\.py|team_state\\.py|db_utils\\.py|init_db\\.py|models/|cli/)" README.md AGENTS.md docs -g '*.md'
+  ```
+
 Exit Criteria:
 - Contributors can find the current architecture and entry points from README/AGENTS.
 - No mention of deleted paths remains in the primary docs.
 - A follow-up task list exists for future doc cleanups (if needed).
 
 ---
+
+## Phase 10 — Run Full Verification and Push
+**Purpose:** confirm the refactor is stable, then publish.
+
+Actions:
+1. Run the full suite locally:
+   ```bash
+   python3 -m pytest tests/ -v
+   ```
+2. Run repo quality checks (when tools are installed):
+   ```bash
+   python3 -m black --check src/ tests/
+   python3 -m mypy src/ --ignore-missing-imports
+   ```
+3. Ensure git hooks pass (`pre-commit`, `pre-push`) without `--no-verify`.
+4. Commit only scoped refactor/doc updates.
+5. Push branch after tests + hooks succeed.
+
+Exit Criteria:
+- Full tests pass on the final branch tip.
+- Required hooks pass.
+- Remote branch is updated with scoped commits.
+
+---
+
+## Current Status Snapshot (2026-02-02)
+- `src/cyberagent/core/`, `src/cyberagent/db/`, `src/cyberagent/domain/`, `src/cyberagent/services/`, and `src/cyberagent/cli/` are present.
+- Legacy modules are still present in `src/` (not yet fully consolidated), so documentation must describe a transitional architecture accurately.
+- Phase 9 documentation updates are complete; Phase 10 remains open for final full verification and push.
 
 ## Regression Checks (Run Frequently)
 - `python3 -m pytest tests/agents/ -v`

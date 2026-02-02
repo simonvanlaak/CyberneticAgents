@@ -23,10 +23,11 @@ Follow concise, action-oriented commit messages (e.g., CLI: add verbose flag to 
 
 ### Key Components
 - `main.py` - Entry point
-- `src/agents/vsm_agent.py` - VSMSystemAgent implementation
-- `src/rbac/` - RBAC configuration
-- `src/registry.py` - Agent registration
-- `src/tools/system_create.py` - Programmatic policy creation
+- `src/cyberagent/core/runtime.py` - Runtime lifecycle
+- `src/cyberagent/services/` - Purpose/strategy/initiative/task/team orchestration
+- `src/agents/` - Agent implementations (legacy path, still active during refactor)
+- `src/rbac/` - RBAC configuration (legacy path, still active during refactor)
+- `src/registry.py` - Agent registration bridge
 
 ### VSM Hierarchy
 ```
@@ -101,16 +102,22 @@ Hidden/cached dirs omitted (e.g., `.git`, `.venv`, `.pytest_cache`, `__pycache__
 ├── logs/
 ├── src/
 │   ├── agents/
-│   ├── cli/
-│   ├── models/
+│   ├── cyberagent/
+│   │   ├── cli/
+│   │   ├── core/
+│   │   ├── db/
+│   │   ├── domain/
+│   │   ├── services/
+│   │   └── tools/
 │   ├── prompts/
 │   ├── rbac/
 │   ├── tools/
+│   ├── registry.py
+│   └── cli_session.py
 └── tests/
 │   ├── agents/
 │   ├── cli/
 │   ├── fixtures/
-│   ├── models/
 │   ├── registry/
 │   └── tools/
 ```
@@ -130,20 +137,25 @@ from autogen_core import AgentId, RoutedAgent, message_handler
 from casbin import Enforcer
 
 # 3. Local imports
-from src.runtime import get_runtime
-from src.agents import DelegateMessage
+from src.cyberagent.core.runtime import get_runtime
+from src.agents.messages import UserMessage
 ```
+
+## Refactor Conventions (Current)
+- Prefer new code under `src/cyberagent/` unless a legacy path is explicitly required.
+- Keep `src/agents/`, `src/tools/`, `src/rbac/`, and `src/registry.py` stable until migration completion.
+- Do not remove compatibility paths without updating tests and docs in the same change.
 
 ### Type Hints - MANDATORY
 All functions must have complete type hints:
 ```python
-from typing import Optional, List, Dict, Any
+from typing import Optional
 
 async def send_message(
-    message: DelegateMessage,
+    message: UserMessage,
     recipient: AgentId,
     timeout: Optional[int] = None
-) -> DelegateMessage:
+) -> UserMessage:
     pass
 ```
 

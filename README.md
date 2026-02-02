@@ -53,7 +53,7 @@ python main.py --message "hello"
 - `cyberagent status` shows the active strategy/task hierarchy, while `cyberagent suggest` lets you pipe JSON/YAML payloads into System 4.
 - Observability helpers (`cyberagent logs`, `cyberagent inbox`, `cyberagent watch`) and the `cyberagent login` command (which stores a keyring-backed token) round out the current CLI surface.
 
-## Project Structure (Current)
+## Project Structure (Current Transitional Layout)
 
 ```
 CyberneticAgents/
@@ -63,13 +63,20 @@ CyberneticAgents/
 │   ├── CyberneticAgents.db     # SQLAlchemy app data
 │   └── rbac.db                 # Casbin RBAC policies
 ├── src/
-│   ├── agents/                 # System 1/3/4/5 + UserAgent
+│   ├── cyberagent/             # New package namespace (refactor target)
+│   │   ├── cli/                # CLI entry points (`cyberagent`, headless, status)
+│   │   ├── core/               # Runtime, logging, shared state
+│   │   ├── db/                 # DB init and DB utility layer
+│   │   ├── domain/             # Domain-level specs and serialization
+│   │   ├── services/           # Purpose/strategy/initiative/task/team services
+│   │   └── tools/              # Refactored tool namespace package
+│   ├── agents/                 # Active agent implementations (legacy path, in transition)
 │   ├── prompts/                # System prompts (1-5)
-│   ├── rbac/                   # Casbin enforcer + model
-│   ├── tools/                  # Contact-user + OpenClaw CLI executor
-│   ├── models/                 # SQLAlchemy models
-│   ├── registry.py             # Agent factory registration
-│   ├── runtime.py              # Runtime + tracing setup
+│   ├── rbac/                   # Casbin enforcer + model (legacy path, in transition)
+│   ├── tools/                  # Tool adapters still under migration
+│   ├── registry.py             # Agent factory registration (legacy entry point)
+│   ├── cli_session.py          # CLI question/answer queue state
+│   ├── llm_config.py           # LLM client setup
 │   └── ...
 ├── tests/                      # pytest suite
 ├── docs/                       # Project notes/roadmap
@@ -78,11 +85,20 @@ CyberneticAgents/
 
 ## How It Works (High Level)
 
-- `main.py` initializes databases and registers agent factories.
+- `main.py` routes into the headless CLI runtime (`src/cyberagent/cli/headless.py`).
+- The headless runtime initializes DB state and registers agent factories.
 - `UserAgent` receives user input and forwards it to System 4.
 - System agents coordinate tasks and policies via internal workflows and OpenClaw tooling.
 - OpenClaw tools are executed through a Docker CLI executor when configured.
 - Messages and tool usage are logged to stdout and runtime logs, with optional tracing.
+
+## Known Transitional Modules
+
+Until the refactor is fully complete, these legacy paths are still intentionally active:
+- `src/agents/`
+- `src/tools/`
+- `src/rbac/`
+- `src/registry.py`
 
 ## Development
 

@@ -81,7 +81,8 @@ op run --env-file ./.env.example -- \
 ---
 
 ## Files Modified
-- `src/tools/cli_executor/Dockerfile.openclaw-tools`: Tools container definition.
+- Historical note: this earlier draft referenced `src/tools/cli_executor/Dockerfile.openclaw-tools`, but that path is not present in the current repository layout.
+- Current tooling code lives under `src/tools/` (legacy transitional path) and `src/cyberagent/tools/` (refactor target namespace).
 
 ---
 
