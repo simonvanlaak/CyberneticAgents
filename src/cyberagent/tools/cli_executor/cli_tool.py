@@ -62,11 +62,14 @@ class CliTool:
                 }
             allowed, details = self._check_skill_permission(agent_id, skill_name)
             if not allowed:
-                return {
+                response = {
                     "success": False,
                     "error": "Skill permission denied.",
                     "details": details,
                 }
+                if details:
+                    response.update(details)
+                return response
 
         # Inject secrets into the executor environment
         if callable(getattr(type(self.executor), "set_exec_env", None)):

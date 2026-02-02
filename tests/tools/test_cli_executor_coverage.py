@@ -358,6 +358,8 @@ def _make_skill_definition(name: str) -> SkillDefinition:
         required_env=(),
         timeout_class="standard",
         timeout_seconds=60,
+        input_schema={"properties": {"query": {"type": "string"}}},
+        output_schema={"properties": {"results": {"type": "array"}}},
         skill_file=Path(f"src/tools/skills/{name}/SKILL.md"),
         instructions="",
     )
@@ -376,6 +378,16 @@ def _write_skill(root: Path, name: str, body: str = "Use this skill.") -> None:
         "    subcommand: run\n"
         "    required_env:\n"
         "      - BRAVE_API_KEY\n"
+        "input_schema:\n"
+        "  type: object\n"
+        "  properties:\n"
+        "    query:\n"
+        "      type: string\n"
+        "output_schema:\n"
+        "  type: object\n"
+        "  properties:\n"
+        "    results:\n"
+        "      type: array\n"
         "---\n\n"
         f"{body}\n",
         encoding="utf-8",
@@ -623,6 +635,50 @@ async def test_cli_tool_execute_denies_skill_permission(
     assert result["details"]["skill_name"] == "web-search"
     assert result["details"]["failed_rule_category"] == "team_envelope"
     assert tool.executor.executed is False
+
+
+@pytest.mark.asyncio
+async def test_cli_tool_execute_denies_skill_permission_top_level_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.cyberagent.tools.cli_executor import cli_tool as cli_tool_module
+
+    class _DummySystem:
+        id = 99
+        team_id = 12
+
+    class _RecordingExecutor:
+        def __init__(self) -> None:
+            self.executed = False
+
+        async def execute_code_blocks(self, *args, **kwargs):
+            self.executed = True
+            return SimpleNamespace(exit_code=0, output="{}")
+
+    monkeypatch.setattr(
+        cli_tool_module, "get_system_from_agent_id", lambda _a: _DummySystem
+    )
+    monkeypatch.setattr(
+        cli_tool_module.systems_service,
+        "can_execute_skill",
+        lambda _sid, _skill: (False, "system_grant"),
+    )
+
+    tool = CliTool(_RecordingExecutor())
+    tool._check_permission = lambda *_args, **_kwargs: True
+
+    result = await tool.execute(
+        "web_search",
+        agent_id="System4/root",
+        skill_name="web-search",
+        query="x",
+    )
+
+    assert result["success"] is False
+    assert result["team_id"] == 12
+    assert result["system_id"] == 99
+    assert result["skill_name"] == "web-search"
+    assert result["failed_rule_category"] == "system_grant"
 
 
 @pytest.mark.asyncio
