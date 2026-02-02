@@ -71,8 +71,12 @@ class CliTool:
         # Inject secrets into the executor environment
         if callable(getattr(type(self.executor), "set_exec_env", None)):
             try:
+                extra_required_env = list(required_env or [])
+                token_env = kwargs.get("token_env")
+                if token_env:
+                    extra_required_env.append(str(token_env))
                 tool_secrets = secrets.get_tool_secrets(
-                    tool_name, required_env=required_env
+                    tool_name, required_env=extra_required_env
                 )
                 self.executor.set_exec_env(tool_secrets)
             except ValueError as exc:

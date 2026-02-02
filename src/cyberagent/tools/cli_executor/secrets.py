@@ -5,6 +5,7 @@ from typing import Dict, Iterable, List
 
 TOOL_SECRET_ENV_VARS: Dict[str, List[str]] = {
     "web_search": ["BRAVE_API_KEY"],
+    "git_readonly_sync": [],
 }
 
 

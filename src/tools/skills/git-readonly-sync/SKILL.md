@@ -3,7 +3,7 @@ name: git-readonly-sync
 description: Clone or pull public repositories in read-only workflows to gather reference material.
 metadata:
   cyberagent:
-    tool: exec
+    tool: git_readonly_sync
     subcommand: run
     timeout_class: standard
 ---
@@ -15,3 +15,14 @@ Guidelines:
 2. Do not commit, push, rebase, or rewrite history.
 3. Prefer shallow clones for speed when full history is unnecessary.
 4. Keep repository paths explicit in outputs.
+
+Inputs (CLI args):
+- `--repo`: repository URL (https or ssh).
+- `--dest`: destination directory.
+- `--branch`: branch name (default: main).
+- `--depth`: shallow clone depth (default: 1).
+- `--token-env`: env var name containing a read-only token (optional).
+- `--token-username`: username for the token (optional, defaults to x-access-token).
+
+Notes:
+- For private repos, provide `--token-env` and ensure the token is supplied via 1Password.

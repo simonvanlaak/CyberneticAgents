@@ -394,3 +394,23 @@ async def test_cli_tool_execute_overrides_timeout(
     assert result["success"] is True
     assert executor.seen_timeout == 12
     assert executor._timeout == 60
+
+
+@pytest.mark.asyncio
+async def test_cli_tool_execute_requires_token_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OP_SERVICE_ACCOUNT_TOKEN", "token")
+    monkeypatch.delenv("GIT_TOKEN", raising=False)
+    executor = _FakeExecutor(json.dumps({"ok": True}))
+    tool = CliTool(executor)
+
+    result = await tool.execute(
+        "git_readonly_sync",
+        token_env="GIT_TOKEN",
+        repo="https://example.com/repo.git",
+        dest="repo",
+    )
+
+    assert result["success"] is False
+    assert "GIT_TOKEN" in result["error"]

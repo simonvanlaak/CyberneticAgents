@@ -68,6 +68,43 @@ async def test_execute_returns_error_on_missing_secret(
 
 
 @pytest.mark.asyncio
+async def test_execute_requires_token_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("GIT_TOKEN", raising=False)
+    monkeypatch.setenv("OP_SERVICE_ACCOUNT_TOKEN", "token")
+
+    executor = DummyExecutor()
+    tool = CliTool(executor)
+
+    result = await tool.execute(
+        "git_readonly_sync",
+        token_env="GIT_TOKEN",
+        repo="https://example.com/repo.git",
+        dest="repo",
+    )
+
+    assert result["success"] is False
+    assert "GIT_TOKEN" in result["error"]
+
+
+@pytest.mark.asyncio
+async def test_execute_accepts_token_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("GIT_TOKEN", "token")
+    monkeypatch.setenv("OP_SERVICE_ACCOUNT_TOKEN", "token")
+
+    executor = DummyExecutor()
+    tool = CliTool(executor)
+
+    result = await tool.execute(
+        "git_readonly_sync",
+        token_env="GIT_TOKEN",
+        repo="https://example.com/repo.git",
+        dest="repo",
+    )
+
+    assert result["success"] is True
+
+
+@pytest.mark.asyncio
 async def test_execute_returns_error_on_rbac_denied(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
