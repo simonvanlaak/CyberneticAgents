@@ -45,6 +45,7 @@ KEYRING_SERVICE = "cyberagent-cli"
 SYSTEM4_AGENT_ID = AgentId(type="System4", key="root")
 LOGS_DIR = Path("logs")
 RUNTIME_PID_FILE = Path("logs/cyberagent.pid")
+CLI_LOG_STATE_FILE = Path("logs/cli_last_seen.json")
 SERVE_COMMAND = "serve"
 TEST_START_ENV = "CYBERAGENT_TEST_NO_RUNTIME"
 TEST_START_ENV = "CYBERAGENT_TEST_NO_RUNTIME"
@@ -68,7 +69,11 @@ class ParsedSuggestion:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="cyberagent", description="CyberneticAgents CLI"
+        prog="cyberagent",
+        description=(
+            "CyberneticAgents CLI. New runtime warnings/errors since your last "
+            "command are summarized automatically; use 'cyberagent logs' for details."
+        ),
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -168,6 +173,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         parser.print_help()
         return 0
     args = parser.parse_args(args_list)
+    _check_recent_runtime_errors(args.command)
     if args.command == "help":
         return _handle_help(args)
     handler = _HANDLERS.get(args.command)
@@ -409,6 +415,84 @@ def _matches_filter(line: str, pattern: str | None) -> bool:
     if pattern is None:
         return True
     return pattern.lower() in line.lower()
+
+
+def _check_recent_runtime_errors(command: str | None) -> None:
+    if not LOGS_DIR.exists():
+        return
+    log_files = sorted(LOGS_DIR.glob("*.log"), key=os.path.getmtime)
+    if not log_files:
+        return
+    latest_log = log_files[-1]
+    state = _load_cli_log_state()
+    offset = 0
+    latest_path = str(latest_log.resolve())
+    if state and state.get("log_path") == latest_path:
+        offset = _safe_int(state.get("byte_offset"), 0)
+
+    warnings = 0
+    errors = 0
+    try:
+        with latest_log.open("rb") as handle:
+            handle.seek(offset)
+            new_bytes = handle.read()
+            new_offset = handle.tell()
+        if new_bytes:
+            text = new_bytes.decode("utf-8", errors="ignore")
+            for line in text.splitlines():
+                level = _extract_log_level(line)
+                if level == "WARNING":
+                    warnings += 1
+                elif level == "ERROR":
+                    errors += 1
+        _store_cli_log_state(latest_path, new_offset)
+    except OSError:
+        return
+
+    if warnings or errors:
+        total = warnings + errors
+        print(
+            "New runtime logs since last command: "
+            f"{total} warnings/errors ({warnings} warnings, {errors} errors). "
+            "Run 'cyberagent logs' to view."
+        )
+
+
+def _extract_log_level(line: str) -> str | None:
+    parts = line.split(" ", 3)
+    if len(parts) < 3:
+        return None
+    level = parts[2].strip()
+    return level if level else None
+
+
+def _load_cli_log_state() -> dict[str, object] | None:
+    if not CLI_LOG_STATE_FILE.exists():
+        return None
+    try:
+        return json.loads(CLI_LOG_STATE_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _store_cli_log_state(log_path: str, byte_offset: int) -> None:
+    try:
+        LOGS_DIR.mkdir(parents=True, exist_ok=True)
+        payload = {
+            "log_path": log_path,
+            "byte_offset": byte_offset,
+            "last_checked_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        }
+        CLI_LOG_STATE_FILE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    except OSError:
+        return
+
+
+def _safe_int(value: object, default: int) -> int:
+    try:
+        return int(value)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return default
 
 
 def _parse_suggestion_args(args: argparse.Namespace) -> ParsedSuggestion:

@@ -61,6 +61,7 @@ cyberagent start
 - Use `cyberagent start` to boot the VSM runtime in the background for CLI workflows.
 - `cyberagent status` shows the active strategy/task hierarchy, while `cyberagent suggest` lets you pipe JSON/YAML payloads into System 4.
 - Observability helpers (`cyberagent logs`, `cyberagent inbox`, `cyberagent watch`) and the `cyberagent login` command (which stores a keyring-backed token) round out the current CLI surface.
+- Each CLI command summarizes any new runtime `WARNING`/`ERROR` logs since the last command; run `cyberagent logs` for details.
 
 ## Project Structure (Current Transitional Layout)
 

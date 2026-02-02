@@ -194,6 +194,10 @@ def register_vsm_agent_type() -> None:
 ## Environment Variables
 defined in .env.example
 
+## CLI Observability (Phase 1)
+- Every CLI command summarizes new runtime `WARNING`/`ERROR` log lines since the last command.
+- Use `cyberagent logs` to view details.
+
 ## Multi-agent safety
 do not create/apply/drop git stash entries unless explicitly requested (this includes git pull --rebase --autostash). Assume other agents may be working; keep unrelated WIP untouched and avoid cross-cutting state changes.
 when the user says "push", you may git pull --rebase to integrate latest changes (never discard other agents' work). When the user says "commit", scope to your changes only. When the user says "commit all", commit everything in grouped chunks.

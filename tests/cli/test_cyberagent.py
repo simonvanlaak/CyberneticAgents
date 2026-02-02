@@ -6,6 +6,7 @@ import io
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 from typing import Sequence
 
@@ -150,6 +151,72 @@ def test_filter_logs_applies_pattern_and_limit() -> None:
     lines = ["alpha", "Beta", "gamma", "delta"]
     filtered = cyberagent._filter_logs(lines, "a", 2)
     assert filtered == ["gamma", "delta"]
+
+
+def test_check_recent_runtime_errors_counts_new(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    log_file = log_dir / "runtime_20250101_000000.log"
+    log_file.write_text(
+        "\n".join(
+            [
+                "2025-01-01 00:00:00.000 INFO [x] ok",
+                "2025-01-01 00:00:01.000 WARNING [x] warn",
+                "2025-01-01 00:00:02.000 ERROR [x] boom",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    state_file = log_dir / "cli_last_seen.json"
+    monkeypatch.setattr(cyberagent, "LOGS_DIR", log_dir)
+    monkeypatch.setattr(cyberagent, "CLI_LOG_STATE_FILE", state_file)
+
+    cyberagent._check_recent_runtime_errors("status")
+    output = capsys.readouterr().out
+    assert "2 warnings/errors" in output
+    assert "cyberagent logs" in output
+
+    # Second call should be quiet when no new lines exist.
+    cyberagent._check_recent_runtime_errors("status")
+    output = capsys.readouterr().out
+    assert output == ""
+
+
+def test_check_recent_runtime_errors_resets_on_new_log(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    now = time.time()
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    first_log = log_dir / "runtime_20250101_000000.log"
+    first_log.write_text("2025-01-01 00:00:00.000 INFO [x] ok\n", encoding="utf-8")
+    os.utime(first_log, (now, now))
+
+    state_file = log_dir / "cli_last_seen.json"
+    monkeypatch.setattr(cyberagent, "LOGS_DIR", log_dir)
+    monkeypatch.setattr(cyberagent, "CLI_LOG_STATE_FILE", state_file)
+
+    cyberagent._check_recent_runtime_errors("status")
+    capsys.readouterr()
+
+    second_log = log_dir / "runtime_20250101_010000.log"
+    second_log.write_text(
+        "2025-01-01 01:00:00.000 WARNING [x] warn\n", encoding="utf-8"
+    )
+    os.utime(second_log, (now + 10, now + 10))
+
+    cyberagent._check_recent_runtime_errors("status")
+    output = capsys.readouterr().out
+    assert "1 warnings/errors" in output
+    assert "cyberagent logs" in output
 
 
 def test_handle_config_displays_teams(
