@@ -24,3 +24,9 @@ Here Product Discovery principles need to be applied. The VSM is trying to under
 
 ### 2. Continuous Purpose Adjustment Loop
 Product discovery needs to be countinous. Root system 4 should have a regular trigger (every day f.ex.) to review what tasks the VSM has completed, check for changes in the knowledge that is availbale and compare with existing purposes and strategies. It can ask the user follow up questions or suggest to innovate and automate tasks that have been repeating.
+
+
+I want to build an LLM Agent based automatic product discovery that asks questions to its user as well as does web research in order to identify user needs, that could be fulfilled by an LLM Agent. Research best practices on understanding user needs in an interview situation supported with additional research. And ultimately create a framework / flow / guide on how the interview should be structured.
+
+
+Added research results in docs/research_synthesys/AI-Powered User Discovery: A Framework for B2B Multi-Agent Onboarding.md
