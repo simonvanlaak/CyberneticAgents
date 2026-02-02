@@ -29,6 +29,28 @@ class TelegramClient:
         if not payload.get("ok", False):
             raise RuntimeError("Telegram sendMessage failed.")
 
+    def send_message_with_keyboard(
+        self, chat_id: int, text: str, keyboard: list[list[dict[str, str]]]
+    ) -> None:
+        payload = self._post(
+            "sendMessage",
+            {
+                "chat_id": chat_id,
+                "text": text,
+                "reply_markup": json.dumps({"inline_keyboard": keyboard}),
+            },
+        )
+        if not payload.get("ok", False):
+            raise RuntimeError("Telegram sendMessage failed.")
+
+    def answer_callback_query(self, callback_id: str, text: str | None = None) -> None:
+        params: dict[str, object] = {"callback_query_id": callback_id}
+        if text:
+            params["text"] = text
+        payload = self._post("answerCallbackQuery", params)
+        if not payload.get("ok", False):
+            raise RuntimeError("Telegram answerCallbackQuery failed.")
+
     def get_file_path(self, file_id: str) -> str:
         payload = self._post("getFile", {"file_id": file_id})
         result = payload.get("result")

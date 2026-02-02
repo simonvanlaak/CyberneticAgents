@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from src.cyberagent.channels.telegram.parser import (
+    TelegramCallbackQuery,
     TelegramInboundMessage,
     build_reset_session_id,
     build_session_id,
     classify_text_message,
+    extract_callback_queries,
     extract_text_messages,
     is_valid_secret,
     is_allowed,
@@ -56,6 +58,31 @@ def test_extract_text_messages_filters_non_text() -> None:
     ]
 
 
+def test_extract_callback_queries() -> None:
+    updates = [
+        {
+            "update_id": 3,
+            "callback_query": {
+                "id": "cb1",
+                "from": {"id": 42},
+                "message": {"message_id": 7, "chat": {"id": 99}},
+                "data": "approve",
+            },
+        }
+    ]
+    callbacks = extract_callback_queries(updates)
+    assert callbacks == [
+        TelegramCallbackQuery(
+            update_id=3,
+            callback_id="cb1",
+            chat_id=99,
+            user_id=42,
+            message_id=7,
+            data="approve",
+        )
+    ]
+
+
 def test_classify_text_message_recognizes_commands() -> None:
     assert classify_text_message("/start") == ("command", "/start")
     assert classify_text_message("/help") == ("command", "/help")
@@ -81,6 +108,17 @@ def test_parse_allowlist_parses_ids() -> None:
 def test_is_allowed_with_allowlist() -> None:
     allowed_chats = {10}
     allowed_users = {42}
-    assert is_allowed(10, 99, allowed_chats, allowed_users) is True
-    assert is_allowed(99, 42, allowed_chats, allowed_users) is True
-    assert is_allowed(99, 100, allowed_chats, allowed_users) is False
+    blocked_chats: set[int] = set()
+    blocked_users: set[int] = set()
+    assert (
+        is_allowed(10, 99, allowed_chats, allowed_users, blocked_chats, blocked_users)
+        is True
+    )
+    assert (
+        is_allowed(99, 42, allowed_chats, allowed_users, blocked_chats, blocked_users)
+        is True
+    )
+    assert (
+        is_allowed(99, 100, allowed_chats, allowed_users, blocked_chats, blocked_users)
+        is False
+    )

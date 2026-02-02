@@ -18,10 +18,13 @@ from src.cyberagent.channels.telegram.parser import (
     build_reset_session_id,
     build_session_id,
     classify_text_message,
+    extract_callback_queries,
     extract_text_messages,
     extract_voice_messages,
     is_allowed,
     parse_allowlist,
+    parse_blocklist,
+    TelegramCallbackQuery,
     TelegramInboundMessage,
 )
 
@@ -61,10 +64,20 @@ class TelegramPoller:
         self._stt_config = telegram_stt.load_config()
         self._stt_cache_dir = telegram_stt.get_cache_dir()
         self._allowed_chat_ids = parse_allowlist(
-            os.environ.get("TELEGRAM_ALLOWED_CHAT_IDS")
+            os.environ.get("TELEGRAM_ALLOWLIST_CHAT_IDS")
+            or os.environ.get("TELEGRAM_ALLOWED_CHAT_IDS")
         )
         self._allowed_user_ids = parse_allowlist(
-            os.environ.get("TELEGRAM_ALLOWED_USER_IDS")
+            os.environ.get("TELEGRAM_ALLOWLIST_USER_IDS")
+            or os.environ.get("TELEGRAM_ALLOWED_USER_IDS")
+        )
+        self._blocked_chat_ids = parse_blocklist(
+            os.environ.get("TELEGRAM_BLOCKLIST_CHAT_IDS")
+            or os.environ.get("TELEGRAM_BLOCKED_CHAT_IDS")
+        )
+        self._blocked_user_ids = parse_blocklist(
+            os.environ.get("TELEGRAM_BLOCKLIST_USER_IDS")
+            or os.environ.get("TELEGRAM_BLOCKED_USER_IDS")
         )
 
     async def run(self) -> None:
@@ -84,7 +97,14 @@ class TelegramPoller:
                     inbound.user_id,
                     self._allowed_chat_ids,
                     self._allowed_user_ids,
+                    self._blocked_chat_ids,
+                    self._blocked_user_ids,
                 ):
+                    logger.warning(
+                        "Telegram message blocked (chat_id=%s user_id=%s).",
+                        inbound.chat_id,
+                        inbound.user_id,
+                    )
                     await self._send_reply(inbound.chat_id, "Not authorized.")
                     self._offset = inbound.update_id + 1
                     continue
@@ -105,7 +125,14 @@ class TelegramPoller:
                     voice.user_id,
                     self._allowed_chat_ids,
                     self._allowed_user_ids,
+                    self._blocked_chat_ids,
+                    self._blocked_user_ids,
                 ):
+                    logger.warning(
+                        "Telegram voice blocked (chat_id=%s user_id=%s).",
+                        voice.chat_id,
+                        voice.user_id,
+                    )
                     await asyncio.to_thread(
                         send_telegram_message, voice.chat_id, "Not authorized."
                     )
@@ -159,6 +186,30 @@ class TelegramPoller:
                     recipient=self._recipient,
                 )
                 self._offset = voice.update_id + 1
+            callbacks = extract_callback_queries(updates)
+            for callback in callbacks:
+                if not is_allowed(
+                    callback.chat_id,
+                    callback.user_id,
+                    self._allowed_chat_ids,
+                    self._allowed_user_ids,
+                    self._blocked_chat_ids,
+                    self._blocked_user_ids,
+                ):
+                    logger.warning(
+                        "Telegram callback blocked (chat_id=%s user_id=%s).",
+                        callback.chat_id,
+                        callback.user_id,
+                    )
+                    await asyncio.to_thread(
+                        self._client.answer_callback_query,
+                        callback.callback_id,
+                        "Not authorized.",
+                    )
+                    self._offset = callback.update_id + 1
+                    continue
+                await self._handle_callback(callback)
+                self._offset = callback.update_id + 1
             await asyncio.sleep(self._poll_interval)
 
     async def _handle_command(self, inbound: TelegramInboundMessage) -> bool:
@@ -192,6 +243,25 @@ class TelegramPoller:
             await self._send_reply(inbound.chat_id, "Session reset.")
             return True
         return False
+
+    async def _handle_callback(self, callback: TelegramCallbackQuery) -> None:
+        session_id = build_session_id(callback.chat_id, callback.user_id)
+        message = UserMessage(content=callback.data, source="User")
+        message.metadata = {
+            "channel": "telegram",
+            "session_id": session_id,
+            "telegram_chat_id": str(callback.chat_id),
+            "telegram_message_id": str(callback.message_id),
+            "telegram_callback_id": callback.callback_id,
+            "telegram_callback_data": callback.data,
+        }
+        await self._runtime.send_message(
+            message=message,
+            recipient=self._recipient,
+        )
+        await asyncio.to_thread(
+            self._client.answer_callback_query, callback.callback_id, "Received."
+        )
 
     async def _forward_message(
         self,

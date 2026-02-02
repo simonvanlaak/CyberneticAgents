@@ -18,9 +18,11 @@ from src.cyberagent.channels.telegram import stt as telegram_stt
 from src.cyberagent.channels.telegram.parser import (
     TelegramInboundMessage,
     TelegramInboundVoiceMessage,
+    TelegramCallbackQuery,
     build_reset_session_id,
     build_session_id,
     classify_text_message,
+    extract_callback_queries,
     extract_text_messages,
     extract_voice_messages,
     is_allowed,
@@ -71,6 +73,12 @@ class TelegramWebhookServer:
         )
         self._allowed_user_ids = parse_allowlist(
             os.environ.get("TELEGRAM_ALLOWED_USER_IDS")
+        )
+        self._blocked_chat_ids = parse_allowlist(
+            os.environ.get("TELEGRAM_BLOCKED_CHAT_IDS")
+        )
+        self._blocked_user_ids = parse_allowlist(
+            os.environ.get("TELEGRAM_BLOCKED_USER_IDS")
         )
 
     def start(self, webhook_url: str) -> None:
@@ -123,10 +131,13 @@ class TelegramWebhookServer:
                 updates = payload if isinstance(payload, list) else [payload]
                 inbound = extract_text_messages(updates)
                 voice_messages = extract_voice_messages(updates)
+                callbacks = extract_callback_queries(updates)
                 for message in inbound:
                     server._handle_inbound(message)
                 for voice in voice_messages:
                     server._handle_voice_inbound(voice)
+                for callback in callbacks:
+                    server._handle_callback_inbound(callback)
                 self.send_response(200)
                 self.end_headers()
 
@@ -138,6 +149,8 @@ class TelegramWebhookServer:
             inbound.user_id,
             self._allowed_chat_ids,
             self._allowed_user_ids,
+            self._blocked_chat_ids,
+            self._blocked_user_ids,
         ):
             self._client.send_message(inbound.chat_id, "Not authorized.")
             return
@@ -177,6 +190,8 @@ class TelegramWebhookServer:
             inbound.user_id,
             self._allowed_chat_ids,
             self._allowed_user_ids,
+            self._blocked_chat_ids,
+            self._blocked_user_ids,
         ):
             self._client.send_message(inbound.chat_id, "Not authorized.")
             return
@@ -217,6 +232,34 @@ class TelegramWebhookServer:
             self._loop,
         )
         future.add_done_callback(self._handle_forward_result)
+
+    def _handle_callback_inbound(self, callback: TelegramCallbackQuery) -> None:
+        if not is_allowed(
+            callback.chat_id,
+            callback.user_id,
+            self._allowed_chat_ids,
+            self._allowed_user_ids,
+            self._blocked_chat_ids,
+            self._blocked_user_ids,
+        ):
+            self._client.answer_callback_query(callback.callback_id, "Not authorized.")
+            return
+        session_id = build_session_id(callback.chat_id, callback.user_id)
+        message = UserMessage(content=callback.data, source="User")
+        message.metadata = {
+            "channel": "telegram",
+            "session_id": session_id,
+            "telegram_chat_id": str(callback.chat_id),
+            "telegram_message_id": str(callback.message_id),
+            "telegram_callback_id": callback.callback_id,
+            "telegram_callback_data": callback.data,
+        }
+        future = asyncio.run_coroutine_threadsafe(
+            self._runtime.send_message(message=message, recipient=self._recipient),
+            self._loop,
+        )
+        future.add_done_callback(self._handle_forward_result)
+        self._client.answer_callback_query(callback.callback_id, "Received.")
 
     def _forward_message(
         self,
