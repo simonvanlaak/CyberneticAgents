@@ -44,7 +44,7 @@ if [[ -n "${staged_py_files}" ]]; then
     ${PYTHON_BIN} -m ruff check "${file}"
   done
   echo "Running basedpyright on staged Python files..."
-  ${BASEDPYRIGHT_BIN} ${staged_py_files}
+  ${BASEDPYRIGHT_BIN} --pythonpath ${PYTHON_BIN} ${staged_py_files}
 else
   echo "No staged Python files for black/ruff/basedpyright."
 fi

@@ -17,4 +17,4 @@ echo "Running ruff on src/ and tests/..."
 ${PYTHON_BIN} -m ruff check src tests
 
 echo "Running basedpyright on src/ and tests/..."
-${BASEDPYRIGHT_BIN}
+${BASEDPYRIGHT_BIN} --pythonpath ${PYTHON_BIN}
