@@ -336,6 +336,7 @@ def test_optional_telegram_setup_prompts_when_missing(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.setattr(onboarding_cli.sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(onboarding_cli.shutil, "which", lambda *_: "/usr/bin/op")
     monkeypatch.setattr(onboarding_cli, "_has_onepassword_auth", lambda: True)
     monkeypatch.setattr(
@@ -344,12 +345,10 @@ def test_optional_telegram_setup_prompts_when_missing(
     monkeypatch.setattr(onboarding_cli, "_prompt_yes_no", lambda *_: True)
     monkeypatch.setattr(onboarding_cli.getpass, "getpass", lambda *_: "secret")
 
-    stored = {}
+    stored: list[dict[str, str]] = []
 
     def fake_create(vault: str, title: str, secret: str) -> bool:
-        stored["vault"] = vault
-        stored["title"] = title
-        stored["secret"] = secret
+        stored.append({"vault": vault, "title": title, "secret": secret})
         return True
 
     monkeypatch.setattr(onboarding_cli, "_create_onepassword_item", fake_create)
@@ -358,7 +357,9 @@ def test_optional_telegram_setup_prompts_when_missing(
     onboarding_cli._offer_optional_telegram_setup()
     captured = capsys.readouterr().out
     assert "Telegram" in captured
-    assert stored["title"] == "TELEGRAM_BOT_TOKEN"
+    titles = {entry["title"] for entry in stored}
+    assert "TELEGRAM_BOT_TOKEN" in titles
+    assert "TELEGRAM_WEBHOOK_SECRET" in titles
 
 
 def test_check_docker_socket_access_denied(

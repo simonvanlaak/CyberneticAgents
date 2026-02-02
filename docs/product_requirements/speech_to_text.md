@@ -19,41 +19,19 @@ CyberneticAgents needs a robust STT pipeline to bridge voice input with its text
 4. **Integration**: Seamless integration with existing CLI, inbox, and agent workflows
 5. **Cost Efficiency**: Minimize transcription costs while maintaining quality
 
-## Dependencies
-Depends on docs/product_requirements/telegram_integration.md
-
 ## Use Cases
 
-### 1. Voice Commands via CLI
-```bash
-# Transcribe audio file
-cyberagent transcribe path/to/audio.wav
-
-# Real-time transcription
-cyberagent listen --stream
-```
-
-### 2. Voice Messages in Inbox
+### 1. Voice Messages in Inbox
 Users send voice messages via messaging platforms (Telegram, WhatsApp):
 1. Audio file arrives at System4 inbox
 2. STT transcribes the audio
 3. Transcribed text is processed as a message
 
-### 3. Meeting Transcripts
-```bash
-# Transcribe a meeting recording
-cyberagent transcribe meeting.mp3 --speaker-diarization
-
-# Output: Timestamped transcript with speaker labels
-[00:00:12] Speaker 1: "Let's discuss the backend architecture..."
-[00:00:18] Speaker 2: "I think we should use microservices..."
-```
-
 ## Architecture
 
 ### STT Pipeline
 ```
-Audio Input → Preprocessing → Transcription Model → Post-Processing → Text Output
+Audio Input → Transcription Model → Text Output
 ```
 
 ### Components
@@ -67,10 +45,7 @@ Audio Input → Preprocessing → Transcription Model → Post-Processing → Te
   - Phone calls (via Twilio/VoIP integration)
 
 #### 2. Audio Preprocessing
-- **Normalization**: Adjust volume levels
-- **Noise Reduction**: Remove background noise
-- **Format Conversion**: Convert to model-compatible format (e.g., 16kHz WAV)
-- **Chunking**: Split long audio into manageable segments
+Deferred.
 
 #### 3. Transcription Engine
 **Primary Model: Groq Whisper**
@@ -90,21 +65,6 @@ Audio Input → Preprocessing → Transcription Model → Post-Processing → Te
 - **Timestamp Injection**: Add timestamps for long transcripts
 - **Language Detection**: Auto-detect input language
 
-### Configuration
-```yaml
-stt:
-  provider: "groq"  # groq | openai | local
-  model: "whisper-large-v3-turbo"
-  language: "auto"  # auto-detect or specify (e.g., "en", "es", "de")
-  enable_timestamps: true
-  enable_speaker_diarization: false
-  preprocessing:
-    noise_reduction: true
-    normalize_volume: true
-  fallback_provider: "openai"
-  max_audio_duration_seconds: 600  # 10 minutes
-```
-
 ## Implementation
 
 ### Phase 1: File-Based Transcription
@@ -113,6 +73,7 @@ stt:
   - Audio file reader
   - Groq Whisper API integration
   - Text output to CLI
+ - **Status**: Not implemented yet (CLI command + file ingest missing).
 
 ```python
 # src/stt/transcribe.py
@@ -154,80 +115,6 @@ def handle_voice_message(message):
     inbox.add_message(message)
 ```
 
-### Phase 3: Real-Time Streaming (Optional)
-- **Deliverable**: Live transcription from microphone
-- **Challenges**: Requires chunking and stateful processing
-- **Use Case**: Voice-activated agents, live meetings
-
-```python
-# Pseudo-code for streaming
-def stream_transcribe(microphone_stream):
-    buffer = AudioBuffer(chunk_size=5s)
-    
-    for chunk in microphone_stream:
-        buffer.append(chunk)
-        
-        if buffer.is_full():
-            transcript = transcribe_chunk(buffer.get_audio())
-            yield transcript
-            buffer.clear()
-```
-
-### Phase 4: Speaker Diarization
-- **Deliverable**: Multi-speaker transcripts with labels
-- **Provider**: Pyannote.audio (open-source) or AssemblyAI
-- **Output**:
-```json
-{
-  "segments": [
-    {"start": 0.0, "end": 5.2, "speaker": "SPEAKER_1", "text": "Hello everyone"},
-    {"start": 5.5, "end": 9.1, "speaker": "SPEAKER_2", "text": "Hi, thanks for joining"}
-  ]
-}
-```
-
-## CLI Commands
-
-### Transcribe Audio File
-```bash
-cyberagent transcribe <file_path> [OPTIONS]
-
-Options:
-  --provider      STT provider (groq|openai|local) [default: groq]
-  --model         Model name [default: whisper-large-v3-turbo]
-  --language      Language code (auto|en|es|de|...) [default: auto]
-  --timestamps    Include timestamps in output
-  --diarization   Enable speaker diarization
-  --output        Output file path (optional)
-```
-
-**Example:**
-```bash
-$ cyberagent transcribe meeting.mp3 --timestamps --diarization
-
-Transcribing meeting.mp3 (8m 34s)...
-Provider: groq/whisper-large-v3-turbo
-Language: en (auto-detected)
-
-[00:00:03] SPEAKER_1: "Let's start with the quarterly review."
-[00:00:12] SPEAKER_2: "Sounds good. Revenue is up 15% this quarter."
-[00:00:21] SPEAKER_1: "That's great news. What about user growth?"
-...
-
-Transcript saved to: meeting_transcript_2026-02-02.txt
-```
-
-### Live Transcription
-```bash
-cyberagent listen [OPTIONS]
-
-Options:
-  --duration      Recording duration (e.g., 5s, 1m) [default: until Enter]
-  --stream        Enable real-time streaming transcription
-  --command       Execute transcribed text as a command
-```
-
-
 ## Inbox Integration
 
 ### Automatic Transcription
@@ -248,11 +135,7 @@ $ cyberagent inbox
 ```
 
 ### Voice Reply (Future Enhancement)
-After processing a voice message, agent can respond with TTS:
-```
-User: 🎤 "What's the status of the deployment?"
-Agent: 🔊 "The deployment is 80% complete. ETA: 5 minutes."
-```
+Deferred.
 
 ## Cost Estimates
 
@@ -354,3 +237,10 @@ agent.process_command(transcript)
 5. Verify auto-transcription in inbox
 6. Test fallback by disabling Groq, verify OpenAI is used
 7. Test long audio (>10 minutes), verify chunking works
+
+## Notes For Resuming Later
+- Current STT exists only in the Telegram flow and bypasses the inbox. There is no shared STT module for CLI/audio files yet.
+- Telegram STT uses Groq/OpenAI endpoints directly via `requests` and returns plain text (no timestamps/segments), which differs from the richer output assumed in this PRD.
+- Long audio is rejected by duration in Telegram (`TELEGRAM_STT_MAX_DURATION`) instead of chunked.
+- There is no CLI surface for STT today, even though the PRD still references it.
+- Surprising: Telegram STT config already supports provider fallback and language selection via env, but none of that is exposed in a CLI or config file.
