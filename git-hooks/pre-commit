@@ -35,8 +35,14 @@ if [[ -n "${staged_py_files}" ]]; then
   for file in ${staged_py_files}; do
     ${PYTHON_BIN} -m black --check "${file}"
   done
+  echo "Running ruff on staged Python files..."
+  for file in ${staged_py_files}; do
+    ${PYTHON_BIN} -m ruff check "${file}"
+  done
+  echo "Running basedpyright on staged Python files..."
+  ${PYTHON_BIN} -m basedpyright ${staged_py_files}
 else
-  echo "No staged Python files for black."
+  echo "No staged Python files for black/ruff/basedpyright."
 fi
 
 # Staged test files only

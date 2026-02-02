@@ -1,5 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+PYTHON_BIN="python3"
+if [[ -x ".venv/bin/python" ]]; then
+  PYTHON_BIN=".venv/bin/python"
+fi
+
 echo "Running full test suite with coverage (min 70%)..."
-python3 -m pytest tests/ -v --cov=src --cov-report=term-missing --cov-fail-under=70
+${PYTHON_BIN} -m pytest tests/ -v --cov=src --cov-report=term-missing --cov-fail-under=70
+
+echo "Running ruff on src/ and tests/..."
+${PYTHON_BIN} -m ruff check src tests
+
+echo "Running basedpyright on src/ and tests/..."
+${PYTHON_BIN} -m basedpyright
