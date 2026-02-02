@@ -1,0 +1,37 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cyberneticagents"
+version = "0.1.0"
+description = "CyberneticAgents CLI and runtime."
+requires-python = ">=3.10"
+dependencies = [
+  "autogen-agentchat==0.7.5",
+  "autogen-core==0.7.5",
+  "autogen-ext[docker]==0.7.5",
+  "casbin==1.43.0",
+  "casbin_sqlalchemy_adapter==1.4.0",
+  "SQLAlchemy==2.0.45",
+  "opentelemetry-sdk",
+  "opentelemetry-exporter-otlp-proto-http",
+  "opentelemetry-instrumentation-openai",
+  "traceloop-sdk",
+  "pre-commit==4.5.1",
+  "pylint==3.3.3",
+  "black==26.1.0",
+  "langfuse",
+  "python-dotenv",
+  "tiktoken",
+  "PyYAML>=6.0",
+  "keyring>=24.0",
+  "pytest-asyncio",
+]
+
+[project.scripts]
+cyberagent = "src.cyberagent.cli.cyberagent:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src", "src.*"]
