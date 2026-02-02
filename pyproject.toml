@@ -27,6 +27,7 @@ dependencies = [
   "PyYAML>=6.0",
   "keyring>=24.0",
   "pytest-asyncio",
+  "requests",
 ]
 
 [project.scripts]
