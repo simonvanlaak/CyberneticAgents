@@ -146,6 +146,34 @@ def test_can_execute_skill_logs_decision(caplog: pytest.LogCaptureFixture) -> No
     )
 
 
+def test_skill_grant_add_logs_audit(caplog: pytest.LogCaptureFixture) -> None:
+    team_id = _create_team_id()
+    system_id = _create_system_id(team_id)
+
+    teams_service.add_allowed_skill(
+        team_id=team_id,
+        skill_name="skill.audit",
+        actor_id="system5/root",
+    )
+
+    caplog.set_level(logging.INFO, logger="src.cyberagent.services.systems")
+
+    systems_service.add_skill_grant(
+        system_id=system_id,
+        skill_name="skill.audit",
+        actor_id="system5/root",
+    )
+
+    assert any(
+        record.message == "skill_grant_add"
+        and record.__dict__.get("team_id") == team_id
+        and record.__dict__.get("system_id") == system_id
+        and record.__dict__.get("skill_name") == "skill.audit"
+        and record.__dict__.get("actor_id") == "system5/root"
+        for record in caplog.records
+    )
+
+
 def test_skill_grant_logs_audit_events(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
