@@ -742,10 +742,9 @@ def _check_recent_runtime_errors(command: str | None) -> None:
         return
 
     if warnings or errors:
-        total = warnings + errors
         print(
             "New runtime logs since last command: "
-            f"{total} warnings/errors ({warnings} warnings, {errors} errors). "
+            f"{errors} errors, {warnings} warnings. "
             "Run 'cyberagent logs' to view."
         )
 
