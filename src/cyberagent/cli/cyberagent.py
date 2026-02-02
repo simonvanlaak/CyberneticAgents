@@ -32,6 +32,7 @@ from autogen_core import AgentId
 
 from src.agents.messages import UserMessage
 from src.cli_session import list_inbox_answered_questions, list_inbox_pending_questions
+from src.cyberagent.channels.telegram.parser import build_session_id
 from src.cyberagent.cli import dev as dev_cli
 from src.cyberagent.cli import onboarding as onboarding_cli
 from src.cyberagent.cli.headless import run_headless_session
@@ -142,11 +143,51 @@ def build_parser() -> argparse.ArgumentParser:
     inbox_parser.add_argument(
         "--answered", action="store_true", help="Include answered items."
     )
+    inbox_parser.add_argument(
+        "--channel",
+        type=str,
+        help="Filter inbox entries by channel (e.g. cli, telegram).",
+    )
+    inbox_parser.add_argument(
+        "--session-id",
+        type=str,
+        help="Filter inbox entries by session id.",
+    )
+    inbox_parser.add_argument(
+        "--telegram-chat-id",
+        type=int,
+        help="Filter inbox entries by Telegram chat id.",
+    )
+    inbox_parser.add_argument(
+        "--telegram-user-id",
+        type=int,
+        help="Filter inbox entries by Telegram user id.",
+    )
 
     watch_parser = subparsers.add_parser(
         "watch", help="Watch the inbox for new questions."
     )
     watch_parser.add_argument("--interval", type=float, default=5.0)
+    watch_parser.add_argument(
+        "--channel",
+        type=str,
+        help="Filter inbox entries by channel (e.g. cli, telegram).",
+    )
+    watch_parser.add_argument(
+        "--session-id",
+        type=str,
+        help="Filter inbox entries by session id.",
+    )
+    watch_parser.add_argument(
+        "--telegram-chat-id",
+        type=int,
+        help="Filter inbox entries by Telegram chat id.",
+    )
+    watch_parser.add_argument(
+        "--telegram-user-id",
+        type=int,
+        help="Filter inbox entries by Telegram user id.",
+    )
 
     logs_parser = subparsers.add_parser("logs", help="Inspect runtime logs.")
     logs_parser.add_argument(
@@ -391,8 +432,13 @@ def _handle_suggest(args: argparse.Namespace) -> int:
 def _handle_inbox(args: argparse.Namespace) -> int:
     if _require_existing_team() is None:
         return 1
-    pending = list_inbox_pending_questions()
-    answered = list_inbox_answered_questions() if args.answered else []
+    channel, session_id = _resolve_inbox_filters(args)
+    pending = list_inbox_pending_questions(channel=channel, session_id=session_id)
+    answered = (
+        list_inbox_answered_questions(channel=channel, session_id=session_id)
+        if args.answered
+        else []
+    )
     if not pending and not answered:
         print("No messages in inbox.")
         print(f"Next: run {WATCH_COMMAND} to wait, or {SUGGEST_COMMAND}.")
@@ -420,9 +466,12 @@ async def _handle_watch(args: argparse.Namespace) -> int:
         return 1
     seen: set[int] = set()
     print("Watching inbox (Ctrl-C to stop)...")
+    channel, session_id = _resolve_inbox_filters(args)
     try:
         while True:
-            pending = list_inbox_pending_questions()
+            pending = list_inbox_pending_questions(
+                channel=channel, session_id=session_id
+            )
             for question in pending:
                 if question.question_id in seen:
                     continue
@@ -435,6 +484,16 @@ async def _handle_watch(args: argparse.Namespace) -> int:
     except KeyboardInterrupt:
         print("Stopped watching inbox.")
     return 0
+
+
+def _resolve_inbox_filters(args: argparse.Namespace) -> tuple[str | None, str | None]:
+    channel = args.channel
+    session_id = args.session_id
+    if args.telegram_chat_id and args.telegram_user_id and not session_id:
+        session_id = build_session_id(args.telegram_chat_id, args.telegram_user_id)
+        if not channel:
+            channel = "telegram"
+    return channel, session_id
 
 
 def _handle_logs(args: argparse.Namespace) -> int:

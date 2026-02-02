@@ -10,6 +10,7 @@ from autogen_core import AgentId, CancellationToken
 
 from src.agents.messages import UserMessage
 from src.cyberagent.channels.telegram.client import TelegramClient
+from src.cyberagent.channels.telegram import session_store
 from src.cyberagent.channels.telegram import stt as telegram_stt
 from src.cyberagent.channels.telegram.outbound import (
     send_message as send_telegram_message,
@@ -108,6 +109,21 @@ class TelegramPoller:
                     await self._send_reply(inbound.chat_id, "Not authorized.")
                     self._offset = inbound.update_id + 1
                     continue
+                logger.info(
+                    "Telegram message received (chat_id=%s user_id=%s).",
+                    inbound.chat_id,
+                    inbound.user_id,
+                )
+                session_store.upsert_session(
+                    chat_id=inbound.chat_id,
+                    user_id=inbound.user_id,
+                    chat_type=inbound.chat_type,
+                    user_info={
+                        "username": inbound.username,
+                        "first_name": inbound.first_name,
+                        "last_name": inbound.last_name,
+                    },
+                )
                 if await self._handle_command(inbound):
                     self._offset = inbound.update_id + 1
                     continue
@@ -138,6 +154,21 @@ class TelegramPoller:
                     )
                     self._offset = voice.update_id + 1
                     continue
+                logger.info(
+                    "Telegram voice received (chat_id=%s user_id=%s).",
+                    voice.chat_id,
+                    voice.user_id,
+                )
+                session_store.upsert_session(
+                    chat_id=voice.chat_id,
+                    user_id=voice.user_id,
+                    chat_type=voice.chat_type,
+                    user_info={
+                        "username": voice.username,
+                        "first_name": voice.first_name,
+                        "last_name": voice.last_name,
+                    },
+                )
                 session_id = build_session_id(voice.chat_id, voice.user_id)
                 if (
                     voice.duration is not None
@@ -208,6 +239,21 @@ class TelegramPoller:
                     )
                     self._offset = callback.update_id + 1
                     continue
+                logger.info(
+                    "Telegram callback received (chat_id=%s user_id=%s).",
+                    callback.chat_id,
+                    callback.user_id,
+                )
+                session_store.upsert_session(
+                    chat_id=callback.chat_id,
+                    user_id=callback.user_id,
+                    chat_type=callback.chat_type,
+                    user_info={
+                        "username": callback.username,
+                        "first_name": callback.first_name,
+                        "last_name": callback.last_name,
+                    },
+                )
                 await self._handle_callback(callback)
                 self._offset = callback.update_id + 1
             await asyncio.sleep(self._poll_interval)

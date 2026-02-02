@@ -196,9 +196,25 @@ def test_handle_inbox_prints_entries(
             answered_at=1,
         )
     ]
-    monkeypatch.setattr(cyberagent, "list_inbox_pending_questions", lambda: pending)
-    monkeypatch.setattr(cyberagent, "list_inbox_answered_questions", lambda: answered)
-    result = cyberagent._handle_inbox(argparse.Namespace(answered=True))
+    monkeypatch.setattr(
+        cyberagent,
+        "list_inbox_pending_questions",
+        lambda *_, **__: pending,
+    )
+    monkeypatch.setattr(
+        cyberagent,
+        "list_inbox_answered_questions",
+        lambda *_, **__: answered,
+    )
+    result = cyberagent._handle_inbox(
+        argparse.Namespace(
+            answered=True,
+            channel=None,
+            session_id=None,
+            telegram_chat_id=None,
+            telegram_user_id=None,
+        )
+    )
     captured = capsys.readouterr()
     assert result == 0
     assert "Pending questions" in captured.out
@@ -212,7 +228,15 @@ def test_handle_inbox_requires_team(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(cyberagent, "get_last_team_id", lambda: None)
-    result = cyberagent._handle_inbox(argparse.Namespace(answered=False))
+    result = cyberagent._handle_inbox(
+        argparse.Namespace(
+            answered=False,
+            channel=None,
+            session_id=None,
+            telegram_chat_id=None,
+            telegram_user_id=None,
+        )
+    )
     captured = capsys.readouterr()
     assert result == 1
     assert "cyberagent onboarding" in captured.out
@@ -225,13 +249,23 @@ async def test_handle_watch_prints_pending(
     question = PendingQuestion(
         question_id=7, content="Watch this", asked_by="System4", created_at=0
     )
-    monkeypatch.setattr(cyberagent, "list_inbox_pending_questions", lambda: [question])
+    monkeypatch.setattr(
+        cyberagent, "list_inbox_pending_questions", lambda *_, **__: [question]
+    )
 
     async def fake_sleep(interval: float) -> None:
         raise KeyboardInterrupt
 
     monkeypatch.setattr(cyberagent.asyncio, "sleep", fake_sleep)
-    await cyberagent._handle_watch(argparse.Namespace(interval=0.1))
+    await cyberagent._handle_watch(
+        argparse.Namespace(
+            interval=0.1,
+            channel=None,
+            session_id=None,
+            telegram_chat_id=None,
+            telegram_user_id=None,
+        )
+    )
     captured = capsys.readouterr()
     assert "[7] Watch this" in captured.out
 
@@ -241,7 +275,15 @@ async def test_handle_watch_requires_team(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.setattr(cyberagent, "get_last_team_id", lambda: None)
-    result = await cyberagent._handle_watch(argparse.Namespace(interval=0.1))
+    result = await cyberagent._handle_watch(
+        argparse.Namespace(
+            interval=0.1,
+            channel=None,
+            session_id=None,
+            telegram_chat_id=None,
+            telegram_user_id=None,
+        )
+    )
     captured = capsys.readouterr()
     assert result == 1
     assert "cyberagent onboarding" in captured.out

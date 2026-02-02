@@ -8,6 +8,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import time
 import urllib.request
 
@@ -33,6 +34,7 @@ NETWORK_SKILL_NAMES = {"web-fetch", "web-search", "git-readonly-sync"}
 TOOL_SECRET_DOC_HINTS = {
     "BRAVE_API_KEY": "src/tools/skills/web-search/SKILL.md",
 }
+TELEGRAM_DOC_HINT = "docs/technical/telegram_setup.md"
 DEFAULT_PROCEDURES = [
     {
         "name": "First Run Discovery",
@@ -272,6 +274,8 @@ def _collect_technical_onboarding_state() -> dict[str, object]:
         "has_langfuse_secret": bool(os.environ.get("LANGFUSE_SECRET_KEY")),
         "has_langsmith": bool(os.environ.get("LANGSMITH_API_KEY")),
         "has_telegram_token": bool(os.environ.get("TELEGRAM_BOT_TOKEN")),
+        "has_telegram_webhook_secret": bool(os.environ.get("TELEGRAM_WEBHOOK_SECRET")),
+        "has_telegram_webhook_url": bool(os.environ.get("TELEGRAM_WEBHOOK_URL")),
         "has_onepassword_auth": _has_onepassword_auth(),
         "has_op_session": bool(_get_onepassword_session_env()),
         "skills_root_exists": DEFAULT_SKILLS_ROOT.exists(),
@@ -605,7 +609,10 @@ def _warn_optional_api_keys() -> None:
 
 
 def _offer_optional_telegram_setup() -> None:
+    if not sys.stdin.isatty():
+        return
     if os.environ.get("TELEGRAM_BOT_TOKEN"):
+        _offer_optional_telegram_webhook_setup()
         return
     print(
         "Telegram is not configured. You can add TELEGRAM_BOT_TOKEN now to enable the "
@@ -614,9 +621,27 @@ def _offer_optional_telegram_setup() -> None:
     if not _prompt_store_secret_in_1password(
         env_name="TELEGRAM_BOT_TOKEN",
         description="Telegram bot token",
-        doc_hint=None,
+        doc_hint=TELEGRAM_DOC_HINT,
     ):
         return
+    _offer_optional_telegram_webhook_setup()
+
+
+def _offer_optional_telegram_webhook_setup() -> None:
+    if os.environ.get("TELEGRAM_WEBHOOK_SECRET"):
+        return
+    print(
+        "Webhook mode is optional. It requires TELEGRAM_WEBHOOK_URL and a secret to "
+        "validate incoming requests."
+    )
+    if not _prompt_yes_no("Would you like to store a Telegram webhook secret now?"):
+        print(f"See setup guide in `{TELEGRAM_DOC_HINT}`.")
+        return
+    _prompt_store_secret_in_1password(
+        env_name="TELEGRAM_WEBHOOK_SECRET",
+        description="Telegram webhook secret",
+        doc_hint=TELEGRAM_DOC_HINT,
+    )
 
 
 def _prompt_store_secret_in_1password(

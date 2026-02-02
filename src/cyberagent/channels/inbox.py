@@ -5,6 +5,7 @@ import json
 import threading
 import time
 from dataclasses import asdict, dataclass
+from typing import TypeVar
 from pathlib import Path
 
 DEFAULT_CHANNEL = "cli"
@@ -138,30 +139,60 @@ def clear_pending_questions() -> None:
         _store_inbox_state()
 
 
-def list_inbox_pending_questions() -> list[PendingQuestion]:
+def list_inbox_pending_questions(
+    channel: str | None = None,
+    session_id: str | None = None,
+) -> list[PendingQuestion]:
     """List pending questions from persisted inbox state."""
     state = _load_inbox_state()
     if state is None:
-        return get_pending_questions()
+        return _filter_inbox_entries(get_pending_questions(), channel, session_id)
     pending = state.get("pending")
     if not isinstance(pending, list):
-        return get_pending_questions()
-    return [
+        return _filter_inbox_entries(get_pending_questions(), channel, session_id)
+    entries = [
         PendingQuestion(**payload) for payload in pending if isinstance(payload, dict)
     ]
+    return _filter_inbox_entries(entries, channel, session_id)
 
 
-def list_inbox_answered_questions() -> list[AnsweredQuestion]:
+def list_inbox_answered_questions(
+    channel: str | None = None,
+    session_id: str | None = None,
+) -> list[AnsweredQuestion]:
     """List answered questions from persisted inbox state."""
     state = _load_inbox_state()
     if state is None:
-        return get_answered_questions()
+        return _filter_inbox_entries(get_answered_questions(), channel, session_id)
     answered = state.get("answered")
     if not isinstance(answered, list):
-        return get_answered_questions()
-    return [
+        return _filter_inbox_entries(get_answered_questions(), channel, session_id)
+    entries = [
         AnsweredQuestion(**payload) for payload in answered if isinstance(payload, dict)
     ]
+    return _filter_inbox_entries(entries, channel, session_id)
+
+
+TInboxEntry = TypeVar("TInboxEntry")
+
+
+def _filter_inbox_entries(
+    entries: list[TInboxEntry],
+    channel: str | None,
+    session_id: str | None,
+) -> list[TInboxEntry]:
+    if not channel and not session_id:
+        return entries
+    filtered: list[TInboxEntry] = []
+    for entry in entries:
+        entry_channel = getattr(entry, "channel", None)
+        entry_session_id = getattr(entry, "session_id", None)
+        if channel and entry_channel != channel:
+            continue
+        if session_id and entry_session_id != session_id:
+            continue
+        filtered.append(entry)
+    return filtered
 
 
 def _load_inbox_state() -> dict[str, object] | None:

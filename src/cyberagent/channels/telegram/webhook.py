@@ -15,6 +15,7 @@ from autogen_core import AgentId, CancellationToken
 from src.agents.messages import UserMessage
 from src.cyberagent.channels.telegram.client import TelegramClient
 from src.cyberagent.channels.telegram import stt as telegram_stt
+from src.cyberagent.channels.telegram import session_store
 from src.cyberagent.channels.telegram.parser import (
     TelegramInboundMessage,
     TelegramInboundVoiceMessage,
@@ -28,6 +29,7 @@ from src.cyberagent.channels.telegram.parser import (
     is_allowed,
     is_valid_secret,
     parse_allowlist,
+    parse_blocklist,
 )
 
 logger = logging.getLogger(__name__)
@@ -69,16 +71,20 @@ class TelegramWebhookServer:
         self._stt_config = telegram_stt.load_config()
         self._stt_cache_dir = telegram_stt.get_cache_dir()
         self._allowed_chat_ids = parse_allowlist(
-            os.environ.get("TELEGRAM_ALLOWED_CHAT_IDS")
+            os.environ.get("TELEGRAM_ALLOWLIST_CHAT_IDS")
+            or os.environ.get("TELEGRAM_ALLOWED_CHAT_IDS")
         )
         self._allowed_user_ids = parse_allowlist(
-            os.environ.get("TELEGRAM_ALLOWED_USER_IDS")
+            os.environ.get("TELEGRAM_ALLOWLIST_USER_IDS")
+            or os.environ.get("TELEGRAM_ALLOWED_USER_IDS")
         )
-        self._blocked_chat_ids = parse_allowlist(
-            os.environ.get("TELEGRAM_BLOCKED_CHAT_IDS")
+        self._blocked_chat_ids = parse_blocklist(
+            os.environ.get("TELEGRAM_BLOCKLIST_CHAT_IDS")
+            or os.environ.get("TELEGRAM_BLOCKED_CHAT_IDS")
         )
-        self._blocked_user_ids = parse_allowlist(
-            os.environ.get("TELEGRAM_BLOCKED_USER_IDS")
+        self._blocked_user_ids = parse_blocklist(
+            os.environ.get("TELEGRAM_BLOCKLIST_USER_IDS")
+            or os.environ.get("TELEGRAM_BLOCKED_USER_IDS")
         )
 
     def start(self, webhook_url: str) -> None:
@@ -152,8 +158,28 @@ class TelegramWebhookServer:
             self._blocked_chat_ids,
             self._blocked_user_ids,
         ):
+            logger.warning(
+                "Telegram webhook blocked (chat_id=%s user_id=%s).",
+                inbound.chat_id,
+                inbound.user_id,
+            )
             self._client.send_message(inbound.chat_id, "Not authorized.")
             return
+        logger.info(
+            "Telegram webhook message received (chat_id=%s user_id=%s).",
+            inbound.chat_id,
+            inbound.user_id,
+        )
+        session_store.upsert_session(
+            chat_id=inbound.chat_id,
+            user_id=inbound.user_id,
+            chat_type=inbound.chat_type,
+            user_info={
+                "username": inbound.username,
+                "first_name": inbound.first_name,
+                "last_name": inbound.last_name,
+            },
+        )
         kind, value = classify_text_message(inbound.text)
         if kind == "command":
             if value == "/start":
@@ -193,8 +219,28 @@ class TelegramWebhookServer:
             self._blocked_chat_ids,
             self._blocked_user_ids,
         ):
+            logger.warning(
+                "Telegram webhook voice blocked (chat_id=%s user_id=%s).",
+                inbound.chat_id,
+                inbound.user_id,
+            )
             self._client.send_message(inbound.chat_id, "Not authorized.")
             return
+        logger.info(
+            "Telegram webhook voice received (chat_id=%s user_id=%s).",
+            inbound.chat_id,
+            inbound.user_id,
+        )
+        session_store.upsert_session(
+            chat_id=inbound.chat_id,
+            user_id=inbound.user_id,
+            chat_type=inbound.chat_type,
+            user_info={
+                "username": inbound.username,
+                "first_name": inbound.first_name,
+                "last_name": inbound.last_name,
+            },
+        )
         session_id = build_session_id(inbound.chat_id, inbound.user_id)
         if (
             inbound.duration is not None
@@ -242,8 +288,28 @@ class TelegramWebhookServer:
             self._blocked_chat_ids,
             self._blocked_user_ids,
         ):
+            logger.warning(
+                "Telegram webhook callback blocked (chat_id=%s user_id=%s).",
+                callback.chat_id,
+                callback.user_id,
+            )
             self._client.answer_callback_query(callback.callback_id, "Not authorized.")
             return
+        logger.info(
+            "Telegram webhook callback received (chat_id=%s user_id=%s).",
+            callback.chat_id,
+            callback.user_id,
+        )
+        session_store.upsert_session(
+            chat_id=callback.chat_id,
+            user_id=callback.user_id,
+            chat_type=callback.chat_type,
+            user_info={
+                "username": callback.username,
+                "first_name": callback.first_name,
+                "last_name": callback.last_name,
+            },
+        )
         session_id = build_session_id(callback.chat_id, callback.user_id)
         message = UserMessage(content=callback.data, source="User")
         message.metadata = {

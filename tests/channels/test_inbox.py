@@ -36,3 +36,57 @@ def test_inbox_resolve_tracks_channel_metadata(
     assert answered.channel == "cli"
     assert answered.session_id == "cli-main"
     assert answered.answer == "done"
+
+
+def test_inbox_filters_by_channel_and_session(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(inbox, "INBOX_STATE_FILE", tmp_path / "inbox.json")
+    inbox.clear_pending_questions()
+
+    inbox.enqueue_pending_question(
+        "From telegram",
+        asked_by="System4",
+        channel="telegram",
+        session_id="telegram:chat-1:user-2",
+    )
+    inbox.enqueue_pending_question(
+        "From cli",
+        asked_by="System4",
+        channel="cli",
+        session_id="cli-main",
+    )
+
+    pending = inbox.list_inbox_pending_questions(channel="telegram")
+    assert len(pending) == 1
+    assert pending[0].channel == "telegram"
+
+    pending = inbox.list_inbox_pending_questions(session_id="cli-main")
+    assert len(pending) == 1
+    assert pending[0].session_id == "cli-main"
+
+
+def test_inbox_answered_filters_by_channel(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(inbox, "INBOX_STATE_FILE", tmp_path / "inbox.json")
+    inbox.clear_pending_questions()
+
+    inbox.enqueue_pending_question(
+        "Telegram question",
+        asked_by="System4",
+        channel="telegram",
+        session_id="telegram:chat-9:user-9",
+    )
+    inbox.enqueue_pending_question(
+        "CLI question",
+        asked_by="System4",
+        channel="cli",
+        session_id="cli-main",
+    )
+    inbox.resolve_pending_question("telegram answer")
+    inbox.resolve_pending_question("cli answer")
+
+    answered = inbox.list_inbox_answered_questions(channel="telegram")
+    assert len(answered) == 1
+    assert answered[0].channel == "telegram"
