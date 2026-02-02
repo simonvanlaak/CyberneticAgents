@@ -205,6 +205,7 @@ do not create/remove/modify git worktree checkouts (or edit .worktrees/*) unless
 do not switch branches / check out a different branch unless explicitly requested.
 running multiple agents is OK as long as each agent has its own session.
 when you see unrecognized files, keep going; focus on your changes and commit only those.
+when you see unrecognized or unrelated changes, proceed without asking; do not revert them and do not stage them unless explicitly requested.
 focus reports on your edits; avoid guard-rail disclaimers unless truly blocked; when multiple agents touch the same file, continue if safe; end with a brief “other files present” note only if relevant.
 
 ## Dependencies
