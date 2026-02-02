@@ -93,7 +93,7 @@ Hidden/cached dirs omitted (e.g., `.git`, `.venv`, `.pytest_cache`, `__pycache__
 ├── LICENSE
 ├── README.md
 ├── main.py
-├── requirements.txt
+├── pyproject.toml
 ├── data/
 ├── docs/
 ├── git-hooks/
@@ -209,9 +209,9 @@ when you see unrecognized or unrelated changes, proceed without asking; do not r
 focus reports on your edits; avoid guard-rail disclaimers unless truly blocked; when multiple agents touch the same file, continue if safe; end with a brief “other files present” note only if relevant.
 
 ## Dependencies
-1. Ensure the ./requirements.txt file always reflects the required dependencies for the project
-2. If dependencies are missing install them in a virtual environment from ./requirements.txt
-3. If new dependencies are required, modify the ./requirements.txt file first.
+1. Ensure the `pyproject.toml` dependencies always reflect the required packages for the project
+2. If dependencies are missing install them in a virtual environment from `pyproject.toml`
+3. If new dependencies are required, modify `pyproject.toml` first.
 
 ## Debug Mode
 When you receive an error message you should get into debug mode.

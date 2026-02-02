@@ -321,7 +321,7 @@ send_telegram_message(
 ## Dependencies
 
 ### Python Libraries
-```requirements.txt
+```text
 python-telegram-bot>=20.0  # Official Telegram Bot API wrapper
 fastapi>=0.100.0           # Webhook server (if not already present)
 uvicorn>=0.23.0            # ASGI server (if not already present)

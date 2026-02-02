@@ -18,7 +18,7 @@ A VSM-inspired multi-agent system built on AutoGen Core + AgentChat with Casbin 
 ```bash
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+pip install -e .
 ```
 
 ### 2) Configure
@@ -110,7 +110,7 @@ CyberneticAgents/
 │   └── ...
 ├── tests/                      # pytest suite
 ├── docs/                       # Project notes/roadmap
-└── requirements.txt
+└── pyproject.toml
 ```
 
 ## How It Works (High Level)
