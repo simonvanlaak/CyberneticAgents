@@ -24,15 +24,19 @@ ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 RUN python3 -m pip install --no-cache-dir \
     requests \
     git+https://github.com/buriy/python-readability.git
-COPY src/cyberagent/tools/cli_executor/web_fetch.py /usr/local/bin/web-fetch
+COPY src/tools/skills/web-fetch/web_fetch.py /usr/local/bin/web-fetch
 RUN chmod +x /usr/local/bin/web-fetch
 
 # Brave search CLI wrapper exposed as a CLI.
-COPY src/cyberagent/tools/cli_executor/web_search.py /usr/local/bin/web_search
+COPY src/tools/skills/web-search/web_search.py /usr/local/bin/web_search
 RUN chmod +x /usr/local/bin/web_search
 
+# File reader helper exposed as a CLI.
+COPY src/tools/skills/file-reader/file_reader.py /usr/local/bin/file-reader
+RUN chmod +x /usr/local/bin/file-reader
+
 # Read-only git sync helper exposed as a CLI.
-COPY src/cyberagent/tools/cli_executor/git_readonly_sync.py /usr/local/bin/git-readonly-sync
+COPY src/tools/skills/git-readonly-sync/git_readonly_sync.py /usr/local/bin/git-readonly-sync
 RUN chmod +x /usr/local/bin/git-readonly-sync
 
 RUN git --version && rg --version

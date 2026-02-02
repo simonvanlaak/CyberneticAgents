@@ -3,8 +3,7 @@ name: web-fetch
 description: Fetch a single URL and extract readable article content for analysis and summarization.
 metadata:
   cyberagent:
-    tool: web_fetch
-    subcommand: run
+    tool: web-fetch
     timeout_class: standard
 input_schema:
   type: object

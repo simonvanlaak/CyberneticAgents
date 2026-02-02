@@ -3,8 +3,7 @@ name: git-readonly-sync
 description: Clone or pull public repositories in read-only workflows to gather reference material.
 metadata:
   cyberagent:
-    tool: git_readonly_sync
-    subcommand: run
+    tool: git-readonly-sync
     timeout_class: standard
 input_schema:
   type: object

@@ -1,13 +1,25 @@
 from __future__ import annotations
 
-import importlib
+import importlib.util
+import subprocess
 import sys
+from pathlib import Path
 from types import ModuleType, SimpleNamespace
 from typing import List, Type
 
 import pytest
 
-from src.cyberagent.tools.cli_executor import git_readonly_sync
+SKILLS_ROOT = Path(__file__).resolve().parents[2] / "src" / "tools" / "skills"
+
+
+def _load_module(path: Path, module_name: str) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Unable to load module at {path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
 def _load_web_fetch(
@@ -16,13 +28,23 @@ def _load_web_fetch(
     monkeypatch.setitem(
         sys.modules, "readability", SimpleNamespace(Document=document_factory)
     )
-    module = importlib.import_module("src.cyberagent.tools.cli_executor.web_fetch")
-    return importlib.reload(module)
+    path = SKILLS_ROOT / "web-fetch" / "web_fetch.py"
+    return _load_module(path, "web_fetch_skill")
 
 
 def _load_web_search(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
-    module = importlib.import_module("src.cyberagent.tools.cli_executor.web_search")
-    return importlib.reload(module)
+    path = SKILLS_ROOT / "web-search" / "web_search.py"
+    return _load_module(path, "web_search_skill")
+
+
+def _load_git_readonly_sync() -> ModuleType:
+    path = SKILLS_ROOT / "git-readonly-sync" / "git_readonly_sync.py"
+    return _load_module(path, "git_readonly_sync_skill")
+
+
+def _load_file_reader() -> ModuleType:
+    path = SKILLS_ROOT / "file-reader" / "file_reader.py"
+    return _load_module(path, "file_reader_skill")
 
 
 def test_web_fetch_requires_url(
@@ -132,7 +154,44 @@ def test_web_search_outputs_results(
     assert '"title": "Cats"' in capsys.readouterr().out
 
 
+def test_file_reader_requires_command(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["file-reader"])
+    file_reader = _load_file_reader()
+
+    with pytest.raises(SystemExit) as excinfo:
+        file_reader.main()
+
+    assert excinfo.value.code == 2
+    assert "--command" in capsys.readouterr().err
+
+
+def test_file_reader_outputs_json(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["file-reader", "--command", "echo ok"])
+
+    class _FakeResult:
+        returncode = 0
+        stdout = "ok\n"
+        stderr = ""
+
+    def _fake_run(*args: object, **kwargs: object) -> _FakeResult:
+        return _FakeResult()
+
+    monkeypatch.setattr(subprocess, "run", _fake_run)
+    file_reader = _load_file_reader()
+    with pytest.raises(SystemExit) as excinfo:
+        file_reader.main()
+
+    output = capsys.readouterr().out.strip()
+    assert excinfo.value.code == 0
+    assert '"output": "ok\\n"' in output
+
+
 def test_build_authed_url_adds_token() -> None:
+    git_readonly_sync = _load_git_readonly_sync()
     url = "https://github.com/org/repo.git"
 
     authed = git_readonly_sync._build_authed_url(url, "token123", None)
@@ -141,6 +200,7 @@ def test_build_authed_url_adds_token() -> None:
 
 
 def test_build_authed_url_ignores_ssh() -> None:
+    git_readonly_sync = _load_git_readonly_sync()
     url = "git@github.com:org/repo.git"
 
     authed = git_readonly_sync._build_authed_url(url, "token123", None)
@@ -151,6 +211,7 @@ def test_build_authed_url_ignores_ssh() -> None:
 def test_git_readonly_sync_requires_token(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    git_readonly_sync = _load_git_readonly_sync()
     monkeypatch.setattr(
         sys,
         "argv",
@@ -175,6 +236,7 @@ def test_git_readonly_sync_requires_token(
 def test_git_readonly_sync_clone_flow(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    git_readonly_sync = _load_git_readonly_sync()
     calls: List[List[str]] = []
 
     def _record(args: list[str], cwd: str | None = None) -> None:
@@ -208,6 +270,7 @@ def test_git_readonly_sync_clone_flow(
 def test_git_readonly_sync_fetch_flow(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    git_readonly_sync = _load_git_readonly_sync()
     calls: List[List[str]] = []
 
     def _record(args: list[str], cwd: str | None = None) -> None:

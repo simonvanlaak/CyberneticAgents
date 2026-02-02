@@ -3,8 +3,7 @@ name: file-reader
 description: Read local text files safely for analysis, extraction, and summarization tasks.
 metadata:
   cyberagent:
-    tool: exec
-    subcommand: run
+    tool: file-reader
     timeout_class: standard
 input_schema:
   type: object

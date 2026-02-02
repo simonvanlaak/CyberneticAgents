@@ -219,12 +219,14 @@ def test_maybe_set_docker_host_from_context_sets_env(
     meta_dir = contexts / "abc123"
     meta_dir.mkdir()
     meta = meta_dir / "meta.json"
+    socket_path = tmp_path / "docker.sock"
+    socket_path.write_text("", encoding="utf-8")
     config.write_text(json.dumps({"currentContext": "desktop-linux"}), encoding="utf-8")
     meta.write_text(
         json.dumps(
             {
                 "Name": "desktop-linux",
-                "Endpoints": {"docker": {"Host": "unix:///tmp/docker.sock"}},
+                "Endpoints": {"docker": {"Host": f"unix://{socket_path.as_posix()}"}},
             }
         ),
         encoding="utf-8",
@@ -235,8 +237,8 @@ def test_maybe_set_docker_host_from_context_sets_env(
         config_path=config, contexts_root=contexts
     )
 
-    assert host == "unix:///tmp/docker.sock"
-    assert os.environ.get("DOCKER_HOST") == "unix:///tmp/docker.sock"
+    assert host == f"unix://{socket_path.as_posix()}"
+    assert os.environ.get("DOCKER_HOST") == f"unix://{socket_path.as_posix()}"
 
 
 def test_maybe_set_docker_host_from_context_skips_when_env_set(
@@ -250,6 +252,38 @@ def test_maybe_set_docker_host_from_context_skips_when_env_set(
 
     assert host is None
     assert os.environ.get("DOCKER_HOST") == "unix:///existing.sock"
+
+
+def test_maybe_set_docker_host_from_context_skips_unreadable_socket(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = tmp_path / "config.json"
+    contexts = tmp_path / "contexts" / "meta"
+    contexts.mkdir(parents=True)
+    meta_dir = contexts / "abc123"
+    meta_dir.mkdir()
+    meta = meta_dir / "meta.json"
+    socket_path = tmp_path / "docker.sock"
+    socket_path.write_text("", encoding="utf-8")
+    socket_path.chmod(0)
+    config.write_text(json.dumps({"currentContext": "desktop-linux"}), encoding="utf-8")
+    meta.write_text(
+        json.dumps(
+            {
+                "Name": "desktop-linux",
+                "Endpoints": {"docker": {"Host": f"unix://{socket_path.as_posix()}"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.delenv("DOCKER_HOST", raising=False)
+    host = factory._maybe_set_docker_host_from_context(
+        config_path=config, contexts_root=contexts
+    )
+
+    assert host is None
+    assert os.environ.get("DOCKER_HOST") is None
 
 
 def test_tool_secrets_missing(monkeypatch: pytest.MonkeyPatch) -> None:

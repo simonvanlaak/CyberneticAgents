@@ -69,6 +69,18 @@ def _maybe_set_docker_host_from_context(
             continue
         host = meta.get("Endpoints", {}).get("docker", {}).get("Host")
         if isinstance(host, str) and host:
-            os.environ["DOCKER_HOST"] = host
-            return host
+            if _unix_socket_accessible(host):
+                os.environ["DOCKER_HOST"] = host
+                return host
+            return None
     return None
+
+
+def _unix_socket_accessible(host: str) -> bool:
+    prefix = "unix://"
+    if not host.startswith(prefix):
+        return True
+    socket_path = Path(host[len(prefix) :])
+    if not socket_path.exists():
+        return False
+    return os.access(socket_path, os.R_OK | os.W_OK)
