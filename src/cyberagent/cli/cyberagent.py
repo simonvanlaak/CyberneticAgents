@@ -401,12 +401,17 @@ def _handle_inbox(args: argparse.Namespace) -> int:
         print("Pending questions:")
         for question in pending:
             print(
-                f"- [{question.question_id}] {question.content} (asked by {question.asked_by or 'System4'})"
+                f"- [{question.question_id}] {question.content} "
+                f"(asked by {question.asked_by or 'System4'}, "
+                f"channel={question.channel}, session={question.session_id})"
             )
     if answered:
         print("\nAnswered questions:")
         for item in answered:
-            print(f"- [{item.question_id}] {item.content} -> {item.answer}")
+            print(
+                f"- [{item.question_id}] {item.content} -> {item.answer} "
+                f"(channel={item.channel}, session={item.session_id})"
+            )
     return 0
 
 
@@ -421,7 +426,10 @@ async def _handle_watch(args: argparse.Namespace) -> int:
             for question in pending:
                 if question.question_id in seen:
                     continue
-                print(f"[{question.question_id}] {question.content}")
+                print(
+                    f"[{question.question_id}] {question.content} "
+                    f"(channel={question.channel})"
+                )
                 seen.add(question.question_id)
             await asyncio.sleep(max(0.1, args.interval))
     except KeyboardInterrupt:

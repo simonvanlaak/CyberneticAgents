@@ -204,6 +204,7 @@ def test_handle_inbox_prints_entries(
     assert "Pending questions" in captured.out
     assert "Answered questions" in captured.out
     assert "[1] Need info" in captured.out
+    assert "channel=cli" in captured.out
     assert "[2] What should we build?" in captured.out
 
 
