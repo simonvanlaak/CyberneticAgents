@@ -49,8 +49,18 @@ if [[ -n "${staged_test_files}" ]]; then
 fi
 
 if [[ -n "${staged_test_files}" ]]; then
-  echo "Running pytest with coverage (min 25%) on staged test files..."
-  ${PYTHON_BIN} -m pytest -v ${staged_test_files} --cov=src --cov-report=term-missing --cov-fail-under=25
+  staged_cov_targets=$(git diff --cached --name-only --diff-filter=ACM | rg '^src/.*\.py$' || true)
+  cov_args=""
+  if [[ -n "${staged_cov_targets}" ]]; then
+    while IFS= read -r file; do
+      cov_args+=" --cov=${file}"
+    done <<< "${staged_cov_targets}"
+    echo "Running pytest with coverage (min 25%) on staged test files..."
+    ${PYTHON_BIN} -m pytest -v ${staged_test_files} ${cov_args} --cov-report=term-missing --cov-fail-under=25
+  else
+    echo "Running pytest on staged test files (no staged src files for coverage)..."
+    ${PYTHON_BIN} -m pytest -v ${staged_test_files}
+  fi
 else
   echo "No staged test files for pytest."
 fi
