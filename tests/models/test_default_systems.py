@@ -29,5 +29,5 @@ def test_ensure_default_systems_for_team_creates_missing() -> None:
         SystemType.INTELLIGENCE,
         SystemType.POLICY,
     ):
-        systems = get_systems_by_type(team_id, system_type)
+        systems = get_systems_by_type(team_id, system_type)  # type: ignore[arg-type]
         assert systems, f"Expected a default system for {system_type}."

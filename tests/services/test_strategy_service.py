@@ -1,3 +1,5 @@
+from typing import cast
+
 import pytest
 
 
@@ -51,8 +53,9 @@ def test_create_strategy_builds(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_update_strategy_fields() -> None:
     from src.cyberagent.services import strategies as strategy_service
+    from src.cyberagent.db.models.strategy import Strategy
 
-    strategy = _FakeStrategy()
+    strategy = cast(Strategy, _FakeStrategy())
 
     strategy_service.update_strategy_fields(strategy, name="New", description="D")
 

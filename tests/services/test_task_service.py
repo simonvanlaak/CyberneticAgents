@@ -1,8 +1,11 @@
+from typing import cast
+
 import pytest
 
 
 class _FakeTask:
     def __init__(self) -> None:
+        self.assignee = None
         self.status = None
         self.result = None
         self.updated = False
@@ -42,8 +45,9 @@ def test_start_task_missing_raises(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_complete_task_sets_result() -> None:
     from src.cyberagent.services import tasks as task_service
+    from src.cyberagent.db.models.task import Task
 
-    task = _FakeTask()
+    task = cast(Task, _FakeTask())
 
     task_service.complete_task(task, "done")
 
@@ -79,8 +83,9 @@ def test_create_task_builds_task(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_assign_task_sets_assignee() -> None:
     from src.cyberagent.services import tasks as task_service
+    from src.cyberagent.db.models.task import Task
 
-    task = _FakeTask()
+    task = cast(Task, _FakeTask())
 
     task_service.assign_task(task, "agent-1")
 
@@ -90,8 +95,9 @@ def test_assign_task_sets_assignee() -> None:
 
 def test_approve_task_updates_status() -> None:
     from src.cyberagent.services import tasks as task_service
+    from src.cyberagent.db.models.task import Task
 
-    task = _FakeTask()
+    task = cast(Task, _FakeTask())
 
     task_service.approve_task(task)
 

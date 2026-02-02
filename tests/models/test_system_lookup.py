@@ -12,7 +12,9 @@ def test_get_system_by_type_single_system(monkeypatch):
         system_model, "get_systems_by_type", lambda *args, **kwargs: [dummy]
     )
 
-    result = system_model.get_system_by_type(team_id=1, system_type=SystemType.CONTROL)
+    result = system_model.get_system_by_type(
+        team_id=1, system_type=SystemType.CONTROL  # type: ignore[arg-type]
+    )
 
     assert result is dummy
 
@@ -24,4 +26,6 @@ def test_get_system_by_type_multiple_systems_raises(monkeypatch):
     )
 
     with pytest.raises(ValueError):
-        system_model.get_system_by_type(team_id=1, system_type=SystemType.CONTROL)
+        system_model.get_system_by_type(
+            team_id=1, system_type=SystemType.CONTROL  # type: ignore[arg-type]
+        )

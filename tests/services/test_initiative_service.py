@@ -1,3 +1,5 @@
+from typing import cast
+
 import pytest
 
 
@@ -69,8 +71,9 @@ def test_create_initiative_builds(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_update_initiative_fields() -> None:
     from src.cyberagent.services import initiatives as initiative_service
+    from src.cyberagent.db.models.initiative import Initiative
 
-    initiative = _FakeInitiative()
+    initiative = cast(Initiative, _FakeInitiative())
 
     initiative_service.update_initiative_fields(initiative, name="N", description="D")
 

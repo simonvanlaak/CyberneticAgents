@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from typing import cast
+
 import pytest
 
 from src.rbac import enforcer as rbac_enforcer
@@ -73,6 +75,6 @@ def test_namespace_helpers(fresh_enforcer) -> None:
         == system_id
     )
 
-    delete_result = rbac_enforcer.delete_system_id(system_id)
+    delete_result = cast(list[list[str]], rbac_enforcer.delete_system_id(system_id))
     assert delete_result
     assert delete_result[0][0] == system_id

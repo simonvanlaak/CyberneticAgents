@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -15,7 +17,9 @@ from src.rbac import skill_permissions_enforcer
 
 
 @pytest.fixture(autouse=True)
-def _reset_skill_permissions_enforcer(tmp_path, monkeypatch) -> None:
+def _reset_skill_permissions_enforcer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[None]:
     monkeypatch.chdir(tmp_path)
     skill_permissions_enforcer._global_enforcer = None
     enforcer = skill_permissions_enforcer.get_enforcer()
