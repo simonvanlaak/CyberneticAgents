@@ -8,11 +8,15 @@ from src.agents.messages import (
     PolicyViolationMessage,
     ResearchReviewMessage,
     StrategyReviewMessage,
+    SystemSkillGrantUpdateMessage,
+    TeamEnvelopeUpdateMessage,
 )
 from src.agents.system_base import SystemBase
 from src.cyberagent.services import policies as policy_service
 from src.cyberagent.services import strategies as strategy_service
+from src.cyberagent.services import systems as systems_service
 from src.cyberagent.services import tasks as task_service
+from src.cyberagent.services import teams as teams_service
 
 
 class System5(SystemBase):
@@ -274,3 +278,117 @@ class System5(SystemBase):
         )
 
         return self._get_structured_message(response, ConfirmationMessage)
+
+    @message_handler
+    async def handle_team_envelope_update_message(
+        self, message: TeamEnvelopeUpdateMessage, context: MessageContext
+    ) -> ConfirmationMessage:
+        """
+        Handle team envelope skill updates within the active team.
+        """
+        if message.team_id != self.team_id:
+            return ConfirmationMessage(
+                content=(
+                    f"System5 cannot modify team {message.team_id} from team {self.team_id}."
+                ),
+                is_error=True,
+                source=self.agent_id.__str__(),
+            )
+
+        if message.action == "add":
+            teams_service.add_allowed_skill(
+                team_id=message.team_id,
+                skill_name=message.skill_name,
+                actor_id=self.agent_id.__str__(),
+            )
+            return ConfirmationMessage(
+                content=f"Added skill {message.skill_name} to team {message.team_id}.",
+                is_error=False,
+                source=self.agent_id.__str__(),
+            )
+
+        if message.action == "remove":
+            revoked = teams_service.remove_allowed_skill(
+                team_id=message.team_id,
+                skill_name=message.skill_name,
+                actor_id=self.agent_id.__str__(),
+            )
+            return ConfirmationMessage(
+                content=(
+                    f"Removed skill {message.skill_name} from team {message.team_id}. "
+                    f"Revoked {revoked} grants."
+                ),
+                is_error=False,
+                source=self.agent_id.__str__(),
+            )
+
+        return ConfirmationMessage(
+            content=f"Unknown team envelope action '{message.action}'.",
+            is_error=True,
+            source=self.agent_id.__str__(),
+        )
+
+    @message_handler
+    async def handle_system_skill_grant_update_message(
+        self, message: SystemSkillGrantUpdateMessage, context: MessageContext
+    ) -> ConfirmationMessage:
+        """
+        Handle system skill grant updates within the active team.
+        """
+        system = systems_service.get_system(message.system_id)
+        if system is None:
+            return ConfirmationMessage(
+                content=f"System id {message.system_id} is not registered.",
+                is_error=True,
+                source=self.agent_id.__str__(),
+            )
+        if system.team_id != self.team_id:
+            return ConfirmationMessage(
+                content=(
+                    f"System5 cannot modify system {message.system_id} in team "
+                    f"{system.team_id} from team {self.team_id}."
+                ),
+                is_error=True,
+                source=self.agent_id.__str__(),
+            )
+
+        if message.action == "add":
+            try:
+                systems_service.add_skill_grant(
+                    system_id=message.system_id,
+                    skill_name=message.skill_name,
+                    actor_id=self.agent_id.__str__(),
+                )
+            except PermissionError as exc:
+                return ConfirmationMessage(
+                    content=str(exc),
+                    is_error=True,
+                    source=self.agent_id.__str__(),
+                )
+            return ConfirmationMessage(
+                content=(
+                    f"Granted skill {message.skill_name} to system {message.system_id}."
+                ),
+                is_error=False,
+                source=self.agent_id.__str__(),
+            )
+
+        if message.action == "remove":
+            systems_service.remove_skill_grant(
+                system_id=message.system_id,
+                skill_name=message.skill_name,
+                actor_id=self.agent_id.__str__(),
+            )
+            return ConfirmationMessage(
+                content=(
+                    f"Revoked skill {message.skill_name} from system {message.system_id}."
+                ),
+                is_error=False,
+                source=self.agent_id.__str__(),
+            )
+
+        return ConfirmationMessage(
+            content=f"Unknown system grant action '{message.action}'.",
+            is_error=True,
+            source=self.agent_id.__str__(),
+        )

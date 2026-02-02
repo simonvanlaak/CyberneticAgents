@@ -95,6 +95,24 @@ class ResearchReviewMessage(BaseTextChatMessage):
     content: str
 
 
+class TeamEnvelopeUpdateMessage(BaseTextChatMessage):
+    """Used to request team envelope skill updates from System 5."""
+
+    team_id: int
+    skill_name: str
+    action: str
+    content: str
+
+
+class SystemSkillGrantUpdateMessage(BaseTextChatMessage):
+    """Used to request system skill grant updates from System 5."""
+
+    system_id: int
+    skill_name: str
+    action: str
+    content: str
+
+
 class ConfirmationMessage(BaseTextChatMessage):
     """Used by a system to confirm an action has been completed."""
 

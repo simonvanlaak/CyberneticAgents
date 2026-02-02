@@ -64,6 +64,8 @@ class TestSystem5Basic:
             "handle_policy_suggestion_message",
             "handle_strategy_review_message",
             "handle_research_review_message",
+            "handle_team_envelope_update_message",
+            "handle_system_skill_grant_update_message",
         ]
 
         for handler in handlers:

@@ -591,3 +591,22 @@ async def test_cli_tool_execute_allows_skill_permission(
 
     assert result["success"] is True
     assert tool.executor.executed is True
+
+
+@pytest.mark.asyncio
+async def test_cli_tool_execute_requires_agent_id_for_skill() -> None:
+    class _RecordingExecutor:
+        def __init__(self) -> None:
+            self.executed = False
+
+        async def execute_code_blocks(self, *args, **kwargs):
+            self.executed = True
+            return SimpleNamespace(exit_code=0, output="{}")
+
+    tool = CliTool(_RecordingExecutor())
+
+    result = await tool.execute("web_search", skill_name="web-search", query="x")
+
+    assert result["success"] is False
+    assert "agent_id" in result["error"]
+    assert tool.executor.executed is False
