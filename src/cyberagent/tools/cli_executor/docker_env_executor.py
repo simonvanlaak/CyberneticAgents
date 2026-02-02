@@ -27,6 +27,7 @@ class EnvDockerCommandLineCodeExecutor(DockerCommandLineCodeExecutor):
     ) -> None:
         super().__init__(*args, **kwargs)
         self._exec_env: Dict[str, str] = exec_env or {}
+        self.last_stderr: str = ""
 
     def set_exec_env(self, exec_env: Optional[Dict[str, str]]) -> None:
         """
@@ -50,6 +51,7 @@ class EnvDockerCommandLineCodeExecutor(DockerCommandLineCodeExecutor):
 
         env = self._build_exec_env()
         exec_kwargs = {"environment": env} if env else {}
+        exec_kwargs["demux"] = True
         exec_task = asyncio.create_task(
             asyncio.to_thread(self._container.exec_run, command, **exec_kwargs)
         )
@@ -58,7 +60,9 @@ class EnvDockerCommandLineCodeExecutor(DockerCommandLineCodeExecutor):
         try:
             result = await exec_task
             exit_code = result.exit_code
-            output = result.output.decode("utf-8")
+            stdout, stderr = _decode_exec_output(result.output)
+            self.last_stderr = stderr
+            output = stdout
             if exit_code == 124:
                 output += "\n Timeout"
             return output, exit_code
@@ -72,3 +76,14 @@ class EnvDockerCommandLineCodeExecutor(DockerCommandLineCodeExecutor):
                 except Exception as e:
                     logger.exception("Failed to schedule kill command on loop: %s", e)
             return "Code execution was cancelled.", 1
+
+
+def _decode_exec_output(output: object) -> tuple[str, str]:
+    if isinstance(output, tuple):
+        stdout_bytes, stderr_bytes = output
+        stdout = stdout_bytes.decode("utf-8") if stdout_bytes else ""
+        stderr = stderr_bytes.decode("utf-8") if stderr_bytes else ""
+        return stdout, stderr
+    if isinstance(output, bytes):
+        return output.decode("utf-8"), ""
+    return str(output), ""

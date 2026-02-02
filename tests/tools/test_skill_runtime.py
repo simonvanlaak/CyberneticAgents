@@ -16,6 +16,8 @@ def _make_skill(name: str) -> SkillDefinition:
         tool_name="exec",
         subcommand=None,
         required_env=(),
+        timeout_class="standard",
+        timeout_seconds=60,
         skill_file=Path(f"src/tools/skills/{name}/SKILL.md"),
         instructions="",
     )

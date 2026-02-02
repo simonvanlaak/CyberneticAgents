@@ -23,6 +23,7 @@ class _FakeExecutor:
         self.output = output
         self.code_blocks = None
         self.envs: List[Dict[str, str]] = []
+        self.last_stderr = ""
 
     def set_exec_env(self, env: Dict[str, str]) -> None:
         self.envs.append(env)
@@ -30,6 +31,7 @@ class _FakeExecutor:
     async def execute_code_blocks(
         self, code_blocks: Any, cancellation_token: CancellationToken
     ) -> SimpleNamespace:
+        self.last_stderr = "stderr output"
         self.code_blocks = code_blocks
         return SimpleNamespace(exit_code=0, output=self.output)
 
@@ -44,6 +46,10 @@ class _FakeContainer:
     def exec_run(self, command: List[str], **kwargs: Any) -> SimpleNamespace:
         self.last_command = command
         self.last_env = kwargs.get("environment")
+        if kwargs.get("demux"):
+            stdout = self._output.encode()
+            stderr = b"stderr"
+            return SimpleNamespace(exit_code=self._exit_code, output=(stdout, stderr))
         return SimpleNamespace(exit_code=self._exit_code, output=self._output.encode())
 
 
@@ -305,6 +311,7 @@ async def test_env_executor_executes_command(
     assert exit_code == 0
     assert output == "ok"
     assert executor._container.last_env == {"KEY": "VALUE"}
+    assert executor.last_stderr == "stderr"
 
 
 @pytest.mark.asyncio
@@ -323,6 +330,8 @@ async def test_build_skill_tools_runs_cli(monkeypatch: pytest.MonkeyPatch) -> No
         tool_name="web_search",
         subcommand="run",
         required_env=(),
+        timeout_class="standard",
+        timeout_seconds=60,
         skill_file=Path("src/tools/skills/web-search/SKILL.md"),
         instructions="",
     )
@@ -336,3 +345,47 @@ async def test_build_skill_tools_runs_cli(monkeypatch: pytest.MonkeyPatch) -> No
     assert result["success"] is True
     assert seen["tool_name"] == "web_search"
     assert seen["kwargs"]["subcommand"] == "run"
+
+
+@pytest.mark.asyncio
+async def test_cli_tool_execute_includes_stderr(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("BRAVE_API_KEY", "token")
+    executor = _FakeExecutor(json.dumps({"ok": True}))
+    tool = CliTool(executor)
+
+    result = await tool.execute("web_search", query="x")
+
+    assert result["success"] is True
+    assert result["stderr"] == "stderr output"
+
+
+@pytest.mark.asyncio
+async def test_cli_tool_execute_overrides_timeout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("BRAVE_API_KEY", "token")
+
+    class _TimeoutExecutor:
+        def __init__(self) -> None:
+            self._timeout = 60
+            self.seen_timeout: int | None = None
+
+        def set_exec_env(self, env: Dict[str, str]) -> None:
+            return None
+
+        async def execute_code_blocks(
+            self, code_blocks: Any, cancellation_token: CancellationToken
+        ) -> SimpleNamespace:
+            self.seen_timeout = self._timeout
+            return SimpleNamespace(exit_code=0, output="ok")
+
+    executor = _TimeoutExecutor()
+    tool = CliTool(executor)
+
+    result = await tool.execute("web_search", timeout_seconds=12)
+
+    assert result["success"] is True
+    assert executor.seen_timeout == 12
+    assert executor._timeout == 60

@@ -21,8 +21,17 @@ class SkillDefinition:
     tool_name: str
     subcommand: str | None
     required_env: tuple[str, ...]
+    timeout_class: str
+    timeout_seconds: int
     skill_file: Path
     instructions: str
+
+
+TIMEOUTS_BY_CLASS = {
+    "short": 30,
+    "standard": 60,
+    "long": 180,
+}
 
 
 def load_skill_definitions(skills_root: Path | str) -> list[SkillDefinition]:
@@ -88,6 +97,8 @@ def _build_skill_definition(
     subcommand = str(subcommand_raw) if subcommand_raw else None
     required_env_raw = cyberagent.get("required_env", [])
     required_env = tuple(str(key) for key in required_env_raw)
+    timeout_class = str(cyberagent.get("timeout_class", "standard")).strip()
+    timeout_seconds = _resolve_timeout_seconds(timeout_class, skill_file)
 
     return SkillDefinition(
         name=name,
@@ -96,6 +107,8 @@ def _build_skill_definition(
         tool_name=tool_name,
         subcommand=subcommand,
         required_env=required_env,
+        timeout_class=timeout_class,
+        timeout_seconds=timeout_seconds,
         skill_file=skill_file,
         instructions="",
     )
@@ -118,6 +131,15 @@ def _validate_skill_name(name: str, skill_dir: Path, skill_file: Path) -> None:
 def _validate_description(description: str, skill_file: Path) -> None:
     if len(description) > 1024:
         raise ValueError(f"{skill_file} description must be 1-1024 characters.")
+
+
+def _resolve_timeout_seconds(timeout_class: str, skill_file: Path) -> int:
+    if timeout_class not in TIMEOUTS_BY_CLASS:
+        raise ValueError(
+            f"{skill_file} timeout_class must be one of: "
+            f"{', '.join(sorted(TIMEOUTS_BY_CLASS))}."
+        )
+    return TIMEOUTS_BY_CLASS[timeout_class]
 
 
 def _as_mapping(value: Any) -> dict[str, Any]:

@@ -21,6 +21,7 @@ def _write_skill(root: Path, skill_name: str, body: str = "Use this skill.") -> 
         "  cyberagent:\n"
         "    tool: web_search\n"
         "    subcommand: run\n"
+        "    timeout_class: standard\n"
         "    required_env:\n"
         "      - BRAVE_API_KEY\n"
         "---\n\n"
@@ -40,6 +41,8 @@ def test_load_skill_definitions_reads_frontmatter(tmp_path: Path) -> None:
     assert skill.tool_name == "web_search"
     assert skill.subcommand == "run"
     assert skill.required_env == ("BRAVE_API_KEY",)
+    assert skill.timeout_class == "standard"
+    assert skill.timeout_seconds == 60
     assert skill.instructions == ""
 
 
@@ -94,9 +97,37 @@ def test_load_skill_definitions_rejects_long_description(tmp_path: Path) -> None
     skill_dir = tmp_path / "web-search"
     skill_dir.mkdir(parents=True, exist_ok=True)
     (skill_dir / "SKILL.md").write_text(
-        "---\n" "name: web-search\n" f"description: {'a' * 1025}\n" "---\n\n" "body\n",
+        "---\n"
+        "name: web-search\n"
+        f"description: {'a' * 1025}\n"
+        "metadata:\n"
+        "  cyberagent:\n"
+        "    timeout_class: standard\n"
+        "---\n\n"
+        "body\n",
         encoding="utf-8",
     )
 
     with pytest.raises(ValueError, match="description"):
+        load_skill_definitions(tmp_path)
+
+
+def test_load_skill_definitions_rejects_unknown_timeout_class(
+    tmp_path: Path,
+) -> None:
+    skill_dir = tmp_path / "web-search"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\n"
+        "name: web-search\n"
+        "description: invalid timeout class\n"
+        "metadata:\n"
+        "  cyberagent:\n"
+        "    timeout_class: warp\n"
+        "---\n\n"
+        "body\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="timeout"):
         load_skill_definitions(tmp_path)
