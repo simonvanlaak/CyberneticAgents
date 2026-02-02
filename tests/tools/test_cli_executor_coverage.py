@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, List
 
@@ -9,11 +10,21 @@ import pytest
 from autogen_core import CancellationToken
 
 from src.cyberagent.core import runtime as core_runtime
-from src.cyberagent.tools.cli_executor import factory, secrets
+from src.cyberagent.tools.cli_executor import (
+    factory,
+    secrets,
+    skill_runtime,
+    skill_tools,
+)
+from src.cyberagent.tools.cli_executor.cli_tool import CliTool
 from src.cyberagent.tools.cli_executor.docker_env_executor import (
     EnvDockerCommandLineCodeExecutor,
 )
-from src.cyberagent.tools.cli_executor.openclaw_tool import OpenClawTool
+from src.cyberagent.tools.cli_executor.skill_loader import (
+    SkillDefinition,
+    load_skill_definitions,
+    load_skill_instructions,
+)
 
 
 class _FakeExecutor:
@@ -163,7 +174,7 @@ async def test_stop_runtime_resets() -> None:
 
 
 def test_create_cli_executor_uses_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setenv("OPENCLAW_TOOLS_IMAGE", "example/image:tag")
+    monkeypatch.setenv("CLI_TOOLS_IMAGE", "example/image:tag")
     monkeypatch.setattr(
         factory, "EnvDockerCommandLineCodeExecutor", _FakeDockerExecutor
     )
@@ -175,7 +186,7 @@ def test_create_cli_executor_uses_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_create_cli_executor_default_image(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.delenv("OPENCLAW_TOOLS_IMAGE", raising=False)
+    monkeypatch.delenv("CLI_TOOLS_IMAGE", raising=False)
     monkeypatch.setattr(
         factory, "EnvDockerCommandLineCodeExecutor", _FakeDockerExecutor
     )
@@ -183,9 +194,7 @@ def test_create_cli_executor_default_image(monkeypatch: pytest.MonkeyPatch) -> N
     executor = factory.create_cli_executor()
 
     assert executor is not None
-    assert (
-        executor.image == "ghcr.io/simonvanlaak/cyberneticagents-openclaw-tools:latest"
-    )
+    assert executor.image == "ghcr.io/simonvanlaak/cyberneticagents-cli-tools:latest"
 
 
 def test_create_cli_executor_handles_failure(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -212,8 +221,8 @@ def test_tool_secrets_present(monkeypatch: pytest.MonkeyPatch) -> None:
     assert secrets.get_tool_secrets("unknown_tool") == {}
 
 
-def test_openclaw_build_cli_args() -> None:
-    tool = OpenClawTool(_FakeExecutor("{}"))
+def test_cli_tool_build_cli_args() -> None:
+    tool = CliTool(_FakeExecutor("{}"))
 
     args = tool._build_cli_args({"query": "hello", "count": 2, "verbose": True})
 
@@ -222,8 +231,8 @@ def test_openclaw_build_cli_args() -> None:
     assert "--verbose" in args
 
 
-def test_openclaw_parse_result_json() -> None:
-    tool = OpenClawTool(_FakeExecutor("{}"))
+def test_cli_tool_parse_result_json() -> None:
+    tool = CliTool(_FakeExecutor("{}"))
     result = SimpleNamespace(exit_code=0, output=json.dumps({"ok": True}))
 
     parsed = tool._parse_result(result)
@@ -232,8 +241,8 @@ def test_openclaw_parse_result_json() -> None:
     assert parsed["output"]["ok"] is True
 
 
-def test_openclaw_parse_result_error() -> None:
-    tool = OpenClawTool(_FakeExecutor("{}"))
+def test_cli_tool_parse_result_error() -> None:
+    tool = CliTool(_FakeExecutor("{}"))
     result = SimpleNamespace(exit_code=1, output="boom")
 
     parsed = tool._parse_result(result)
@@ -243,10 +252,10 @@ def test_openclaw_parse_result_error() -> None:
 
 
 @pytest.mark.asyncio
-async def test_openclaw_execute_sets_env(monkeypatch: pytest.MonkeyPatch) -> None:
+async def test_cli_tool_execute_sets_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BRAVE_API_KEY", "token")
     executor = _FakeExecutor(json.dumps({"ok": True}))
-    tool = OpenClawTool(executor)
+    tool = CliTool(executor)
 
     result = await tool.execute("web_search", query="x")
 
@@ -254,7 +263,7 @@ async def test_openclaw_execute_sets_env(monkeypatch: pytest.MonkeyPatch) -> Non
     assert executor.envs[0] == {"BRAVE_API_KEY": "token"}
     assert executor.envs[-1] == {}
     assert executor.code_blocks is not None
-    assert "openclaw web_search" in executor.code_blocks[0].code
+    assert "web_search" in executor.code_blocks[0].code
 
 
 def test_env_executor_injects_env() -> None:
@@ -302,3 +311,283 @@ async def test_env_executor_executes_command(monkeypatch: pytest.MonkeyPatch) ->
     assert exit_code == 0
     assert output == "ok"
     assert executor._container.last_env == {"KEY": "VALUE"}
+
+
+def _make_skill_definition(name: str) -> SkillDefinition:
+    return SkillDefinition(
+        name=name,
+        description=f"{name} description",
+        location=Path(f"src/tools/skills/{name}"),
+        tool_name=name.replace("-", "_"),
+        subcommand=None,
+        required_env=(),
+        timeout_class="standard",
+        timeout_seconds=60,
+        skill_file=Path(f"src/tools/skills/{name}/SKILL.md"),
+        instructions="",
+    )
+
+
+def _write_skill(root: Path, name: str, body: str = "Use this skill.") -> None:
+    skill_dir = root / name
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\n"
+        f"name: {name}\n"
+        "description: test skill\n"
+        "metadata:\n"
+        "  cyberagent:\n"
+        "    tool: web_search\n"
+        "    subcommand: run\n"
+        "    required_env:\n"
+        "      - BRAVE_API_KEY\n"
+        "---\n\n"
+        f"{body}\n",
+        encoding="utf-8",
+    )
+
+
+def test_load_skill_definitions_reads_frontmatter(tmp_path: Path) -> None:
+    _write_skill(tmp_path, "web-search")
+
+    skills = load_skill_definitions(tmp_path)
+
+    assert len(skills) == 1
+    skill = skills[0]
+    assert skill.name == "web-search"
+    assert skill.tool_name == "web_search"
+    assert skill.subcommand == "run"
+    assert skill.required_env == ("BRAVE_API_KEY",)
+
+
+def test_load_skill_instructions_reads_body(tmp_path: Path) -> None:
+    _write_skill(tmp_path, "web-fetch", body="Fetch and summarize pages.")
+    skill = load_skill_definitions(tmp_path)[0]
+
+    instructions = load_skill_instructions(skill)
+
+    assert "Fetch and summarize pages." in instructions
+
+
+def test_get_agent_skill_tools_returns_empty_when_no_executor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(skill_runtime, "_shared_cli_tool", None)
+    monkeypatch.setattr(skill_runtime, "_get_shared_cli_tool", lambda: None)
+
+    tools = skill_runtime.get_agent_skill_tools("System4/root")
+
+    assert tools == []
+
+
+def test_get_agent_skill_tools_applies_max_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    skills = [_make_skill_definition(f"skill-{i}") for i in range(7)]
+    monkeypatch.setattr(skill_runtime, "_get_shared_cli_tool", lambda: object())
+    monkeypatch.setattr(skill_runtime, "load_skill_definitions", lambda _root: skills)
+
+    built_count = {"count": 0}
+
+    def _build(_tool, loaded_skills, agent_id: str):
+        built_count["count"] = len(loaded_skills)
+        return []
+
+    monkeypatch.setattr(skill_runtime, "build_skill_tools", _build)
+
+    skill_runtime.get_agent_skill_tools("System4/root")
+
+    assert built_count["count"] == skill_runtime.MAX_AGENT_SKILLS
+
+
+def test_get_agent_skill_prompt_entries_include_locations(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    skills = [_make_skill_definition(f"skill-{i}") for i in range(2)]
+    monkeypatch.setattr(skill_runtime, "_shared_cli_tool", object())
+    monkeypatch.setattr(skill_runtime, "_get_shared_cli_tool", lambda: object())
+    monkeypatch.setattr(skill_runtime, "load_skill_definitions", lambda _root: skills)
+
+    entries = skill_runtime.get_agent_skill_prompt_entries("System4/root")
+
+    assert "skill-0" in entries[0]
+    assert "skill-0 description" in entries[0]
+    assert "src/tools/skills/skill-0" in entries[0]
+
+
+def test_get_agent_skill_tools_returns_empty_when_no_skills(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(skill_runtime, "_get_shared_cli_tool", lambda: object())
+    monkeypatch.setattr(skill_runtime, "load_skill_definitions", lambda _root: [])
+
+    assert skill_runtime.get_agent_skill_tools("System4/root") == []
+
+
+def test_get_shared_cli_tool_caches(monkeypatch: pytest.MonkeyPatch) -> None:
+    created: dict[str, int] = {"count": 0}
+
+    def _fake_factory():
+        created["count"] += 1
+        return object()
+
+    monkeypatch.setattr(skill_runtime, "create_cli_executor", _fake_factory)
+    skill_runtime._shared_cli_tool = None
+
+    first = skill_runtime._get_shared_cli_tool()
+    second = skill_runtime._get_shared_cli_tool()
+
+    assert first is second
+    assert created["count"] == 1
+
+
+@pytest.mark.asyncio
+async def test_build_skill_tools_invokes_cli_tool() -> None:
+    class _DummyCliTool:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, Any]] = []
+
+        async def execute(self, tool_name: str, **kwargs: Any) -> dict[str, Any]:
+            self.calls.append({"tool_name": tool_name, **kwargs})
+            return {"success": True}
+
+    skill = _make_skill_definition("web-search")
+    cli_tool = _DummyCliTool()
+
+    tools = skill_tools.build_skill_tools(cli_tool, [skill], agent_id="System4/root")
+
+    assert len(tools) == 1
+    result = await tools[0].run_json(
+        args={"arguments_json": json.dumps({"query": "cybernetic"})},
+        cancellation_token=CancellationToken(),
+    )
+
+    assert result == {"success": True}
+    assert len(cli_tool.calls) == 1
+    call = cli_tool.calls[0]
+    assert call["tool_name"] == "web_search"
+    assert call["agent_id"] == "System4/root"
+    assert call["skill_name"] == "web-search"
+    assert call["query"] == "cybernetic"
+
+
+@pytest.mark.asyncio
+async def test_build_skill_tools_rejects_bad_arguments() -> None:
+    class _DummyCliTool:
+        async def execute(self, tool_name: str, **kwargs: Any) -> dict[str, Any]:
+            return {"success": True}
+
+    skill = _make_skill_definition("web-search")
+    cli_tool = _DummyCliTool()
+    tools = skill_tools.build_skill_tools(cli_tool, [skill])
+
+    result = await tools[0].run_json(
+        args={"arguments_json": "not json"},
+        cancellation_token=CancellationToken(),
+    )
+
+    assert result["success"] is False
+
+
+@pytest.mark.asyncio
+async def test_build_skill_tools_rejects_non_mapping_arguments() -> None:
+    class _DummyCliTool:
+        async def execute(self, tool_name: str, **kwargs: Any) -> dict[str, Any]:
+            return {"success": True}
+
+    skill = _make_skill_definition("web-search")
+    cli_tool = _DummyCliTool()
+    tools = skill_tools.build_skill_tools(cli_tool, [skill])
+
+    result = await tools[0].run_json(
+        args={"arguments_json": json.dumps(["not", "a", "dict"])},
+        cancellation_token=CancellationToken(),
+    )
+
+    assert result["success"] is False
+
+
+@pytest.mark.asyncio
+async def test_cli_tool_execute_denies_skill_permission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.cyberagent.tools.cli_executor import cli_tool as cli_tool_module
+
+    class _DummySystem:
+        id = 42
+        team_id = 7
+
+    class _RecordingExecutor:
+        def __init__(self) -> None:
+            self.executed = False
+
+        async def execute_code_blocks(self, *args, **kwargs):
+            self.executed = True
+            return SimpleNamespace(exit_code=0, output="{}")
+
+    monkeypatch.setattr(
+        cli_tool_module, "get_system_from_agent_id", lambda _a: _DummySystem
+    )
+    monkeypatch.setattr(
+        cli_tool_module.systems_service,
+        "can_execute_skill",
+        lambda _sid, _skill: (False, "team_envelope"),
+    )
+
+    tool = CliTool(_RecordingExecutor())
+    tool._check_permission = lambda *_args, **_kwargs: True
+
+    result = await tool.execute(
+        "web_search",
+        agent_id="System4/root",
+        skill_name="web-search",
+        query="x",
+    )
+
+    assert result["success"] is False
+    assert result["details"]["team_id"] == 7
+    assert result["details"]["system_id"] == 42
+    assert result["details"]["skill_name"] == "web-search"
+    assert result["details"]["failed_rule_category"] == "team_envelope"
+    assert tool.executor.executed is False
+
+
+@pytest.mark.asyncio
+async def test_cli_tool_execute_allows_skill_permission(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.cyberagent.tools.cli_executor import cli_tool as cli_tool_module
+
+    class _DummySystem:
+        id = 8
+        team_id = 3
+
+    class _RecordingExecutor:
+        def __init__(self) -> None:
+            self.executed = False
+
+        async def execute_code_blocks(self, *args, **kwargs):
+            self.executed = True
+            return SimpleNamespace(exit_code=0, output="{}")
+
+    monkeypatch.setattr(
+        cli_tool_module, "get_system_from_agent_id", lambda _a: _DummySystem
+    )
+    monkeypatch.setattr(
+        cli_tool_module.systems_service,
+        "can_execute_skill",
+        lambda _sid, _skill: (True, None),
+    )
+
+    tool = CliTool(_RecordingExecutor())
+    tool._check_permission = lambda *_args, **_kwargs: True
+
+    result = await tool.execute(
+        "web_search",
+        agent_id="System4/root",
+        skill_name="web-search",
+        query="x",
+    )
+
+    assert result["success"] is True
+    assert tool.executor.executed is True
