@@ -207,6 +207,7 @@ def test_create_cli_executor_handles_failure(monkeypatch: pytest.MonkeyPatch) ->
 
 def test_tool_secrets_missing(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("BRAVE_API_KEY", raising=False)
+    monkeypatch.setenv("OP_SERVICE_ACCOUNT_TOKEN", "token")
 
     with pytest.raises(ValueError):
         secrets.get_tool_secrets("web_search")
@@ -214,6 +215,7 @@ def test_tool_secrets_missing(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_tool_secrets_present(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BRAVE_API_KEY", "token")
+    monkeypatch.setenv("OP_SERVICE_ACCOUNT_TOKEN", "token")
 
     assert secrets.get_tool_secrets("web_search") == {"BRAVE_API_KEY": "token"}
     assert secrets.get_tool_secrets("unknown_tool") == {}
@@ -252,6 +254,7 @@ def test_cli_tool_parse_result_error() -> None:
 @pytest.mark.asyncio
 async def test_cli_tool_execute_sets_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BRAVE_API_KEY", "token")
+    monkeypatch.setenv("OP_SERVICE_ACCOUNT_TOKEN", "token")
     executor = _FakeExecutor(json.dumps({"ok": True}))
     tool = CliTool(executor)
 
@@ -352,6 +355,7 @@ async def test_cli_tool_execute_includes_stderr(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("BRAVE_API_KEY", "token")
+    monkeypatch.setenv("OP_SERVICE_ACCOUNT_TOKEN", "token")
     executor = _FakeExecutor(json.dumps({"ok": True}))
     tool = CliTool(executor)
 
@@ -366,6 +370,7 @@ async def test_cli_tool_execute_overrides_timeout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("BRAVE_API_KEY", "token")
+    monkeypatch.setenv("OP_SERVICE_ACCOUNT_TOKEN", "token")
 
     class _TimeoutExecutor:
         def __init__(self) -> None:

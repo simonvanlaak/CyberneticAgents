@@ -33,6 +33,7 @@ class CliTool:
         subcommand: Optional[str] = None,
         timeout_seconds: Optional[int] = None,
         skill_name: Optional[str] = None,
+        required_env: Optional[list[str] | tuple[str, ...]] = None,
         **kwargs,
     ) -> Dict[str, Any]:
         """
@@ -70,7 +71,9 @@ class CliTool:
         # Inject secrets into the executor environment
         if callable(getattr(type(self.executor), "set_exec_env", None)):
             try:
-                tool_secrets = secrets.get_tool_secrets(tool_name)
+                tool_secrets = secrets.get_tool_secrets(
+                    tool_name, required_env=required_env
+                )
                 self.executor.set_exec_env(tool_secrets)
             except ValueError as exc:
                 return {

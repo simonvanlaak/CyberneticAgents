@@ -41,6 +41,7 @@ def _build_skill_runner(cli_tool: Any, skill: SkillDefinition, agent_id: str | N
             subcommand=skill.subcommand,
             timeout_seconds=getattr(skill, "timeout_seconds", None),
             skill_name=skill.name,
+            required_env=list(skill.required_env),
             **arguments,
         )
 
