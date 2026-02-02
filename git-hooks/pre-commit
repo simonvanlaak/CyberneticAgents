@@ -21,6 +21,12 @@ fi
 
 # Staged test files only
 staged_test_files=$(git diff --cached --name-only --diff-filter=ACM | rg '^tests/.*\.py$' || true)
+coverage_anchor="tests/tools/test_cli_executor_coverage.py"
+if [[ -n "${staged_test_files}" ]]; then
+  if ! echo "${staged_test_files}" | rg -q "^${coverage_anchor}$"; then
+    staged_test_files="${staged_test_files} ${coverage_anchor}"
+  fi
+fi
 
 if [[ -n "${staged_test_files}" ]]; then
   echo "Running pytest with coverage (min 25%) on staged test files..."
