@@ -197,6 +197,28 @@ These keep policy rows readable, queryable, and migration-safe.
 - GREEN: improve data integrity checks and add migration/backfill notes.
 - REFACTOR: finalize observability coverage and ensure performance stays acceptable.
 
+## Migration and Backfill Notes
+
+### 1) Skill Permissions Storage
+- Skill permissions are stored via the dedicated Casbin adapter database (`data/skill_permissions.db`).
+- No migration is required for existing `rbac.db` policies; the skill permissions model is separate.
+- If the deployment already has legacy skill policies in other stores, add a one-time import step that:
+  - maps team envelopes to `team:{team_id}` subject policies
+  - maps system grants to `system:{system_id}` subject policies
+  - preserves skill names with the `skill:{skill_name}` resource prefix
+
+### 2) Recursion Linkage
+- Recursion linkage uses the `recursions` table (see “Recursion Linkage (New)”).
+- On upgrade, initialize the table if it does not exist (SQLAlchemy metadata handles this on `init_db()`).
+- No backfill is required unless recursion already existed without persisted linkage.
+  - If it did, write a one-off backfill script that enumerates known sub-teams
+    and inserts `(sub_team_id, origin_system_id, parent_team_id, created_at, created_by)`.
+
+### 3) Root Team Identification
+- Root team is identified by `teams.name == "default_team"`.
+- If the production root team name differs, add a migration step to align the name,
+  or replace the name check with a configurable root-team identifier.
+
 ## Implementation Checklist
 
 ### Foundation
