@@ -11,6 +11,9 @@ This manual onboarding is error‑prone and slows down experiments. We need an *
 ## High‑Level Solution
 Create an **Onboarding Service** that runs once at first start and then stays active in the background to **re‑evaluate the system’s purpose** on a regular schedule.
 
+## Dependencies
+depends on docs/product_requirements/standard_operating_procedures.md
+
 ### 1. First‑Run Discovery
 System 4 gets triggered with a default prompt, that starts the discovery process on the user. This is similar to https://docs.openclaw.ai/reference/templates/BOOTSTRAP. However the key difference is to understand the users needs pro actively. The purpose is to achieve viability and for that the system 4 needs to understand user needs.
 Additionally this bootstrap run should be easiy on the user. Many LLM Tools have a long onboarding interaction that is tedious when wanting to try them out.
