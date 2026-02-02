@@ -3,6 +3,7 @@
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+import src.agents.system4 as system4_module
 from autogen_core import MessageContext, AgentId
 
 from src.agents.system4 import (
@@ -140,6 +141,36 @@ class TestSystem4MessageHandling:
         message = UserMessage(content="User question", source="User")
         assert message.content == "User question"
         assert message.source == "User"
+
+
+@pytest.mark.asyncio
+async def test_suggest_policy_tool_omits_missing_policy(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    system4 = System4("System4/root")
+    captured: dict[str, object] = {}
+
+    async def fake_publish(message, _agent_id):  # noqa: ANN001
+        captured["message"] = message
+
+    monkeypatch.setattr(system4, "_publish_message_to_agent", fake_publish)
+    monkeypatch.setattr(
+        system4_module.policy_service, "get_policy_by_id", lambda _pid: None
+    )
+
+    class DummySystem:
+        def get_agent_id(self):
+            return AgentId.from_str("System5/root")
+
+    monkeypatch.setattr(
+        "src.agents.system4.get_system_by_type", lambda *_: DummySystem()
+    )
+
+    await system4.suggest_policy_tool(123, "Test suggestion")
+
+    message = captured.get("message")
+    assert message is not None
+    assert message.policy_id is None
 
 
 class TestSystem4Integration:

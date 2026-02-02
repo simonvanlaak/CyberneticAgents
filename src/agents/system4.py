@@ -18,6 +18,7 @@ from src.agents.messages import (
 )
 from src.agents.system_base import SystemBase
 from src.cyberagent.services import initiatives as initiative_service
+from src.cyberagent.services import policies as policy_service
 from src.cyberagent.services import purposes as purpose_service
 from src.cyberagent.services import strategies as strategy_service
 from src.cyberagent.services import systems as system_service
@@ -350,7 +351,11 @@ class System4(SystemBase):
             system_service.get_system(system3_id).get_agent_id(),
         )
 
-    async def suggest_policy_tool(self, policy_id: int, suggestion: str):
+    async def suggest_policy_tool(self, policy_id: int | None, suggestion: str):
+        if policy_id is not None:
+            policy = policy_service.get_policy_by_id(policy_id)
+            if policy is None:
+                policy_id = None
         await self._publish_message_to_agent(
             PolicySuggestionMessage(
                 policy_id=policy_id, content=suggestion, source=self.name
