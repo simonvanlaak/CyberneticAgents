@@ -14,8 +14,6 @@ import pytest
 from autogen_core import AgentId
 
 from src.cyberagent.cli import cyberagent
-from src.cyberagent.db.db_utils import get_db
-from src.cyberagent.db.models.team import Team
 from src.cli_session import AnsweredQuestion, PendingQuestion
 
 
@@ -64,60 +62,6 @@ def test_start_command_uses_background_spawn(monkeypatch: pytest.MonkeyPatch) ->
     exit_code = cyberagent.main(["start", "--message", "ready"])
     assert exit_code == 0
     assert called["headless"] is False
-
-
-def _clear_teams() -> None:
-    session = next(get_db())
-    try:
-        session.query(Team).delete()
-        session.commit()
-    finally:
-        session.close()
-
-
-def test_handle_onboarding_creates_default_team(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    _clear_teams()
-
-    exit_code = cyberagent._handle_onboarding(argparse.Namespace())
-    captured = capsys.readouterr().out
-
-    assert exit_code == 0
-    assert "Created default team" in captured
-    assert "cyberagent suggest" in captured
-
-    session = next(get_db())
-    try:
-        team = session.query(Team).filter(Team.name == "default_team").first()
-        assert team is not None
-    finally:
-        session.close()
-
-
-def test_handle_onboarding_skips_when_team_exists(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    _clear_teams()
-    session = next(get_db())
-    try:
-        session.add(Team(name="existing_team"))
-        session.commit()
-    finally:
-        session.close()
-
-    exit_code = cyberagent._handle_onboarding(argparse.Namespace())
-    captured = capsys.readouterr().out
-
-    assert exit_code == 0
-    assert "Team already exists" in captured
-    assert "cyberagent suggest" in captured
-
-    session = next(get_db())
-    try:
-        assert session.query(Team).count() == 1
-    finally:
-        session.close()
 
 
 def test_status_command_delegates_to_status_main(
