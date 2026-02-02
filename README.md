@@ -23,7 +23,22 @@ pip install -r requirements.txt
 
 ### 2) Configure
 
-Copy `.env.example` to `.env` and fill in at least:
+CyberneticAgents expects secrets to live in 1Password and be injected at runtime.
+Create a vault named `CyberneticAgents` and add items named after the env vars
+with a `credential` field:
+
+- `GROQ_API_KEY` (required)
+- `BRAVE_API_KEY` (required for web search tools)
+- `MISTRAL_API_KEY` (only if `LLM_PROVIDER=mistral`)
+- Optional: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGSMITH_API_KEY`
+
+Sign in to 1Password in the same shell:
+
+```bash
+eval "$(op signin --account <shorthand>)"
+```
+
+Copy `.env.example` to `.env` if you want explicit local defaults:
 
 ```bash
 GROQ_API_KEY=your_groq_api_key_here
@@ -55,10 +70,14 @@ uv tool install -e .
 ```
 - Run the CLI:
 ```bash
+cyberagent onboarding
 cyberagent start
 ```
 
+- `cyberagent onboarding` runs technical checks (Docker, 1Password access, required keys).
+- If a required key is missing, onboarding can prompt you to paste it and store it in 1Password (requires write access to the vault).
 - Use `cyberagent start` to boot the VSM runtime in the background for CLI workflows.
+- Use `cyberagent restart` to stop/start the runtime when config changes.
 - `cyberagent status` shows the active strategy/task hierarchy, while `cyberagent suggest` lets you pipe JSON/YAML payloads into System 4.
 - Observability helpers (`cyberagent logs`, `cyberagent inbox`, `cyberagent watch`) and the `cyberagent login` command (which stores a keyring-backed token) round out the current CLI surface.
 - Each CLI command summarizes any new runtime `WARNING`/`ERROR` logs since the last command; run `cyberagent logs` for details.
