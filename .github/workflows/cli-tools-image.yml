@@ -3,6 +3,10 @@ name: Build CLI Tools Image
 on:
   push:
     branches: ["main"]
+    paths:
+      - ".github/workflows/cli-tools-image.yml"
+      - "src/cyberagent/tools/cli_executor/**"
+      - "src/cyberagent/tools/cli_executor/Dockerfile.cli-tools"
   workflow_dispatch:
 
 permissions:
