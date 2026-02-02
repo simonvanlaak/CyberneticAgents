@@ -13,7 +13,7 @@ from src.cyberagent.db.models.recursion import Recursion
 from src.cyberagent.db.models.team import Team
 from src.rbac import skill_permissions_enforcer
 
-TEST_DB_PATH = Path(".pytest_db") / "test.db"
+TEST_DB_PATH = (Path(".pytest_db") / "test.db").resolve()
 
 
 def pytest_configure() -> None:
