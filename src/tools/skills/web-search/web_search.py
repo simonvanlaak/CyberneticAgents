@@ -42,11 +42,11 @@ def main() -> None:
 
     import requests
 
-    params: dict[str, object] = {"q": args.query}
+    params: dict[str, str] = {"q": args.query}
     if args.count is not None:
-        params["count"] = args.count
+        params["count"] = str(args.count)
     if args.offset is not None:
-        params["offset"] = args.offset
+        params["offset"] = str(args.offset)
     if args.freshness is not None:
         params["freshness"] = args.freshness
 

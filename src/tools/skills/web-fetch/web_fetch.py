@@ -10,7 +10,12 @@ def main() -> None:
         sys.exit(2)
 
     import requests
-    from readability import Document
+
+    try:
+        from readability import Document  # type: ignore[import]
+    except ImportError:
+        print("Missing dependency: readability-lxml", file=sys.stderr)
+        sys.exit(2)
 
     url = sys.argv[1]
     response = requests.get(url, timeout=20)

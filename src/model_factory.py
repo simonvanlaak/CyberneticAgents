@@ -75,7 +75,9 @@ def _create_mistral_client(config: LLMConfig) -> Any:
     """
     try:
         # Try to import Mistral client from autogen-ext
-        from autogen_ext.models.mistral import MistralChatCompletionClient
+        from autogen_ext.models.mistral import (  # type: ignore[import]
+            MistralChatCompletionClient,
+        )
 
         # Create Mistral client configuration
         mistral_config = {

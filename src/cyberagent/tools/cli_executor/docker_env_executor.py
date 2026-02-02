@@ -50,11 +50,19 @@ class EnvDockerCommandLineCodeExecutor(DockerCommandLineCodeExecutor):
             )
 
         env = self._build_exec_env()
-        exec_kwargs = {"environment": env} if env else {}
-        exec_kwargs["demux"] = True
-        exec_task = asyncio.create_task(
-            asyncio.to_thread(self._container.exec_run, command, **exec_kwargs)
-        )
+        if env:
+            exec_task = asyncio.create_task(
+                asyncio.to_thread(
+                    self._container.exec_run,
+                    command,
+                    environment=env,
+                    demux=True,
+                )
+            )
+        else:
+            exec_task = asyncio.create_task(
+                asyncio.to_thread(self._container.exec_run, command, demux=True)
+            )
         cancellation_token.link_future(exec_task)
 
         try:
