@@ -13,15 +13,20 @@ from src.cyberagent.db.models.recursion import Recursion
 from src.cyberagent.db.models.team import Team
 from src.rbac import skill_permissions_enforcer
 
+TEST_DB_PATH = Path(".pytest_db") / "test.db"
+
 
 def pytest_configure() -> None:
-    tmp_root = Path(".pytest_db")
+    tmp_root = TEST_DB_PATH.parent
     tmp_root.mkdir(parents=True, exist_ok=True)
-    db_path = tmp_root / "test.db"
+    db_path = TEST_DB_PATH
     if db_path.exists():
+        os.chmod(db_path, 0o666)
         db_path.unlink()
     init_db.configure_database(f"sqlite:///{db_path}")
     init_db.init_db()
+    if db_path.exists():
+        os.chmod(db_path, 0o666)
     skill_db = Path("data") / "skill_permissions.db"
     if skill_db.exists():
         skill_db.unlink()
@@ -44,6 +49,8 @@ def _clear_active_team_env(monkeypatch: pytest.MonkeyPatch) -> None:
         os.chmod(skill_db, 0o666)
         skill_db.unlink()
     skill_permissions_enforcer._global_enforcer = None
+    if TEST_DB_PATH.exists():
+        os.chmod(TEST_DB_PATH, 0o666)
     session = next(get_db())
     try:
         session.query(Recursion).delete()
