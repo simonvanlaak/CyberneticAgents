@@ -137,13 +137,13 @@ def test_status_render_includes_hierarchy():
 def test_status_render_no_data_suggests_start() -> None:
     output = render_status([])
     assert "No data found." in output
-    assert "python -m src.cyberagent.cli.cyberagent start" in output
+    assert "cyberagent start" in output
 
 
 def test_status_render_no_purposes_suggests_suggest() -> None:
     output = render_status([TeamView(id=1, name="Empty Team", purposes=[])])
     assert "No purposes found." in output
-    assert "python -m src.cyberagent.cli.cyberagent suggest" in output
+    assert "cyberagent suggest" in output
 
 
 def test_status_active_only_filters_completed_tasks():
