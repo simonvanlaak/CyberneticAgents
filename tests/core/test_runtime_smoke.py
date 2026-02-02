@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import types
 from typing import Optional
 
 import pytest
@@ -32,6 +31,18 @@ def test_get_runtime_starts_once(monkeypatch: pytest.MonkeyPatch) -> None:
     second = runtime_module.get_runtime()
     assert first is second
     assert calls["start"] == 1
+
+
+def test_configure_tracing_auth_fails(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LANGFUSE_PUBLIC_KEY", "public")
+    monkeypatch.setenv("LANGFUSE_SECRET_KEY", "secret")
+
+    class DummyLangfuse:
+        def auth_check(self) -> bool:
+            return False
+
+    monkeypatch.setattr(runtime_module, "Langfuse", DummyLangfuse)
+    assert runtime_module.configure_tracing() is None
 
 
 @pytest.mark.asyncio

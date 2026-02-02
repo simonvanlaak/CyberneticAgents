@@ -77,6 +77,8 @@ class SystemBase(RoutedAgent):
         responsibility_prompts: List[str],
         trace_context: dict | None = None,
     ):
+        if "/" not in name:
+            name = f"{self.__class__.__name__}/{name}"
         self.name = name.replace("/", "_")
         self.agent_id = AgentId.from_str(name)
         team_id_env = os.environ.get("CYBERAGENT_ACTIVE_TEAM_ID")

@@ -20,6 +20,13 @@ class TestSystem3Basic:
         assert system3.agent_id.type == "System3"
         assert system3.agent_id.key == "controller1"
 
+    def test_system3_creation_from_key(self):
+        """Test System3 creation from key-only id."""
+        system3 = System3("root")
+        assert system3 is not None
+        assert system3.agent_id.type == "System3"
+        assert system3.agent_id.key == "root"
+
     def test_system3_identity_and_responsibilities(self):
         """Test System3 identity and responsibility prompts."""
         system3 = System3("System3/controller1")

@@ -83,6 +83,28 @@ def test_cli_tool_build_args_and_parse_result() -> None:
     assert parsed["output"]["ok"] is True
 
 
+def test_load_skill_definitions_rejects_bad_schema(tmp_path: Path) -> None:
+    skill_dir = tmp_path / "demo-skill"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    (skill_dir / "SKILL.md").write_text(
+        "\n".join(
+            [
+                "---",
+                "name: demo-skill",
+                "description: Demo skill",
+                "input_schema: not-a-mapping",
+                "---",
+                "",
+                "Body",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="schema must be a mapping"):
+        load_skill_definitions(tmp_path)
+
+
 @pytest.mark.asyncio
 async def test_build_skill_tools_rejects_invalid_args_json() -> None:
     skill = SkillDefinition(
