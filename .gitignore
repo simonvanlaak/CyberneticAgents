@@ -11,6 +11,7 @@ venv/
 # Runtime artifacts
 data/last_team.json
 logs/
+docker_cli_executor/
 env/
 ENV/
 .venv
