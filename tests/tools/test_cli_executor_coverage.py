@@ -744,6 +744,6 @@ async def test_cli_tool_execute_requires_agent_id_for_skill() -> None:
 
 
 def test_set_executor_timeout_rejects_zero() -> None:
-    # Guard against invalid timeout input during coverage runs (audit helper).
+    # Guard against invalid timeout input during coverage runs (integration audit).
     with pytest.raises(ValueError, match="Timeout must be greater"):
         _set_executor_timeout(object(), 0)
