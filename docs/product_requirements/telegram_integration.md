@@ -64,6 +64,11 @@ TELEGRAM_WEBHOOK_URL=https://your-domain.com/telegram/webhook
 TELEGRAM_WEBHOOK_SECRET=op://CyberneticAgents/TELEGRAM_WEBHOOK_SECRET/credential
 ```
 
+### 0. **Onboarding Integration**
+- Onboarding should detect when Telegram credentials are present.
+- If Telegram is not configured, onboarding should offer an optional setup step.
+- The setup flow should explain required secrets and how to add them to 1Password.
+
 ### 2. **Message Handling**
 
 **Inbound Messages:**
