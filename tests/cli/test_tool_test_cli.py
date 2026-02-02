@@ -218,3 +218,64 @@ async def test_handle_tool_test_reports_executor_start_failure(
 
     assert exit_code == 1
     assert "Failed to start CLI tool executor" in captured.err
+
+
+@pytest.mark.asyncio
+async def test_handle_tool_test_reexecs_on_permission_error(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    fake_skill = SkillDefinition(
+        name="file-reader",
+        description="Test",
+        location=Path("skills/file-reader"),
+        tool_name="exec",
+        subcommand="run",
+        required_env=(),
+        timeout_class="standard",
+        timeout_seconds=60,
+        input_schema={},
+        output_schema={},
+        skill_file=Path("skills/file-reader/SKILL.md"),
+        instructions="",
+    )
+
+    class DummyExecutor:
+        async def start(self) -> None:
+            raise PermissionError("Operation not permitted")
+
+    class DummyTool:
+        def __init__(self) -> None:
+            self.executor = DummyExecutor()
+
+        async def execute(self, *args, **kwargs):  # noqa: ANN001
+            return {"success": True}
+
+    class DummyProc:
+        def __init__(self) -> None:
+            self.returncode = 0
+            self.stdout = "ok\n"
+            self.stderr = ""
+
+    def fake_run(cmd, capture_output, text, env):  # noqa: ANN001
+        assert "CYBERAGENT_TOOL_TEST_REEXEC" in env
+        return DummyProc()
+
+    monkeypatch.setattr(
+        cyberagent, "load_skill_definitions", lambda _root: [fake_skill]
+    )
+    monkeypatch.setattr(cyberagent, "_create_cli_tool", lambda: DummyTool())
+    monkeypatch.setattr(cyberagent.shutil, "which", lambda _name: "python3")
+    monkeypatch.setattr(cyberagent, "_repo_root", lambda: Path("/tmp/repo"))
+    monkeypatch.setattr(cyberagent.subprocess, "run", fake_run)
+    monkeypatch.delenv("CYBERAGENT_TOOL_TEST_REEXEC", raising=False)
+
+    args = argparse.Namespace(
+        tool_name="file-reader",
+        args="{}",
+        agent_id=None,
+    )
+    exit_code = await cyberagent._handle_tool_test(args)
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert "ok" in captured.out

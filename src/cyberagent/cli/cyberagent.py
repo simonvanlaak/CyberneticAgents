@@ -9,6 +9,7 @@ import os
 import subprocess
 import sys
 import time
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
@@ -589,6 +590,9 @@ async def _handle_tool_test(args: argparse.Namespace) -> int:
             await executor.start()
             started = True
         except Exception as exc:
+            reexec = _maybe_reexec_tool_test(args, exc)
+            if reexec is not None:
+                return reexec
             print(f"Failed to start CLI tool executor: {exc}", file=sys.stderr)
             return 1
 
@@ -619,6 +623,52 @@ def _find_skill_definition(tool_name: str) -> SkillDefinition | None:
 def _list_skill_names() -> list[str]:
     tools = load_skill_definitions(DEFAULT_SKILLS_ROOT)
     return sorted(skill.name for skill in tools)
+
+
+def _maybe_reexec_tool_test(args: argparse.Namespace, exc: Exception) -> int | None:
+    if os.environ.get("CYBERAGENT_TOOL_TEST_REEXEC") == "1":
+        return None
+    if isinstance(exc, PermissionError):
+        pass
+    elif "PermissionError" not in str(exc):
+        return None
+    python = shutil.which("python3")
+    if not python:
+        return None
+    repo_root = _repo_root()
+    if repo_root is None:
+        return None
+    env = os.environ.copy()
+    env["CYBERAGENT_TOOL_TEST_REEXEC"] = "1"
+    pythonpath = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = (
+        f"{repo_root}{os.pathsep}{pythonpath}" if pythonpath else str(repo_root)
+    )
+    cmd = [
+        python,
+        "-m",
+        "src.cyberagent.cli.cyberagent",
+        "dev",
+        "tool-test",
+        args.tool_name,
+        "--args",
+        args.args or "{}",
+    ]
+    if args.agent_id:
+        cmd.extend(["--agent-id", args.agent_id])
+    proc = subprocess.run(cmd, capture_output=True, text=True, env=env)
+    if proc.stdout:
+        sys.stdout.write(proc.stdout)
+    if proc.stderr:
+        sys.stderr.write(proc.stderr)
+    return proc.returncode
+
+
+def _repo_root() -> Path | None:
+    try:
+        return Path(__file__).resolve().parents[3]
+    except IndexError:
+        return None
 
 
 async def _execute_skill_tool(

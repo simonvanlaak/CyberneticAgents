@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, List
@@ -207,6 +208,48 @@ def test_create_cli_executor_handles_failure(monkeypatch: pytest.MonkeyPatch) ->
     monkeypatch.setattr(factory, "EnvDockerCommandLineCodeExecutor", _raise)
 
     assert factory.create_cli_executor() is None
+
+
+def test_maybe_set_docker_host_from_context_sets_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = tmp_path / "config.json"
+    contexts = tmp_path / "contexts" / "meta"
+    contexts.mkdir(parents=True)
+    meta_dir = contexts / "abc123"
+    meta_dir.mkdir()
+    meta = meta_dir / "meta.json"
+    config.write_text(json.dumps({"currentContext": "desktop-linux"}), encoding="utf-8")
+    meta.write_text(
+        json.dumps(
+            {
+                "Name": "desktop-linux",
+                "Endpoints": {"docker": {"Host": "unix:///tmp/docker.sock"}},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.delenv("DOCKER_HOST", raising=False)
+    host = factory._maybe_set_docker_host_from_context(
+        config_path=config, contexts_root=contexts
+    )
+
+    assert host == "unix:///tmp/docker.sock"
+    assert os.environ.get("DOCKER_HOST") == "unix:///tmp/docker.sock"
+
+
+def test_maybe_set_docker_host_from_context_skips_when_env_set(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = tmp_path / "config.json"
+    config.write_text(json.dumps({"currentContext": "desktop-linux"}), encoding="utf-8")
+
+    monkeypatch.setenv("DOCKER_HOST", "unix:///existing.sock")
+    host = factory._maybe_set_docker_host_from_context(config_path=config)
+
+    assert host is None
+    assert os.environ.get("DOCKER_HOST") == "unix:///existing.sock"
 
 
 def test_tool_secrets_missing(monkeypatch: pytest.MonkeyPatch) -> None:
