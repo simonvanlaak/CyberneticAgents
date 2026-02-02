@@ -37,6 +37,15 @@ def test_build_parser_includes_commands(command: Sequence[str], label: str) -> N
     assert parsed.command == label
 
 
+def test_build_parser_includes_dev_system_run() -> None:
+    parser = cyberagent.build_parser()
+    parsed = parser.parse_args(["dev", "system-run", "System4/root", "hello"])
+    assert parsed.command == "dev"
+    assert parsed.dev_command == "system-run"
+    assert parsed.system_id == "System4/root"
+    assert parsed.message == "hello"
+
+
 def test_start_command_uses_background_spawn(monkeypatch: pytest.MonkeyPatch) -> None:
     called: dict[str, bool] = {"headless": False}
 
@@ -129,6 +138,125 @@ def test_handle_suggest_enqueues_payload(
     assert recorded["payload"] == "hello"
     assert "Runtime active in background (pid 1234)." in output
     assert "Suggestion queued for System4." in output
+
+
+@pytest.mark.asyncio
+async def test_handle_tool_test_invalid_args_json(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    args = argparse.Namespace(
+        tool_name="web-search",
+        args="{invalid",
+        agent_id=None,
+    )
+    exit_code = await cyberagent._handle_tool_test(args)
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "Invalid --args JSON" in captured.err
+
+
+@pytest.mark.asyncio
+async def test_handle_tool_test_missing_skill(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from pathlib import Path
+
+    from src.cyberagent.tools.cli_executor.skill_loader import SkillDefinition
+
+    fake_skill = SkillDefinition(
+        name="another-skill",
+        description="Test",
+        location=Path("skills/another-skill"),
+        tool_name="another_tool",
+        subcommand=None,
+        required_env=(),
+        timeout_class="standard",
+        timeout_seconds=60,
+        input_schema={},
+        output_schema={},
+        skill_file=Path("skills/another-skill/SKILL.md"),
+        instructions="",
+    )
+
+    monkeypatch.setattr(
+        cyberagent, "load_skill_definitions", lambda _root: [fake_skill]
+    )
+
+    args = argparse.Namespace(
+        tool_name="web-search",
+        args="{}",
+        agent_id=None,
+    )
+    exit_code = await cyberagent._handle_tool_test(args)
+    captured = capsys.readouterr()
+    assert exit_code == 2
+    assert "Unknown tool" in captured.err
+
+
+@pytest.mark.asyncio
+async def test_handle_tool_test_executes_skill(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from pathlib import Path
+
+    from src.cyberagent.tools.cli_executor.skill_loader import SkillDefinition
+
+    fake_skill = SkillDefinition(
+        name="web-search",
+        description="Test",
+        location=Path("skills/web-search"),
+        tool_name="web_search",
+        subcommand=None,
+        required_env=(),
+        timeout_class="standard",
+        timeout_seconds=60,
+        input_schema={},
+        output_schema={},
+        skill_file=Path("skills/web-search/SKILL.md"),
+        instructions="",
+    )
+
+    recorded: dict[str, object] = {}
+
+    class DummyTool:
+        async def execute(  # noqa: D401
+            self,
+            tool_name,
+            agent_id=None,
+            subcommand=None,
+            timeout_seconds=None,
+            skill_name=None,
+            required_env=None,
+            **kwargs,
+        ):
+            recorded["tool_name"] = tool_name
+            recorded["agent_id"] = agent_id
+            recorded["subcommand"] = subcommand
+            recorded["timeout_seconds"] = timeout_seconds
+            recorded["skill_name"] = skill_name
+            recorded["required_env"] = required_env
+            recorded["kwargs"] = kwargs
+            return {"success": True, "output": {"ok": True}}
+
+    monkeypatch.setattr(
+        cyberagent, "load_skill_definitions", lambda _root: [fake_skill]
+    )
+    monkeypatch.setattr(cyberagent, "_create_cli_tool", lambda: DummyTool())
+
+    args = argparse.Namespace(
+        tool_name="web-search",
+        args='{"q": "hello"}',
+        agent_id="System4/root",
+    )
+    exit_code = await cyberagent._handle_tool_test(args)
+    captured = capsys.readouterr()
+
+    assert exit_code == 0
+    assert recorded["tool_name"] == "web_search"
+    assert recorded["agent_id"] == "System4/root"
+    assert recorded["skill_name"] == "web-search"
+    assert recorded["kwargs"] == {"q": "hello"}
+    assert '"ok": true' in captured.out
 
 
 def test_handle_inbox_prints_entries(
@@ -636,3 +764,41 @@ async def test_send_suggestion_timeout_does_not_cancel_runtime_send(
     assert runtime.task is not None
     await runtime.task
     assert runtime.cancelled is False
+
+
+@pytest.mark.asyncio
+async def test_dev_system_run_sends_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class DummyRuntime:
+        def __init__(self) -> None:
+            self.calls: list[dict[str, object]] = []
+
+        async def send_message(self, **kwargs: object) -> None:
+            self.calls.append(kwargs)
+
+    async def fake_register_systems() -> None:
+        return None
+
+    async def fake_stop_runtime_with_timeout() -> None:
+        return None
+
+    runtime = DummyRuntime()
+    monkeypatch.setattr(cyberagent, "init_db", lambda: None)
+    monkeypatch.setattr(cyberagent, "register_systems", fake_register_systems)
+    monkeypatch.setattr(cyberagent, "get_runtime", lambda: runtime)
+    monkeypatch.setattr(
+        cyberagent, "_stop_runtime_with_timeout", fake_stop_runtime_with_timeout
+    )
+    monkeypatch.setattr(cyberagent, "SUGGEST_SEND_TIMEOUT_SECONDS", 0.5)
+
+    args = argparse.Namespace(
+        dev_command="system-run",
+        system_id="System4/root",
+        message="Ping",
+    )
+
+    exit_code = await cyberagent._handle_dev(args)
+    assert exit_code == 0
+    assert runtime.calls
+    assert runtime.calls[0]["recipient"] == AgentId.from_str("System4/root")

@@ -37,6 +37,13 @@ from src.cli_session import get_answered_questions, get_pending_questions
 from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.init_db import init_db
 from src.cyberagent.db.models.team import Team
+from src.cyberagent.tools.cli_executor.cli_tool import CliTool
+from src.cyberagent.tools.cli_executor.factory import create_cli_executor
+from src.cyberagent.tools.cli_executor.skill_loader import (
+    SkillDefinition,
+    load_skill_definitions,
+)
+from src.cyberagent.tools.cli_executor.skill_runtime import DEFAULT_SKILLS_ROOT
 from src.rbac.enforcer import get_enforcer
 from src.registry import register_systems
 from src.cyberagent.core.runtime import get_runtime, stop_runtime
@@ -163,6 +170,30 @@ def build_parser() -> argparse.ArgumentParser:
     login_parser.add_argument(
         "--token", "-t", type=str, help="Authentication token. Prompts if omitted."
     )
+
+    dev_parser = subparsers.add_parser("dev", help="Developer utilities.")
+    dev_subparsers = dev_parser.add_subparsers(dest="dev_command", required=True)
+    tool_test_parser = dev_subparsers.add_parser(
+        "tool-test", help="Run a skill tool directly."
+    )
+    tool_test_parser.add_argument("tool_name", type=str, help="Skill tool name.")
+    tool_test_parser.add_argument(
+        "--args",
+        type=str,
+        default="{}",
+        help="JSON object string of tool arguments.",
+    )
+    tool_test_parser.add_argument(
+        "--agent-id",
+        type=str,
+        default=None,
+        help="Agent id for RBAC/skill permission checks.",
+    )
+    system_run_parser = dev_subparsers.add_parser(
+        "system-run", help="Send a one-off message to a system."
+    )
+    system_run_parser.add_argument("system_id", type=str)
+    system_run_parser.add_argument("message", type=str)
 
     help_parser = subparsers.add_parser("help", help="Show CLI help.")
     help_parser.add_argument(
@@ -436,6 +467,120 @@ def _handle_login(args: argparse.Namespace) -> int:
     return 0
 
 
+async def _handle_dev(args: argparse.Namespace) -> int:
+    if args.dev_command == "tool-test":
+        return await _handle_tool_test(args)
+    if args.dev_command == "system-run":
+        return await _handle_dev_system_run(args)
+    print("Unknown dev command.", file=sys.stderr)
+    return 1
+
+
+async def _handle_dev_system_run(args: argparse.Namespace) -> int:
+    init_db()
+    await register_systems()
+    runtime = get_runtime()
+    try:
+        recipient = AgentId.from_str(args.system_id)
+    except Exception as exc:
+        print(f"Invalid system id '{args.system_id}': {exc}", file=sys.stderr)
+        return 2
+    message = UserMessage(content=args.message, source="Dev")
+    try:
+        await asyncio.wait_for(
+            asyncio.shield(
+                runtime.send_message(
+                    message=message,
+                    recipient=recipient,
+                    sender=AgentId(type="UserAgent", key="root"),
+                )
+            ),
+            timeout=SUGGEST_SEND_TIMEOUT_SECONDS,
+        )
+        print(f"Message delivered to {args.system_id}.")
+        return 0
+    except asyncio.TimeoutError:
+        print(
+            "Message send timed out; the runtime may still be working. "
+            "Check logs with 'cyberagent logs'."
+        )
+        return 1
+    except Exception as exc:  # pragma: no cover - safety net for runtime errors
+        print(f"Failed to send message: {exc}", file=sys.stderr)
+        return 1
+    finally:
+        await _stop_runtime_with_timeout()
+
+
+async def _handle_tool_test(args: argparse.Namespace) -> int:
+    try:
+        parsed_args = json.loads(args.args or "{}")
+    except json.JSONDecodeError as exc:
+        print(f"Invalid --args JSON: {exc}", file=sys.stderr)
+        return 2
+    if not isinstance(parsed_args, dict):
+        print("--args must decode to a JSON object.", file=sys.stderr)
+        return 2
+
+    skill = _find_skill_definition(args.tool_name)
+    if skill is None:
+        known = _list_skill_names()
+        suffix = f" Available: {', '.join(known)}" if known else ""
+        print(f"Unknown tool '{args.tool_name}'.{suffix}", file=sys.stderr)
+        return 2
+
+    cli_tool = _create_cli_tool()
+    if cli_tool is None:
+        print("CLI tool executor unavailable; check CLI tools image.", file=sys.stderr)
+        return 1
+
+    if args.agent_id:
+        init_db()
+    else:
+        print("Note: running without agent id; permissions not enforced.")
+
+    result = await _execute_skill_tool(cli_tool, skill, parsed_args, args.agent_id)
+    print(json.dumps(result, indent=2, default=str))
+    return 0 if result.get("success") else 1
+
+
+def _create_cli_tool() -> CliTool | None:
+    executor = create_cli_executor()
+    if executor is None:
+        return None
+    return CliTool(executor)
+
+
+def _find_skill_definition(tool_name: str) -> SkillDefinition | None:
+    tools = load_skill_definitions(DEFAULT_SKILLS_ROOT)
+    for skill in tools:
+        if skill.name == tool_name:
+            return skill
+    return None
+
+
+def _list_skill_names() -> list[str]:
+    tools = load_skill_definitions(DEFAULT_SKILLS_ROOT)
+    return sorted(skill.name for skill in tools)
+
+
+async def _execute_skill_tool(
+    cli_tool: CliTool,
+    skill: SkillDefinition,
+    arguments: dict[str, Any],
+    agent_id: str | None,
+) -> dict[str, Any]:
+    return await cli_tool.execute(
+        skill.tool_name,
+        agent_id=agent_id,
+        subcommand=skill.subcommand,
+        timeout_seconds=skill.timeout_seconds,
+        skill_name=skill.name if agent_id else None,
+        required_env=list(skill.required_env),
+        **arguments,
+    )
+
+
 async def _handle_serve(args: argparse.Namespace) -> int:
     team_id = os.environ.get("CYBERAGENT_ACTIVE_TEAM_ID")
     if team_id:
@@ -698,6 +843,7 @@ _HANDLERS = {
     "suggest": _handle_suggest,
     "inbox": _handle_inbox,
     "watch": _handle_watch,
+    "dev": _handle_dev,
     "logs": _handle_logs,
     "config": _handle_config,
     "login": _handle_login,
