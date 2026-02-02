@@ -144,3 +144,70 @@ def test_can_execute_skill_logs_decision(caplog: pytest.LogCaptureFixture) -> No
         and record.__dict__.get("failed_rule_category") == "team_envelope"
         for record in caplog.records
     )
+
+
+def test_skill_grant_logs_audit_events(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    team_id = _create_team_id()
+    system_id = _create_system_id(team_id)
+    caplog.set_level(logging.INFO, logger="src.cyberagent.services.systems")
+
+    teams_service.add_allowed_skill(
+        team_id=team_id,
+        skill_name="skill.audit",
+        actor_id="system5/root",
+    )
+
+    systems_service.add_skill_grant(
+        system_id=system_id,
+        skill_name="skill.audit",
+        actor_id="system5/root",
+    )
+    systems_service.remove_skill_grant(
+        system_id=system_id,
+        skill_name="skill.audit",
+        actor_id="system5/root",
+    )
+
+    assert any(
+        record.message == "skill_grant_add"
+        and record.__dict__.get("team_id") == team_id
+        and record.__dict__.get("system_id") == system_id
+        and record.__dict__.get("skill_name") == "skill.audit"
+        and record.__dict__.get("actor_id") == "system5/root"
+        for record in caplog.records
+    )
+    assert any(
+        record.message == "skill_grant_remove"
+        and record.__dict__.get("team_id") == team_id
+        and record.__dict__.get("system_id") == system_id
+        and record.__dict__.get("skill_name") == "skill.audit"
+        and record.__dict__.get("actor_id") == "system5/root"
+        for record in caplog.records
+    )
+
+
+def test_skill_grant_denial_logs_audit(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    team_id = _create_team_id()
+    system_id = _create_system_id(team_id)
+    caplog.set_level(logging.WARNING, logger="src.cyberagent.services.systems")
+
+    with pytest.raises(PermissionError, match="team_envelope"):
+        systems_service.add_skill_grant(
+            system_id=system_id,
+            skill_name="skill.denied",
+            actor_id="system5/root",
+        )
+
+    assert any(
+        record.message == "skill_permission_denied"
+        and record.__dict__.get("team_id") == team_id
+        and record.__dict__.get("system_id") == system_id
+        and record.__dict__.get("skill_name") == "skill.denied"
+        and record.__dict__.get("actor_id") == "system5/root"
+        and record.__dict__.get("failed_rule_category") == "team_envelope"
+        for record in caplog.records
+    )

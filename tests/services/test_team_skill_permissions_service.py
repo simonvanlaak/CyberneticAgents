@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from uuid import uuid4
 
 import pytest
@@ -99,3 +100,36 @@ def test_remove_allowed_skill_cascades_system_grants() -> None:
 
     assert removed_count == 1
     assert systems_service.list_granted_skills(system_id) == []
+
+
+def test_team_envelope_logs_audit_events(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    team_id = _create_team_id()
+    caplog.set_level(logging.INFO, logger="src.cyberagent.services.teams")
+
+    teams_service.add_allowed_skill(
+        team_id=team_id,
+        skill_name="skill.audit",
+        actor_id="system5/root",
+    )
+    teams_service.remove_allowed_skill(
+        team_id=team_id,
+        skill_name="skill.audit",
+        actor_id="system5/root",
+    )
+
+    assert any(
+        record.message == "skill_envelope_add"
+        and record.__dict__.get("team_id") == team_id
+        and record.__dict__.get("skill_name") == "skill.audit"
+        and record.__dict__.get("actor_id") == "system5/root"
+        for record in caplog.records
+    )
+    assert any(
+        record.message == "skill_envelope_remove"
+        and record.__dict__.get("team_id") == team_id
+        and record.__dict__.get("skill_name") == "skill.audit"
+        and record.__dict__.get("actor_id") == "system5/root"
+        for record in caplog.records
+    )

@@ -221,6 +221,17 @@ def test_tool_secrets_present(monkeypatch: pytest.MonkeyPatch) -> None:
     assert secrets.get_tool_secrets("unknown_tool") == {}
 
 
+def test_tool_secrets_merge_required_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("BRAVE_API_KEY", "token")
+    monkeypatch.setenv("EXTRA_KEY", "extra")
+    monkeypatch.setenv("OP_SERVICE_ACCOUNT_TOKEN", "token")
+
+    result = secrets.get_tool_secrets("web_search", required_env=["EXTRA_KEY"])
+
+    assert result["BRAVE_API_KEY"] == "token"
+    assert result["EXTRA_KEY"] == "extra"
+
+
 def test_cli_tool_build_cli_args() -> None:
     tool = CliTool(_FakeExecutor("{}"))
 
