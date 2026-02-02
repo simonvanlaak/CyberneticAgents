@@ -13,8 +13,6 @@ from src.agents.system3 import (
     TasksAssignResponse,
     TasksCreateResponse,
 )
-from src.cyberagent.db.models.initiative import Initiative
-from src.cyberagent.db.models.task import Task
 
 
 class TestSystem3RefactoredImplementation:
@@ -59,7 +57,7 @@ class TestSystem3RefactoredImplementation:
             patch(
                 "src.cyberagent.services.initiatives._get_initiative"
             ) as mock_get_initiative,
-            patch("src.cyberagent.db.models.task.Task.add") as mock_task_add,
+            patch("src.cyberagent.db.models.task.Task.add"),
             patch("src.cyberagent.db.models.task.Task.to_prompt", return_value=["{}"]),
             patch.object(system3, "_get_systems_by_type") as mock_get_systems,
         ):
@@ -168,7 +166,7 @@ class TestSystem3RefactoredImplementation:
             patch(
                 "src.cyberagent.services.initiatives._get_initiative"
             ) as mock_get_initiative,
-            patch("src.cyberagent.db.models.task.Task.add") as mock_task_add,
+            patch("src.cyberagent.db.models.task.Task.add"),
             patch("src.cyberagent.db.models.task.Task.to_prompt", return_value=["{}"]),
             patch.object(system3, "_get_systems_by_type") as mock_get_systems,
         ):

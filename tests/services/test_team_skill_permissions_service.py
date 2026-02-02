@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import logging
 from uuid import uuid4
 
 import pytest

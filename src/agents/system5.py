@@ -1,3 +1,4 @@
+from autogen_agentchat.base import TaskResult
 from autogen_core import MessageContext, message_handler
 
 from src.agents.messages import (

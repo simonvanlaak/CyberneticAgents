@@ -155,7 +155,7 @@ class SystemBase(RoutedAgent):
                 import ast
 
                 message_trace_context = ast.literal_eval(message_trace_context_raw)
-            except:
+            except (ValueError, SyntaxError):
                 message_trace_context = {}
         else:
             message_trace_context = message_trace_context_raw

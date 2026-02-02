@@ -2,13 +2,13 @@
 # Tests for System3 (Control) agent with sequential processing
 
 import json
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from autogen_core import AgentId, MessageContext
 
 from src.agents.messages import InitiativeAssignMessage
-from src.agents.system3 import System3, TasksAssignResponse, TasksCreateResponse
+from src.agents.system3 import System3, TasksCreateResponse
 
 
 class TestSystem3SequentialProcessing:
@@ -55,11 +55,11 @@ class TestSystem3SequentialProcessing:
         system3.run.return_value = mock_response
 
         # Test the logic
-        assert system3._was_tool_called(mock_response, "assign_task") == True
+        assert system3._was_tool_called(mock_response, "assign_task")
 
         # Test scenario 2: Tool is not called
         system3._was_tool_called.return_value = False
-        assert system3._was_tool_called(mock_response, "assign_task") == False
+        assert not system3._was_tool_called(mock_response, "assign_task")
 
     @pytest.mark.asyncio
     async def test_system3_structured_output_without_tools(self):

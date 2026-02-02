@@ -5,13 +5,13 @@ Model Client Factory
 This module provides a factory for creating model clients for different LLM providers.
 """
 
-import os
-from typing import Any, Dict
+from typing import Any
 
 from autogen_core.models import ModelInfo
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 
 from src.llm_config import LLMConfig
+
 
 def create_model_client(config: LLMConfig) -> Any:
     """
@@ -32,6 +32,7 @@ def create_model_client(config: LLMConfig) -> Any:
         return _create_mistral_client(config)
     else:
         raise ValueError(f"Unsupported LLM provider: {config.provider}")
+
 
 def _create_groq_client(config: LLMConfig) -> OpenAIChatCompletionClient:
     """
@@ -55,6 +56,7 @@ def _create_groq_client(config: LLMConfig) -> OpenAIChatCompletionClient:
             structured_output=False,
         ),
     )
+
 
 def _create_mistral_client(config: LLMConfig) -> Any:
     """
@@ -110,6 +112,7 @@ def _create_mistral_client(config: LLMConfig) -> Any:
             ),
         )
 
+
 def get_available_providers() -> list:
     """
     Get list of available LLM providers.
@@ -118,6 +121,7 @@ def get_available_providers() -> list:
         List of available provider names
     """
     return ["groq", "mistral"]
+
 
 def validate_config(config: LLMConfig) -> bool:
     """
@@ -148,4 +152,6 @@ def validate_config(config: LLMConfig) -> bool:
         return False
 
     return True
+
+
 # Now let me update the VSM agent to use the new configuration system:

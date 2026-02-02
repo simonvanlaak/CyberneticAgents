@@ -1,5 +1,3 @@
-import os
-
 import pytest
 
 from src.cyberagent.tools.cli_executor import secrets

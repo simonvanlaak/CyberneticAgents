@@ -8,7 +8,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
 import pytest
 from autogen_core import AgentId

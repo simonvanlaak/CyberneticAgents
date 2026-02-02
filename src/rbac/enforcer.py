@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import os
 import logging
-from typing import Iterable
 
 import casbin
 import casbin_sqlalchemy_adapter

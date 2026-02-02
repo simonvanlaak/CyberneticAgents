@@ -2,12 +2,11 @@
 # Tests for System3 (Control) agent functionality
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 from autogen_core import MessageContext, AgentId
 
 from src.agents.system3 import System3, TasksCreateResponse, TasksAssignResponse
 from src.agents.messages import InitiativeAssignMessage
-from src.enums import Status
 
 
 class TestSystem3Basic:

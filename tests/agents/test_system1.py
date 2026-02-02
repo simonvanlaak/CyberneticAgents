@@ -2,12 +2,9 @@
 # Tests for System1 (Operations) agent functionality
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
-from autogen_core import MessageContext, AgentId
 
 from src.agents.system1 import System1
 from src.agents.messages import TaskAssignMessage, TaskReviewMessage
-from src.enums import Status
 
 
 class TestSystem1Basic:

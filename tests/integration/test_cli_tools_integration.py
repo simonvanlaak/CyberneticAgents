@@ -100,7 +100,6 @@ async def test_web_search_integration(mock_execute: AsyncMock) -> None:
 @pytest.mark.asyncio
 async def test_rbac_enforcement() -> None:
     """Test that RBAC prevents unauthorized tool usage."""
-    from src.rbac.enforcer import check_tool_permission
     from src.cyberagent.tools.cli_executor.cli_tool import CliTool
 
     # Mock RBAC to deny access

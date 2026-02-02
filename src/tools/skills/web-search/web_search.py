@@ -4,7 +4,6 @@
 import argparse
 import json
 import os
-import sys
 
 API_URL = "https://api.search.brave.com/res/v1/web/search"
 

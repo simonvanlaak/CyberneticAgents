@@ -3,11 +3,10 @@
 
 import pytest
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 from autogen_agentchat.base import TaskResult
 from autogen_agentchat.messages import TextMessage
-from autogen_core import MessageContext, AgentId
 
 from src.agents.system5 import System5
 from src.agents.messages import (
@@ -88,7 +87,7 @@ class TestSystem5StructuredResponses:
         )
 
         assert message.content == "Policy approved"
-        assert message.is_error == False
+        assert not message.is_error
         assert message.source == "System5/policy1"
 
 

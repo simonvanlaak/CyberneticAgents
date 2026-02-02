@@ -5,7 +5,7 @@ import pytest
 
 sys.modules.setdefault("langfuse", MagicMock())
 
-from src.agents.system4 import System4
+from src.agents.system4 import System4  # noqa: E402
 
 
 @pytest.mark.asyncio

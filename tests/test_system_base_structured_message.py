@@ -8,7 +8,7 @@ from pydantic import BaseModel
 
 sys.modules.setdefault("langfuse", MagicMock())
 
-from src.agents.system_base import SystemBase
+from src.agents.system_base import SystemBase  # noqa: E402
 
 
 class DummySystem(SystemBase):

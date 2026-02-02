@@ -1,5 +1,5 @@
 import json
-from typing import List, Tuple
+from typing import List
 
 from autogen_core import AgentId
 from sqlalchemy import Enum, ForeignKey, Integer, String, and_

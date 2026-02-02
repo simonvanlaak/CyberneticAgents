@@ -8,7 +8,6 @@ from src.tools.contact_user import (
     ContactUserArgsType,
     ContactUserTool,
     InformUserArgsType,
-    InformUserTool,
 )
 
 

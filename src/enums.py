@@ -4,7 +4,6 @@ Enum definitions for the CyberneticAgents system.
 """
 
 from enum import Enum as PyEnum
-from sqlalchemy import Enum
 
 
 class Status(PyEnum):

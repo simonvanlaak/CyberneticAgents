@@ -3,7 +3,6 @@ from __future__ import annotations
 import pytest
 
 from src.llm_config import (
-    LLMConfig,
     determine_system_type,
     get_model_for_system_type,
     load_llm_config,

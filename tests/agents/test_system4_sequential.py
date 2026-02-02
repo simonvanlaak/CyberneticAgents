@@ -2,9 +2,9 @@
 # Tests for System4 (Intelligence) agent with sequential processing
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 import src.agents.system4 as system4_module
-from autogen_core import MessageContext, AgentId
+from autogen_core import AgentId
 
 from src.agents.system4 import (
     InitiativeAdjustResponse,
