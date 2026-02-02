@@ -12,6 +12,7 @@ from src.cyberagent.services import recursions as recursions_service
 from src.cyberagent.services import systems as systems_service
 from src.cyberagent.services import teams as teams_service
 from src.enums import SystemType
+from src.rbac import skill_permissions_enforcer
 
 
 def _create_team_id(name: str | None = None) -> int:
@@ -65,6 +66,7 @@ def test_audit_logs_for_recursion_and_execution(
             skill_name="skill.audit",
             actor_id="system5/root",
         )
+        assert "skill.audit" in teams_service.list_allowed_skills(team_id)
 
     systems_service.add_skill_grant(
         system_id=origin_system_id,
@@ -76,10 +78,25 @@ def test_audit_logs_for_recursion_and_execution(
         skill_name="skill.audit",
         actor_id="system5/root",
     )
+    assert "skill.audit" in systems_service.list_granted_skills(origin_system_id)
+    assert "skill.audit" in systems_service.list_granted_skills(sub_system_id)
+    enforcer = skill_permissions_enforcer.get_enforcer()
+    assert enforcer.enforce(
+        f"system:{origin_system_id}",
+        str(parent_team_id),
+        "skill:skill.audit",
+        "allow",
+    )
+    assert enforcer.enforce(
+        f"system:{sub_system_id}",
+        str(sub_team_id),
+        "skill:skill.audit",
+        "allow",
+    )
 
     allowed, reason = systems_service.can_execute_skill(sub_system_id, "skill.audit")
 
-    assert allowed is True
+    assert allowed is True, f"Expected allow but got {reason}"
     assert reason is None
 
     assert any(

@@ -55,6 +55,8 @@ def add_allowed_skill(team_id: int, skill_name: str, actor_id: str) -> bool:
         _skill_resource(skill_name),
         "allow",
     )
+    if added:
+        enforcer.save_policy()
     log_event(
         "skill_envelope_add",
         service="teams",

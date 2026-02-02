@@ -9,6 +9,7 @@ import pytest
 from src.cyberagent.db import init_db
 from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.models.system import ensure_default_systems_for_team
+from src.cyberagent.db.models.recursion import Recursion
 from src.cyberagent.db.models.team import Team
 from src.rbac import skill_permissions_enforcer
 
@@ -40,9 +41,12 @@ def _clear_active_team_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OP_SERVICE_ACCOUNT_TOKEN", raising=False)
     skill_db = Path("data") / "skill_permissions.db"
     if skill_db.exists():
+        os.chmod(skill_db, 0o666)
         skill_db.unlink()
-    enforcer = getattr(skill_permissions_enforcer, "_global_enforcer", None)
-    if enforcer is not None:
-        enforcer.clear_policy()
-        enforcer.save_policy()
     skill_permissions_enforcer._global_enforcer = None
+    session = next(get_db())
+    try:
+        session.query(Recursion).delete()
+        session.commit()
+    finally:
+        session.close()

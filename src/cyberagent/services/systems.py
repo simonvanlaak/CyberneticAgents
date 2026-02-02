@@ -93,6 +93,8 @@ def add_skill_grant(system_id: int, skill_name: str, actor_id: str) -> bool:
         _skill_resource(skill_name),
         "allow",
     )
+    if added:
+        enforcer.save_policy()
     log_event(
         "skill_grant_add",
         service="systems",
@@ -194,29 +196,33 @@ def can_execute_skill(system_id: int, skill_name: str) -> tuple[bool, str | None
     team_id = _get_team_id_or_raise(system_id)
     enforcer = get_enforcer()
 
-    deny_category: str | None = None
+    def _evaluate_permission() -> str | None:
+        deny: str | None = None
+        if not _is_root_team(team_id):
+            if not enforcer.enforce(
+                _team_subject(team_id),
+                str(team_id),
+                _skill_resource(skill_name),
+                "allow",
+            ):
+                deny = "team_envelope"
+        if deny is None:
+            if not enforcer.enforce(
+                _system_subject(system_id),
+                str(team_id),
+                _skill_resource(skill_name),
+                "allow",
+            ):
+                deny = "system_grant"
+        if deny is None:
+            if not _check_recursion_chain(team_id, skill_name, enforcer):
+                deny = "system_grant"
+        return deny
 
-    if not _is_root_team(team_id):
-        if not enforcer.enforce(
-            _team_subject(team_id),
-            str(team_id),
-            _skill_resource(skill_name),
-            "allow",
-        ):
-            deny_category = "team_envelope"
-
-    if deny_category is None:
-        if not enforcer.enforce(
-            _system_subject(system_id),
-            str(team_id),
-            _skill_resource(skill_name),
-            "allow",
-        ):
-            deny_category = "system_grant"
-
-    if deny_category is None:
-        if not _check_recursion_chain(team_id, skill_name, enforcer):
-            deny_category = "system_grant"
+    deny_category = _evaluate_permission()
+    if deny_category is not None:
+        enforcer.load_policy()
+        deny_category = _evaluate_permission()
 
     allowed = deny_category is None
     log_event(

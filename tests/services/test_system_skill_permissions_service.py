@@ -96,6 +96,30 @@ def test_add_skill_grant_enforces_max_limit() -> None:
     assert len(systems_service.list_granted_skills(system_id)) == 5
 
 
+def test_can_execute_skill_reloads_policy_after_clear() -> None:
+    team_id = _create_team_id()
+    system_id = _create_system_id(team_id)
+
+    teams_service.add_allowed_skill(
+        team_id=team_id,
+        skill_name="skill.reload",
+        actor_id="system5/root",
+    )
+    systems_service.add_skill_grant(
+        system_id=system_id,
+        skill_name="skill.reload",
+        actor_id="system5/root",
+    )
+
+    enforcer = skill_permissions_enforcer.get_enforcer()
+    enforcer.clear_policy()
+
+    allowed, reason = systems_service.can_execute_skill(system_id, "skill.reload")
+
+    assert allowed is True
+    assert reason is None
+
+
 def test_can_execute_skill_deny_precedence() -> None:
     team_id = _create_team_id()
     system_id = _create_system_id(team_id)
