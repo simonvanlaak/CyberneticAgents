@@ -185,3 +185,73 @@ async def test_system5_rejects_cross_team_system_grant(
 
     assert response.is_error is True
     assert systems_service.list_granted_skills(other_system_id) == []
+
+
+@pytest.mark.asyncio
+async def test_system5_rejects_grant_outside_envelope(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    team_id = _create_team_id()
+    system_id = _create_system_id(team_id)
+    monkeypatch.setenv("CYBERAGENT_ACTIVE_TEAM_ID", str(team_id))
+    system5 = System5("System5/policy1")
+
+    message = SystemSkillGrantUpdateMessage(
+        system_id=system_id,
+        skill_name="skill.denied",
+        action="add",
+        content="Grant skill.denied to system.",
+        source="System3/control1",
+    )
+
+    response = await system5.handle_system_skill_grant_update_message(
+        message, _make_context()
+    )
+
+    assert response.is_error is True
+    assert systems_service.list_granted_skills(system_id) == []
+
+
+@pytest.mark.asyncio
+async def test_system5_rejects_grant_over_limit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    team_id = _create_team_id()
+    system_id = _create_system_id(team_id)
+    monkeypatch.setenv("CYBERAGENT_ACTIVE_TEAM_ID", str(team_id))
+    system5 = System5("System5/policy1")
+
+    for index in range(6):
+        teams_service.add_allowed_skill(
+            team_id=team_id,
+            skill_name=f"skill.limit.{index}",
+            actor_id="system5/root",
+        )
+
+    for index in range(5):
+        message = SystemSkillGrantUpdateMessage(
+            system_id=system_id,
+            skill_name=f"skill.limit.{index}",
+            action="add",
+            content=f"Grant skill.limit.{index} to system.",
+            source="System3/control1",
+        )
+        response = await system5.handle_system_skill_grant_update_message(
+            message, _make_context()
+        )
+        assert response.is_error is False
+
+    message = SystemSkillGrantUpdateMessage(
+        system_id=system_id,
+        skill_name="skill.limit.5",
+        action="add",
+        content="Grant skill.limit.5 to system.",
+        source="System3/control1",
+    )
+
+    response = await system5.handle_system_skill_grant_update_message(
+        message, _make_context()
+    )
+
+    assert response.is_error is True
+    assert len(systems_service.list_granted_skills(system_id)) == 5

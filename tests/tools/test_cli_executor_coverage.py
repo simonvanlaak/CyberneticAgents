@@ -405,6 +405,8 @@ def test_load_skill_definitions_reads_frontmatter(tmp_path: Path) -> None:
     assert skill.tool_name == "web_search"
     assert skill.subcommand == "run"
     assert skill.required_env == ("BRAVE_API_KEY",)
+    assert skill.input_schema["properties"]["query"]["type"] == "string"
+    assert skill.output_schema["properties"]["results"]["type"] == "array"
 
 
 def test_load_skill_instructions_reads_body(tmp_path: Path) -> None:
@@ -742,6 +744,6 @@ async def test_cli_tool_execute_requires_agent_id_for_skill() -> None:
 
 
 def test_set_executor_timeout_rejects_zero() -> None:
-    # Guard against invalid timeout input in audit coverage runs.
+    # Guard against invalid timeout input during coverage runs.
     with pytest.raises(ValueError, match="Timeout must be greater"):
         _set_executor_timeout(object(), 0)
