@@ -37,6 +37,20 @@ def init_db():
     from src.cyberagent.db.models.task import Task
     from src.cyberagent.db.models.team import Team
 
+    _ = (
+        Initiative,
+        Policy,
+        Procedure,
+        ProcedureRun,
+        ProcedureTask,
+        Purpose,
+        Recursion,
+        Strategy,
+        System,
+        Task,
+        Team,
+    )
+
     # Create all tables
     Base.metadata.create_all(bind=engine)
     _ensure_team_last_active_column()

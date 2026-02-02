@@ -1,9 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Iterator
-
-import pytest
 from sqlalchemy.orm import Session
 
 from src.cyberagent.db.db_utils import get_db
