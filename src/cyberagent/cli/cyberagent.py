@@ -31,6 +31,7 @@ from autogen_core import AgentId
 
 from src.agents.messages import UserMessage
 from src.cyberagent.cli.headless import run_headless_session
+from src.cyberagent.cli.suggestion_queue import enqueue_suggestion
 from src.cyberagent.cli.status import main as status_main
 from src.cli_session import get_answered_questions, get_pending_questions
 from src.cyberagent.db.db_utils import get_db
@@ -49,7 +50,7 @@ CLI_LOG_STATE_FILE = Path("logs/cli_last_seen.json")
 SERVE_COMMAND = "serve"
 TEST_START_ENV = "CYBERAGENT_TEST_NO_RUNTIME"
 TEST_START_ENV = "CYBERAGENT_TEST_NO_RUNTIME"
-SUGGEST_COMMAND = 'cyberagent suggest --payload "Describe the task"'
+SUGGEST_COMMAND = 'cyberagent suggest "Describe the task"'
 START_COMMAND = "cyberagent start"
 INBOX_COMMAND = "cyberagent inbox"
 WATCH_COMMAND = "cyberagent watch"
@@ -100,6 +101,12 @@ def build_parser() -> argparse.ArgumentParser:
         "suggest", help="Send a suggestion payload to System4."
     )
     suggest_parser.add_argument(
+        "message",
+        nargs="?",
+        type=str,
+        help="Suggestion payload (positional).",
+    )
+    suggest_parser.add_argument(
         "--payload", "-p", type=str, help="Inline JSON/YAML payload."
     )
     suggest_parser.add_argument(
@@ -127,6 +134,17 @@ def build_parser() -> argparse.ArgumentParser:
     logs_parser = subparsers.add_parser("logs", help="Inspect runtime logs.")
     logs_parser.add_argument(
         "--filter", "-i", type=str, help="Substring filter for log lines."
+    )
+    logs_parser.add_argument(
+        "--level",
+        "-l",
+        action="append",
+        help="Filter by log level (repeatable or comma-separated).",
+    )
+    logs_parser.add_argument(
+        "--errors",
+        action="store_true",
+        help="Shortcut for --level ERROR,CRITICAL.",
     )
     logs_parser.add_argument(
         "--follow", "-f", action="store_true", help="Tail the logs."
@@ -210,6 +228,52 @@ async def _handle_start(args: argparse.Namespace) -> int:
     return 0
 
 
+def _ensure_background_runtime() -> int | None:
+    if _runtime_pid_is_running():
+        return _load_runtime_pid()
+    return _start_runtime_background()
+
+
+def _runtime_pid_is_running() -> bool:
+    pid = _load_runtime_pid()
+    if pid is None:
+        return False
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def _load_runtime_pid() -> int | None:
+    if not RUNTIME_PID_FILE.exists():
+        return None
+    try:
+        return int(RUNTIME_PID_FILE.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
+
+
+def _start_runtime_background() -> int | None:
+    if os.environ.get(TEST_START_ENV) == "1":
+        return None
+    init_db()
+    team_id = get_or_create_last_team_id()
+    cmd = [sys.executable, "-m", "src.cyberagent.cli.cyberagent", SERVE_COMMAND]
+    env = os.environ.copy()
+    env["CYBERAGENT_ACTIVE_TEAM_ID"] = str(team_id)
+    proc = subprocess.Popen(
+        cmd,
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.STDOUT,
+        close_fds=True,
+    )
+    RUNTIME_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+    RUNTIME_PID_FILE.write_text(str(proc.pid), encoding="utf-8")
+    return proc.pid
+
+
 async def _handle_stop(_: argparse.Namespace) -> int:
     await stop_runtime()
     print("Runtime stopped.")
@@ -249,7 +313,14 @@ def _handle_suggest(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
-    asyncio.run(_send_suggestion(parsed))
+    runtime_pid = _ensure_background_runtime()
+    enqueue_suggestion(parsed.payload_text)
+    if runtime_pid is not None:
+        print(f"Runtime active in background (pid {runtime_pid}).")
+    print("Suggestion queued for System4.")
+    print(
+        f"Next: run {INBOX_HINT_COMMAND} or {WATCH_HINT_COMMAND} to check for incoming messages."
+    )
     return 0
 
 
@@ -302,7 +373,11 @@ def _handle_logs(args: argparse.Namespace) -> int:
         return 0
     target = log_files[-1]
     lines = target.read_text(encoding="utf-8", errors="ignore").splitlines()
-    filtered = _filter_logs(lines, args.filter, args.limit)
+    levels = _resolve_log_levels(args.level, args.errors)
+    if levels is None:
+        print("Invalid log level. Use: DEBUG, INFO, WARNING, ERROR, CRITICAL.")
+        return 2
+    filtered = _filter_logs(lines, args.filter, args.limit, levels)
     for line in filtered:
         print(line)
     if args.follow:
@@ -312,7 +387,7 @@ def _handle_logs(args: argparse.Namespace) -> int:
                 while True:
                     line = handle.readline()
                     if line:
-                        if _matches_filter(line, args.filter):
+                        if _matches_filter(line, args.filter, levels):
                             print(line.rstrip("\n"))
                     else:
                         time.sleep(0.3)
@@ -403,16 +478,58 @@ def _lookup_subparser(
 
 
 def _filter_logs(
-    lines: Sequence[str], pattern: str | None, limit: int
+    lines: Sequence[str],
+    pattern: str | None,
+    limit: int,
+    levels: set[str] | None,
 ) -> Sequence[str]:
-    filtered = [line for line in lines if _matches_filter(line, pattern)]
+    filtered = [line for line in lines if _matches_filter(line, pattern, levels)]
     return filtered[-limit:]
 
 
-def _matches_filter(line: str, pattern: str | None) -> bool:
+def _matches_filter(line: str, pattern: str | None, levels: set[str] | None) -> bool:
     if pattern is None:
+        text_match = True
+    else:
+        text_match = pattern.lower() in line.lower()
+    if not text_match:
+        return False
+    if levels is None:
         return True
-    return pattern.lower() in line.lower()
+    level = _extract_log_level(line)
+    if level is None:
+        return False
+    return level.upper() in levels
+
+
+def _normalize_log_levels(level_args: Sequence[str] | None) -> set[str] | None:
+    if not level_args:
+        return None
+    allowed = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
+    normalized: set[str] = set()
+    for arg in level_args:
+        for raw in arg.split(","):
+            token = raw.strip().upper()
+            if not token:
+                continue
+            if token not in allowed:
+                return None
+            normalized.add(token)
+    return normalized
+
+
+def _resolve_log_levels(
+    level_args: Sequence[str] | None, errors_only: bool
+) -> set[str] | None:
+    levels = _normalize_log_levels(level_args)
+    if levels is None:
+        return None
+    if errors_only:
+        error_levels = {"ERROR", "CRITICAL"}
+        if levels is None:
+            return error_levels
+        return levels | error_levels
+    return levels
 
 
 def _check_recent_runtime_errors(command: str | None) -> None:
@@ -495,7 +612,9 @@ def _safe_int(value: object, default: int) -> int:
 
 def _parse_suggestion_args(args: argparse.Namespace) -> ParsedSuggestion:
     raw = ""
-    if args.payload:
+    if args.message:
+        raw = args.message
+    elif args.payload:
         raw = args.payload
     elif args.file:
         if args.file == "-":
@@ -534,10 +653,12 @@ async def _send_suggestion(parsed: ParsedSuggestion) -> None:
     message = UserMessage(content=parsed.payload_text, source="User")
     try:
         await asyncio.wait_for(
-            runtime.send_message(
-                message=message,
-                recipient=SYSTEM4_AGENT_ID,
-                sender=AgentId(type="UserAgent", key="root"),
+            asyncio.shield(
+                runtime.send_message(
+                    message=message,
+                    recipient=SYSTEM4_AGENT_ID,
+                    sender=AgentId(type="UserAgent", key="root"),
+                )
             ),
             timeout=SUGGEST_SEND_TIMEOUT_SECONDS,
         )

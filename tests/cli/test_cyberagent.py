@@ -70,7 +70,7 @@ def test_status_command_delegates_to_status_main(
 
 
 def test_parse_suggestion_requires_payload(monkeypatch: pytest.MonkeyPatch) -> None:
-    args = argparse.Namespace(payload=None, file=None, format="json")
+    args = argparse.Namespace(message=None, payload=None, file=None, format="json")
     fake_stdin = io.StringIO("")
     fake_stdin.isatty = lambda: True
     monkeypatch.setattr(sys, "stdin", fake_stdin)
@@ -79,16 +79,26 @@ def test_parse_suggestion_requires_payload(monkeypatch: pytest.MonkeyPatch) -> N
 
 
 def test_parse_suggestion_json_payload() -> None:
-    args = argparse.Namespace(payload='{"foo": "bar"}', file=None, format="json")
+    args = argparse.Namespace(
+        message=None, payload='{"foo": "bar"}', file=None, format="json"
+    )
     parsed = cyberagent._parse_suggestion_args(args)
     assert parsed.payload_object == {"foo": "bar"}
     assert '"foo": "bar"' in parsed.payload_text
 
 
+def test_parse_suggestion_positional_message() -> None:
+    args = argparse.Namespace(
+        message="Run this and that", payload=None, file=None, format="json"
+    )
+    parsed = cyberagent._parse_suggestion_args(args)
+    assert parsed.payload_object == "Run this and that"
+
+
 def test_handle_suggest_invalid_payload_prints_guidance(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    args = argparse.Namespace(payload=None, file=None, format="json")
+    args = argparse.Namespace(message=None, payload=None, file=None, format="json")
     fake_stdin = io.StringIO("")
     fake_stdin.isatty = lambda: True
     monkeypatch.setattr(sys, "stdin", fake_stdin)
@@ -96,8 +106,29 @@ def test_handle_suggest_invalid_payload_prints_guidance(
     captured = capsys.readouterr()
     assert exit_code == 2
     assert "Invalid payload" in captured.err
-    assert "--payload" in captured.err
+    assert "cyberagent suggest" in captured.err
     assert "--file" in captured.err
+
+
+def test_handle_suggest_enqueues_payload(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    recorded: dict[str, object] = {}
+
+    def fake_enqueue(payload_text: str) -> None:
+        recorded["payload"] = payload_text
+
+    monkeypatch.setattr(cyberagent, "enqueue_suggestion", fake_enqueue)
+    monkeypatch.setattr(cyberagent, "_ensure_background_runtime", lambda: 1234)
+
+    args = argparse.Namespace(message=None, payload="hello", file=None, format="json")
+    exit_code = cyberagent._handle_suggest(args)
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert recorded["payload"] == "hello"
+    assert "Runtime active in background (pid 1234)." in output
+    assert "Suggestion queued for System4." in output
 
 
 def test_handle_inbox_prints_entries(
@@ -149,8 +180,28 @@ async def test_handle_watch_prints_pending(
 
 def test_filter_logs_applies_pattern_and_limit() -> None:
     lines = ["alpha", "Beta", "gamma", "delta"]
-    filtered = cyberagent._filter_logs(lines, "a", 2)
+    filtered = cyberagent._filter_logs(lines, "a", 2, None)
     assert filtered == ["gamma", "delta"]
+
+
+def test_filter_logs_with_levels() -> None:
+    lines = [
+        "2025-01-01 00:00:00.000 INFO [x] ok",
+        "2025-01-01 00:00:01.000 WARNING [x] warn",
+        "2025-01-01 00:00:02.000 ERROR [x] boom",
+    ]
+    levels = cyberagent._normalize_log_levels(["error,warning"])
+    assert levels == {"ERROR", "WARNING"}
+    filtered = cyberagent._filter_logs(lines, None, 10, levels)
+    assert filtered == [
+        "2025-01-01 00:00:01.000 WARNING [x] warn",
+        "2025-01-01 00:00:02.000 ERROR [x] boom",
+    ]
+
+
+def test_resolve_log_levels_errors_only() -> None:
+    levels = cyberagent._resolve_log_levels(None, True)
+    assert levels == {"ERROR", "CRITICAL"}
 
 
 def test_check_recent_runtime_errors_counts_new(
@@ -534,3 +585,54 @@ async def test_send_suggestion_handles_output_parse_failed(
     output = capsys.readouterr().out
     assert "could not be parsed" in output
     assert stopped["value"] is True
+
+
+@pytest.mark.asyncio
+async def test_send_suggestion_timeout_does_not_cancel_runtime_send(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class DummyRuntime:
+        def __init__(self) -> None:
+            self.cancelled = False
+            self.task: asyncio.Task[None] | None = None
+
+        async def send_message(self, **kwargs: object) -> None:
+            async def _run() -> None:
+                await asyncio.sleep(0.05)
+
+            self.task = asyncio.create_task(_run())
+            try:
+                await self.task
+            except asyncio.CancelledError:
+                self.cancelled = True
+                raise
+
+    async def fake_register_systems() -> None:
+        return None
+
+    class DummyEnforcer:
+        def clear_policy(self) -> None:
+            return None
+
+    async def fake_stop_runtime_with_timeout() -> None:
+        return None
+
+    runtime = DummyRuntime()
+    monkeypatch.setattr(cyberagent, "init_db", lambda: None)
+    monkeypatch.setattr(cyberagent, "register_systems", fake_register_systems)
+    monkeypatch.setattr(cyberagent, "get_enforcer", lambda: DummyEnforcer())
+    monkeypatch.setattr(cyberagent, "get_runtime", lambda: runtime)
+    monkeypatch.setattr(
+        cyberagent, "_stop_runtime_with_timeout", fake_stop_runtime_with_timeout
+    )
+    monkeypatch.setattr(cyberagent, "SUGGEST_SEND_TIMEOUT_SECONDS", 0.01)
+
+    parsed = cyberagent.ParsedSuggestion(
+        payload_text="Run a full tool test",
+        payload_object="Run a full tool test",
+    )
+
+    await cyberagent._send_suggestion(parsed)
+    assert runtime.task is not None
+    await runtime.task
+    assert runtime.cancelled is False
