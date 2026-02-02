@@ -171,9 +171,9 @@ class System5(SystemBase):
         """
         policy_prompt = []
         if message.policy_id:
-            policy_prompt = policy_service.get_policy_by_id(
-                message.policy_id
-            ).to_prompt()
+            policy = policy_service.get_policy_by_id(message.policy_id)
+            if policy is not None:
+                policy_prompt = policy.to_prompt()
         message_specific_prompts = [
             "## POLICY SUGGESTION REVIEW",
             "You have received a policy change suggestion from another system.",

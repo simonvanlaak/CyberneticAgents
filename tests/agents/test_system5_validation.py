@@ -2,6 +2,7 @@
 # Tests to validate System5 (Policy) agent is correctly implemented
 
 import pytest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from autogen_core import MessageContext, AgentId
 
@@ -164,6 +165,31 @@ class TestSystem5Integration:
         trace_context = {"trace_id": "abc123", "span_id": "def456"}
         system5 = System5("System5/policy1", trace_context=trace_context)
         assert system5.trace_context == trace_context
+
+
+@pytest.mark.asyncio
+async def test_system5_policy_suggestion_missing_policy(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    system5 = System5("System5/root")
+    system5.run = AsyncMock(return_value=object())
+    system5._get_structured_message = MagicMock(
+        return_value=ConfirmationMessage(
+            content="ok", is_error=False, source="System5/root"
+        )
+    )
+    monkeypatch.setattr(
+        "src.agents.system5.policy_service.get_policy_by_id", lambda _pid: None
+    )
+
+    message = PolicySuggestionMessage(
+        policy_id=123,
+        content="Test suggestion",
+        source="System4/root",
+    )
+    ctx = SimpleNamespace()
+    result = await system5.handle_policy_suggestion_message(message, ctx)
+    assert result.content == "ok"
 
 
 @pytest.mark.asyncio

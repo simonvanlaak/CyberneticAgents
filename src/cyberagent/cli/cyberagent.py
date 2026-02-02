@@ -49,13 +49,11 @@ CLI_LOG_STATE_FILE = Path("logs/cli_last_seen.json")
 SERVE_COMMAND = "serve"
 TEST_START_ENV = "CYBERAGENT_TEST_NO_RUNTIME"
 TEST_START_ENV = "CYBERAGENT_TEST_NO_RUNTIME"
-SUGGEST_COMMAND = (
-    'python -m src.cyberagent.cli.cyberagent suggest --payload "Describe the task"'
-)
-START_COMMAND = "python -m src.cyberagent.cli.cyberagent start"
-INBOX_COMMAND = "python -m src.cyberagent.cli.cyberagent inbox"
-WATCH_COMMAND = "python -m src.cyberagent.cli.cyberagent watch"
-STATUS_COMMAND = "python -m src.cyberagent.cli.cyberagent status"
+SUGGEST_COMMAND = 'cyberagent suggest --payload "Describe the task"'
+START_COMMAND = "cyberagent start"
+INBOX_COMMAND = "cyberagent inbox"
+WATCH_COMMAND = "cyberagent watch"
+STATUS_COMMAND = "cyberagent status"
 INBOX_HINT_COMMAND = "cyberagent inbox"
 WATCH_HINT_COMMAND = "cyberagent watch"
 SUGGEST_SHUTDOWN_TIMEOUT_SECONDS = 1.0
@@ -242,12 +240,11 @@ def _handle_suggest(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         print(
-            "- File payload: python -m src.cyberagent.cli.cyberagent suggest --file payload.json",
+            "- File payload: cyberagent suggest --file payload.json",
             file=sys.stderr,
         )
         print(
-            "- YAML payload: python -m src.cyberagent.cli.cyberagent suggest "
-            "--file payload.yaml --format yaml",
+            "- YAML payload: cyberagent suggest --file payload.yaml --format yaml",
             file=sys.stderr,
         )
         return 2

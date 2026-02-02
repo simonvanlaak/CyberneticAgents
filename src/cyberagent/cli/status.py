@@ -7,10 +7,8 @@ from typing import Iterable, Optional
 from src.cyberagent.db.init_db import get_database_path, init_db
 
 TERMINAL_STATUSES = {"completed", "approved", "rejected"}
-START_COMMAND = "python -m src.cyberagent.cli.cyberagent start"
-SUGGEST_COMMAND = (
-    'python -m src.cyberagent.cli.cyberagent suggest --payload "Describe the task"'
-)
+START_COMMAND = "cyberagent start"
+SUGGEST_COMMAND = 'cyberagent suggest --payload "Describe the task"'
 
 
 @dataclass(frozen=True)
