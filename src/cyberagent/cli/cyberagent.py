@@ -55,6 +55,9 @@ START_COMMAND = "python -m src.cyberagent.cli.cyberagent start"
 INBOX_COMMAND = "python -m src.cyberagent.cli.cyberagent inbox"
 WATCH_COMMAND = "python -m src.cyberagent.cli.cyberagent watch"
 STATUS_COMMAND = "python -m src.cyberagent.cli.cyberagent status"
+INBOX_HINT_COMMAND = "cyberagent inbox"
+WATCH_HINT_COMMAND = "cyberagent watch"
+SUGGEST_SHUTDOWN_TIMEOUT_SECONDS = 1.0
 
 
 @dataclass(frozen=True)
@@ -454,6 +457,9 @@ async def _send_suggestion(parsed: ParsedSuggestion) -> None:
             sender=AgentId(type="UserAgent", key="root"),
         )
         print("Suggestion delivered to System4.")
+        print(
+            f"Next: run {INBOX_HINT_COMMAND} or {WATCH_HINT_COMMAND} to check for incoming messages."
+        )
     except Exception as exc:  # pragma: no cover - safety net for runtime errors
         if getattr(exc, "code", None) == "output_parse_failed":
             print(
@@ -463,7 +469,14 @@ async def _send_suggestion(parsed: ParsedSuggestion) -> None:
             return
         raise
     finally:
-        await stop_runtime()
+        await _stop_runtime_with_timeout()
+
+
+async def _stop_runtime_with_timeout() -> None:
+    try:
+        await asyncio.wait_for(stop_runtime(), timeout=SUGGEST_SHUTDOWN_TIMEOUT_SECONDS)
+    except asyncio.TimeoutError:
+        print("Runtime shutdown timed out; exiting anyway.")
 
 
 _HANDLERS = {

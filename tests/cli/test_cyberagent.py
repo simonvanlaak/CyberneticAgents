@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import io
 import os
 import subprocess
@@ -319,6 +320,78 @@ async def test_send_suggestion_sets_user_sender(
     await cyberagent._send_suggestion(parsed)
 
     assert captured["sender"] == AgentId(type="UserAgent", key="root")
+
+
+@pytest.mark.asyncio
+async def test_send_suggestion_prints_inbox_hint(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    stopped: dict[str, bool] = {"value": False}
+
+    class DummyRuntime:
+        async def send_message(
+            self, message, recipient, sender=None, **kwargs
+        ):  # noqa: ANN001
+            return None
+
+    async def fake_register() -> None:
+        return None
+
+    async def fake_stop() -> None:
+        stopped["value"] = True
+
+    class DummyEnforcer:
+        def clear_policy(self) -> None:
+            return None
+
+    monkeypatch.setattr(cyberagent, "get_runtime", lambda: DummyRuntime())
+    monkeypatch.setattr(cyberagent, "register_systems", fake_register)
+    monkeypatch.setattr(cyberagent, "stop_runtime", fake_stop)
+    monkeypatch.setattr(cyberagent, "get_enforcer", lambda: DummyEnforcer())
+    monkeypatch.setattr(cyberagent, "init_db", lambda: None)
+
+    parsed = cyberagent.ParsedSuggestion(payload_text="hi", payload_object="hi")
+    await cyberagent._send_suggestion(parsed)
+
+    output = capsys.readouterr().out
+    assert "Suggestion delivered to System4." in output
+    assert "cyberagent inbox" in output
+    assert "cyberagent watch" in output
+    assert stopped["value"] is True
+
+
+@pytest.mark.asyncio
+async def test_send_suggestion_shutdown_timeout_exits(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    class DummyRuntime:
+        async def send_message(
+            self, message, recipient, sender=None, **kwargs
+        ):  # noqa: ANN001
+            return None
+
+    async def fake_register() -> None:
+        return None
+
+    async def slow_stop() -> None:
+        await asyncio.Event().wait()
+
+    class DummyEnforcer:
+        def clear_policy(self) -> None:
+            return None
+
+    monkeypatch.setattr(cyberagent, "get_runtime", lambda: DummyRuntime())
+    monkeypatch.setattr(cyberagent, "register_systems", fake_register)
+    monkeypatch.setattr(cyberagent, "stop_runtime", slow_stop)
+    monkeypatch.setattr(cyberagent, "get_enforcer", lambda: DummyEnforcer())
+    monkeypatch.setattr(cyberagent, "init_db", lambda: None)
+    monkeypatch.setattr(cyberagent, "SUGGEST_SHUTDOWN_TIMEOUT_SECONDS", 0.01)
+
+    parsed = cyberagent.ParsedSuggestion(payload_text="hi", payload_object="hi")
+    await asyncio.wait_for(cyberagent._send_suggestion(parsed), timeout=0.2)
+
+    output = capsys.readouterr().out
+    assert "Runtime shutdown timed out" in output
 
 
 @pytest.mark.asyncio
