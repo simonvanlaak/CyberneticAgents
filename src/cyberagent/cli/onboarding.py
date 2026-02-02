@@ -9,15 +9,24 @@ from pathlib import Path
 import shutil
 import subprocess
 import time
+import urllib.request
 
 from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.init_db import get_database_path, init_db
 from src.cyberagent.db.models.team import Team
+from src.cyberagent.tools.cli_executor.skill_loader import (
+    SkillDefinition,
+    load_skill_definitions,
+)
 from src.cyberagent.tools.cli_executor.skill_runtime import DEFAULT_SKILLS_ROOT
 
 LOGS_DIR = Path("logs")
 TECH_ONBOARDING_STATE_FILE = Path("logs/technical_onboarding.json")
 VAULT_NAME = "CyberneticAgents"
+NETWORK_SKILL_NAMES = {"web-fetch", "web-search", "git-readonly-sync"}
+TOOL_SECRET_DOC_HINTS = {
+    "BRAVE_API_KEY": "src/tools/skills/web-search/SKILL.md",
+}
 
 
 def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
@@ -56,6 +65,7 @@ def run_technical_onboarding_checks() -> bool:
         _check_onepassword_auth,
         _check_required_tool_secrets,
         _check_skill_root_access,
+        _check_network_access,
     ]
     for check in checks:
         if not check():
@@ -78,6 +88,7 @@ def _collect_technical_onboarding_state() -> dict[str, object]:
         "has_langfuse_secret": bool(os.environ.get("LANGFUSE_SECRET_KEY")),
         "has_langsmith": bool(os.environ.get("LANGSMITH_API_KEY")),
         "has_onepassword_auth": _has_onepassword_auth(),
+        "has_op_session": bool(_get_onepassword_session_env()),
         "skills_root_exists": DEFAULT_SKILLS_ROOT.exists(),
         "docker_path": shutil.which("docker") or "",
         "data_dir_writable": _is_path_writable(Path("data")),
@@ -206,14 +217,23 @@ def _check_docker_available() -> bool:
 
 
 def _has_onepassword_auth() -> bool:
-    return bool(os.getenv("OP_SERVICE_ACCOUNT_TOKEN"))
+    return bool(os.getenv("OP_SERVICE_ACCOUNT_TOKEN")) or bool(
+        _get_onepassword_session_env()
+    )
+
+
+def _get_onepassword_session_env() -> str | None:
+    for key, value in os.environ.items():
+        if key.startswith("OP_SESSION_") and value:
+            return value
+    return None
 
 
 def _check_onepassword_auth() -> bool:
     if _has_onepassword_auth():
         return True
-    print("Missing 1Password service account token.")
-    print("Export OP_SERVICE_ACCOUNT_TOKEN and re-run onboarding.")
+    print("Missing 1Password authentication (service account or session).")
+    print("Export OP_SERVICE_ACCOUNT_TOKEN or OP_SESSION_* and re-run onboarding.")
     return False
 
 
@@ -230,30 +250,45 @@ def _format_op_signin_hint() -> list[str]:
 
 
 def _check_required_tool_secrets() -> bool:
-    if not os.environ.get("BRAVE_API_KEY"):
+    skills = load_skill_definitions(DEFAULT_SKILLS_ROOT)
+    required_env = sorted(
+        {env for skill in skills for env in skill.required_env if env}
+    )
+    if not required_env:
+        return True
+
+    required_by_env: dict[str, list[str]] = {}
+    for skill in skills:
+        for env in skill.required_env:
+            required_by_env.setdefault(env, []).append(skill.name)
+
+    for env_name in required_env:
+        if os.environ.get(env_name):
+            continue
         loaded = _load_secret_from_1password(
             vault_name=VAULT_NAME,
-            item_name="BRAVE_API_KEY",
+            item_name=env_name,
             field_label="credential",
         )
         if loaded:
-            print(f"Found BRAVE_API_KEY in 1Password vault {VAULT_NAME}.")
-            return True
-        print("Missing BRAVE_API_KEY for web-search.")
+            print(f"Found {env_name} in 1Password vault {VAULT_NAME}.")
+            continue
+        skills_list = ", ".join(sorted(required_by_env.get(env_name, [])))
+        print(f"Missing {env_name} for required tools: {skills_list}.")
         print(
             "CyberneticAgents stores tool secrets in 1Password. Create a vault named "
-            f"'{VAULT_NAME}' and add an item named BRAVE_API_KEY."
+            f"'{VAULT_NAME}' and add an item named {env_name}."
         )
         print("Field name should be 'credential'.")
-        print(
-            "See docs for creating a Brave API key in "
-            "`src/tools/skills/web-search/SKILL.md`."
-        )
-        return _prompt_store_secret_in_1password(
-            env_name="BRAVE_API_KEY",
-            description="Brave Search API key",
-            doc_hint="src/tools/skills/web-search/SKILL.md",
-        )
+        doc_hint = TOOL_SECRET_DOC_HINTS.get(env_name)
+        if doc_hint:
+            print(f"See docs in `{doc_hint}`.")
+        if not _prompt_store_secret_in_1password(
+            env_name=env_name,
+            description=f"{env_name} secret",
+            doc_hint=doc_hint,
+        ):
+            return False
     return True
 
 
@@ -265,6 +300,32 @@ def _check_skill_root_access() -> bool:
         print(f"Skills root is not readable: {DEFAULT_SKILLS_ROOT}")
         return False
     return True
+
+
+def _check_network_access() -> bool:
+    skills = load_skill_definitions(DEFAULT_SKILLS_ROOT)
+    if not _skills_require_network(skills):
+        return True
+    if _probe_network_access():
+        return True
+    skills_list = ", ".join(
+        sorted({skill.name for skill in skills if skill.name in NETWORK_SKILL_NAMES})
+    )
+    print("Network access is required for web research tools " f"({skills_list}).")
+    print("Enable outbound network access and re-run onboarding.")
+    return False
+
+
+def _skills_require_network(skills: list[SkillDefinition]) -> bool:
+    return any(skill.name in NETWORK_SKILL_NAMES for skill in skills)
+
+
+def _probe_network_access() -> bool:
+    try:
+        with urllib.request.urlopen("https://example.com", timeout=3) as response:
+            return response.status < 500
+    except OSError:
+        return False
 
 
 def _warn_optional_api_keys() -> None:

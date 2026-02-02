@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 import pytest
 
 from src.cyberagent.cli import onboarding as onboarding_cli
 from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.models.team import Team
+from src.cyberagent.tools.cli_executor.skill_loader import SkillDefinition
 
 
 def _clear_teams() -> None:
@@ -99,6 +101,7 @@ def test_technical_onboarding_requires_groq_key(
     monkeypatch.setattr(onboarding_cli, "_check_path_writable", lambda *_: True)
     monkeypatch.setattr(onboarding_cli, "_check_docker_available", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_check_skill_root_access", lambda: True)
+    monkeypatch.setattr(onboarding_cli, "_check_network_access", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_check_required_tool_secrets", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_has_onepassword_auth", lambda: True)
     monkeypatch.setattr(
@@ -123,6 +126,7 @@ def test_technical_onboarding_requires_onepassword_auth(
     monkeypatch.setattr(onboarding_cli, "_check_path_writable", lambda *_: True)
     monkeypatch.setattr(onboarding_cli, "_check_docker_available", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_check_skill_root_access", lambda: True)
+    monkeypatch.setattr(onboarding_cli, "_check_network_access", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_check_required_tool_secrets", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_has_onepassword_auth", lambda: False)
     monkeypatch.setattr(
@@ -134,7 +138,7 @@ def test_technical_onboarding_requires_onepassword_auth(
 
     assert onboarding_cli.run_technical_onboarding_checks() is False
     captured = capsys.readouterr().out
-    assert "1Password service account token" in captured
+    assert "1Password authentication" in captured
 
 
 def test_onepassword_hint_when_op_missing(
@@ -146,6 +150,15 @@ def test_onepassword_hint_when_op_missing(
     assert onboarding_cli._check_onepassword_auth() is False
     captured = capsys.readouterr().out
     assert "OP_SERVICE_ACCOUNT_TOKEN" in captured
+
+
+def test_has_onepassword_auth_accepts_session(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OP_SERVICE_ACCOUNT_TOKEN", raising=False)
+    monkeypatch.setenv("OP_SESSION_CYBERAGENT", "session-token")
+
+    assert onboarding_cli._has_onepassword_auth() is True
 
 
 def test_missing_brave_key_explains_vault_and_item(
@@ -264,3 +277,54 @@ def test_loads_brave_key_from_onepassword(
     assert onboarding_cli._check_required_tool_secrets() is True
     captured = capsys.readouterr().out
     assert "Found BRAVE_API_KEY" in captured
+
+
+def test_check_network_access_fails_when_required(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    skill = SkillDefinition(
+        name="web-search",
+        description="Search the web",
+        location=Path("src/tools/skills/web-search"),
+        tool_name="web_search",
+        subcommand=None,
+        required_env=("BRAVE_API_KEY",),
+        timeout_class="short",
+        timeout_seconds=30,
+        input_schema={},
+        output_schema={},
+        skill_file=Path("src/tools/skills/web-search/SKILL.md"),
+        instructions="",
+    )
+    monkeypatch.setattr(onboarding_cli, "load_skill_definitions", lambda *_: [skill])
+    monkeypatch.setattr(onboarding_cli, "_probe_network_access", lambda: False)
+
+    assert onboarding_cli._check_network_access() is False
+    captured = capsys.readouterr().out
+    assert "Network access is required" in captured
+
+
+def test_check_network_access_skips_without_network_skills(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    skill = SkillDefinition(
+        name="file-reader",
+        description="Read local files",
+        location=Path("src/tools/skills/file-reader"),
+        tool_name="file_reader",
+        subcommand=None,
+        required_env=(),
+        timeout_class="short",
+        timeout_seconds=30,
+        input_schema={},
+        output_schema={},
+        skill_file=Path("src/tools/skills/file-reader/SKILL.md"),
+        instructions="",
+    )
+    monkeypatch.setattr(onboarding_cli, "load_skill_definitions", lambda *_: [skill])
+
+    def _fail_probe() -> bool:
+        raise AssertionError("Network probe should not run.")
+
+    monkeypatch.setattr(onboarding_cli, "_probe_network_access", _fail_probe)
+    assert onboarding_cli._check_network_access() is True

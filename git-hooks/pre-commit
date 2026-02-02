@@ -53,7 +53,9 @@ if [[ -n "${staged_test_files}" ]]; then
   cov_args=""
   if [[ -n "${staged_cov_targets}" ]]; then
     while IFS= read -r file; do
-      cov_args+=" --cov=${file}"
+      module="${file%.py}"
+      module="${module//\//.}"
+      cov_args+=" --cov=${module}"
     done <<< "${staged_cov_targets}"
     echo "Running pytest with coverage (min 25%) on staged test files..."
     ${PYTHON_BIN} -m pytest -v ${staged_test_files} ${cov_args} --cov-report=term-missing --cov-fail-under=25
