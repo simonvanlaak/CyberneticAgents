@@ -32,6 +32,70 @@ dependencies = [
 [project.scripts]
 cyberagent = "src.cyberagent.cli.cyberagent:main"
 
+[project.optional-dependencies]
+dev = [
+  "ruff",
+  "basedpyright",
+]
+
+[tool.basedpyright]
+include = ["src", "tests"]
+venvPath = "."
+venv = ".venv"
+typeCheckingMode = "standard"
+exclude = [
+  "**/__pycache__",
+  "**/*.py[cod]",
+  "**/*.so",
+  ".Python",
+  ".pytest_db",
+  ".venv",
+  "venv",
+  "data/last_team.json",
+  "logs",
+  "docker_cli_executor",
+  "env",
+  "ENV",
+  ".env",
+  ".env.local",
+  ".env.*.local",
+  ".vscode",
+  ".idea",
+  "**/*.swp",
+  "**/*.swo",
+  "**/*~",
+  ".DS_Store",
+  ".pytest_cache",
+  ".coverage",
+  "htmlcov",
+  ".tox",
+  ".hypothesis",
+  "coverage.xml",
+  "**/*.cover",
+  ".mypy_cache",
+  ".dmypy.json",
+  "dmypy.json",
+  ".pyre",
+  ".pytype",
+  "build",
+  "dist",
+  "**/*.egg-info",
+  "**/*.egg",
+  ".eggs",
+  "docs/_build",
+  "site",
+  "data/*.db",
+  "data/*.db-shm",
+  "data/*.db-wal",
+  "**/*.db-journal",
+  ".ipynb_checkpoints",
+  "**/*.ipynb",
+  "pip-log.txt",
+  "pip-delete-this-directory.txt",
+  ".ruff_cache",
+  ".pre-commit-cache",
+]
+
 [tool.pytest.ini_options]
 norecursedirs = [
   ".pre-commit-cache",
