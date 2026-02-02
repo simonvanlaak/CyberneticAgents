@@ -12,6 +12,7 @@ from src.agents.user_agent import UserAgent
 from src.cli_session import forward_user_messages, read_stdin_loop
 from src.cyberagent.channels.inbox import DEFAULT_CHANNEL, DEFAULT_SESSION_ID
 from src.cyberagent.channels.telegram.poller import TelegramPoller
+from src.cyberagent.channels.telegram.webhook import TelegramWebhookServer
 from src.cyberagent.cli.suggestion_queue import (
     SUGGEST_QUEUE_POLL_SECONDS,
     ack_suggestion,
@@ -86,8 +87,24 @@ async def run_headless_session(initial_message: str | None = None) -> None:
         _process_suggestion_queue(runtime, stop_event)
     )
     telegram_task: asyncio.Task[None] | None = None
+    webhook_server: TelegramWebhookServer | None = None
     token = os.environ.get("TELEGRAM_BOT_TOKEN")
-    if token:
+    webhook_url = os.environ.get("TELEGRAM_WEBHOOK_URL")
+    if token and webhook_url:
+        host = os.environ.get("TELEGRAM_WEBHOOK_HOST", "0.0.0.0")
+        port = int(os.environ.get("TELEGRAM_WEBHOOK_PORT", "8080"))
+        secret = os.environ.get("TELEGRAM_WEBHOOK_SECRET")
+        webhook_server = TelegramWebhookServer(
+            token=token,
+            runtime=runtime,
+            recipient=recipient,
+            loop=asyncio.get_running_loop(),
+            host=host,
+            port=port,
+            secret=secret,
+        )
+        webhook_server.start(webhook_url)
+    elif token:
         telegram_poller = TelegramPoller(token, runtime, recipient, stop_event)
         telegram_task = asyncio.create_task(telegram_poller.run())
 
@@ -97,6 +114,8 @@ async def run_headless_session(initial_message: str | None = None) -> None:
         reader_task.cancel()
         forward_task.cancel()
         suggestion_task.cancel()
+        if webhook_server:
+            webhook_server.stop()
         if telegram_task:
             telegram_task.cancel()
         await stop_runtime()
