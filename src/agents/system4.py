@@ -1,4 +1,6 @@
-from typing import TYPE_CHECKING, Any, List, Tuple
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, List, Tuple
 
 from autogen_agentchat.messages import TextMessage
 from autogen_core import MessageContext, message_handler
@@ -36,10 +38,12 @@ try:
     from src.cyberagent.db.models.initiative import Initiative
     from src.cyberagent.db.models.strategy import Strategy
 except Exception:  # pragma: no cover - fallback only for partial test/runtime setups
-    from typing import Any
 
-    Initiative = Any  # type: ignore[assignment]
-    Strategy = Any  # type: ignore[assignment]
+    class Initiative:  # type: ignore[no-redef]
+        pass
+
+    class Strategy:  # type: ignore[no-redef]
+        pass
 
 
 # Legacy monkeypatch compatibility for tests that patch module-level callables.
@@ -505,8 +509,8 @@ class System4(SystemBase):
             return (False, e)
 
     async def _select_next_initiative(
-        self, message, ctx, prompts, strategy: Any
-    ) -> Any:
+        self, message, ctx, prompts, strategy: Strategy
+    ) -> Initiative:
         # Identify initative to start first
         assign_initiative_prompts = prompts + [
             "## STRATEGY",

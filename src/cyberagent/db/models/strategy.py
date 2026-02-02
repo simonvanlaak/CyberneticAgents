@@ -26,8 +26,8 @@ class Strategy(Base):
     purpose_id: Mapped[int] = mapped_column(Integer, ForeignKey("purposes.id"))
     status: Mapped[Status] = mapped_column(Enum(Status), default=Status.PENDING)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[int] = mapped_column(String(5000), nullable=False)
-    result: Mapped[int] = mapped_column(String(5000))
+    description: Mapped[str] = mapped_column(String(5000), nullable=False)
+    result: Mapped[str | None] = mapped_column(String(5000))
 
     # Relationships
     team = relationship("Team", back_populates="strategies")
@@ -41,7 +41,7 @@ class Strategy(Base):
         finally:
             db.close()
 
-    def set_status(self, status: str):
+    def set_status(self, status: Status | str):
         self.status = Status(status)
 
     def to_prompt(self) -> List[str]:

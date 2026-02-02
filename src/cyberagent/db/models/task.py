@@ -35,7 +35,7 @@ class Task(Base):
     team = relationship("Team", back_populates="tasks")
     initiative = relationship("Initiative", back_populates="tasks")
 
-    def set_status(self, status: str):
+    def set_status(self, status: Status | str):
         self.status = Status(status)
 
     def to_prompt(self) -> List[str]:

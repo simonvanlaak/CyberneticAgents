@@ -71,7 +71,7 @@ class Initiative(Base):
         db.expunge(self)
         return self.id
 
-    def set_status(self, status: str) -> None:
+    def set_status(self, status: Status | str) -> None:
         self.status = Status(status)
 
     def update(self):
