@@ -32,6 +32,15 @@ dependencies = [
 [project.scripts]
 cyberagent = "src.cyberagent.cli.cyberagent:main"
 
+[tool.pytest.ini_options]
+norecursedirs = [
+  ".pre-commit-cache",
+  ".pytest_db",
+  "data",
+  "logs",
+  "security_logs.db",
+]
+
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["src", "src.*"]
