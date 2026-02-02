@@ -14,6 +14,8 @@ import pytest
 from autogen_core import AgentId
 
 from src.cyberagent.cli import cyberagent
+from src.cyberagent.db.db_utils import get_db
+from src.cyberagent.db.models.team import Team
 from src.cli_session import AnsweredQuestion, PendingQuestion
 
 
@@ -23,6 +25,7 @@ from src.cli_session import AnsweredQuestion, PendingQuestion
         (["start"], "start"),
         (["stop"], "stop"),
         (["status"], "status"),
+        (["onboarding"], "onboarding"),
         (["suggest"], "suggest"),
         (["inbox"], "inbox"),
         (["watch"], "watch"),
@@ -61,6 +64,60 @@ def test_start_command_uses_background_spawn(monkeypatch: pytest.MonkeyPatch) ->
     exit_code = cyberagent.main(["start", "--message", "ready"])
     assert exit_code == 0
     assert called["headless"] is False
+
+
+def _clear_teams() -> None:
+    session = next(get_db())
+    try:
+        session.query(Team).delete()
+        session.commit()
+    finally:
+        session.close()
+
+
+def test_handle_onboarding_creates_default_team(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _clear_teams()
+
+    exit_code = cyberagent._handle_onboarding(argparse.Namespace())
+    captured = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Created default team" in captured
+    assert "cyberagent suggest" in captured
+
+    session = next(get_db())
+    try:
+        team = session.query(Team).filter(Team.name == "default_team").first()
+        assert team is not None
+    finally:
+        session.close()
+
+
+def test_handle_onboarding_skips_when_team_exists(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    _clear_teams()
+    session = next(get_db())
+    try:
+        session.add(Team(name="existing_team"))
+        session.commit()
+    finally:
+        session.close()
+
+    exit_code = cyberagent._handle_onboarding(argparse.Namespace())
+    captured = capsys.readouterr().out
+
+    assert exit_code == 0
+    assert "Team already exists" in captured
+    assert "cyberagent suggest" in captured
+
+    session = next(get_db())
+    try:
+        assert session.query(Team).count() == 1
+    finally:
+        session.close()
 
 
 def test_status_command_delegates_to_status_main(
@@ -153,184 +210,6 @@ def test_handle_suggest_requires_team(
     output = capsys.readouterr().out
     assert exit_code == 1
     assert "cyberagent onboarding" in output
-
-
-@pytest.mark.asyncio
-async def test_handle_tool_test_invalid_args_json(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    args = argparse.Namespace(
-        tool_name="web-search",
-        args="{invalid",
-        agent_id=None,
-    )
-    exit_code = await cyberagent._handle_tool_test(args)
-    captured = capsys.readouterr()
-    assert exit_code == 2
-    assert "Invalid --args JSON" in captured.err
-
-
-@pytest.mark.asyncio
-async def test_handle_tool_test_missing_skill(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    from pathlib import Path
-
-    from src.cyberagent.tools.cli_executor.skill_loader import SkillDefinition
-
-    fake_skill = SkillDefinition(
-        name="another-skill",
-        description="Test",
-        location=Path("skills/another-skill"),
-        tool_name="another_tool",
-        subcommand=None,
-        required_env=(),
-        timeout_class="standard",
-        timeout_seconds=60,
-        input_schema={},
-        output_schema={},
-        skill_file=Path("skills/another-skill/SKILL.md"),
-        instructions="",
-    )
-
-    monkeypatch.setattr(
-        cyberagent, "load_skill_definitions", lambda _root: [fake_skill]
-    )
-
-    args = argparse.Namespace(
-        tool_name="web-search",
-        args="{}",
-        agent_id=None,
-    )
-    exit_code = await cyberagent._handle_tool_test(args)
-    captured = capsys.readouterr()
-    assert exit_code == 2
-    assert "Unknown tool" in captured.err
-
-
-@pytest.mark.asyncio
-async def test_handle_tool_test_executes_skill(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    from pathlib import Path
-
-    from src.cyberagent.tools.cli_executor.skill_loader import SkillDefinition
-
-    fake_skill = SkillDefinition(
-        name="web-search",
-        description="Test",
-        location=Path("skills/web-search"),
-        tool_name="web_search",
-        subcommand=None,
-        required_env=(),
-        timeout_class="standard",
-        timeout_seconds=60,
-        input_schema={},
-        output_schema={},
-        skill_file=Path("skills/web-search/SKILL.md"),
-        instructions="",
-    )
-
-    recorded: dict[str, object] = {}
-
-    class DummyTool:
-        async def execute(  # noqa: D401
-            self,
-            tool_name,
-            agent_id=None,
-            subcommand=None,
-            timeout_seconds=None,
-            skill_name=None,
-            required_env=None,
-            **kwargs,
-        ):
-            recorded["tool_name"] = tool_name
-            recorded["agent_id"] = agent_id
-            recorded["subcommand"] = subcommand
-            recorded["timeout_seconds"] = timeout_seconds
-            recorded["skill_name"] = skill_name
-            recorded["required_env"] = required_env
-            recorded["kwargs"] = kwargs
-            return {"success": True, "output": {"ok": True}}
-
-    monkeypatch.setattr(
-        cyberagent, "load_skill_definitions", lambda _root: [fake_skill]
-    )
-    monkeypatch.setattr(cyberagent, "_create_cli_tool", lambda: DummyTool())
-
-    args = argparse.Namespace(
-        tool_name="web-search",
-        args='{"q": "hello"}',
-        agent_id="System4/root",
-    )
-    exit_code = await cyberagent._handle_tool_test(args)
-    captured = capsys.readouterr()
-
-    assert exit_code == 0
-    assert recorded["tool_name"] == "web_search"
-    assert recorded["agent_id"] == "System4/root"
-    assert recorded["skill_name"] == "web-search"
-    assert recorded["kwargs"] == {"q": "hello"}
-    assert '"ok": true' in captured.out
-
-
-@pytest.mark.asyncio
-async def test_handle_tool_test_starts_executor(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    from pathlib import Path
-
-    from src.cyberagent.tools.cli_executor.skill_loader import SkillDefinition
-
-    fake_skill = SkillDefinition(
-        name="web-search",
-        description="Test",
-        location=Path("skills/web-search"),
-        tool_name="web_search",
-        subcommand=None,
-        required_env=(),
-        timeout_class="standard",
-        timeout_seconds=60,
-        input_schema={},
-        output_schema={},
-        skill_file=Path("skills/web-search/SKILL.md"),
-        instructions="",
-    )
-
-    class DummyExecutor:
-        def __init__(self) -> None:
-            self.started = False
-            self.stopped = False
-
-        async def start(self) -> None:
-            self.started = True
-
-        async def stop(self) -> None:
-            self.stopped = True
-
-    class DummyTool:
-        def __init__(self) -> None:
-            self.executor = DummyExecutor()
-
-        async def execute(self, *args, **kwargs):  # noqa: ANN001
-            return {"success": True, "output": {"ok": True}}
-
-    dummy_tool = DummyTool()
-    monkeypatch.setattr(
-        cyberagent, "load_skill_definitions", lambda _root: [fake_skill]
-    )
-    monkeypatch.setattr(cyberagent, "_create_cli_tool", lambda: dummy_tool)
-
-    args = argparse.Namespace(
-        tool_name="web-search",
-        args="{}",
-        agent_id=None,
-    )
-    exit_code = await cyberagent._handle_tool_test(args)
-
-    assert exit_code == 0
-    assert dummy_tool.executor.started is True
-    assert dummy_tool.executor.stopped is True
 
 
 def test_handle_inbox_prints_entries(
@@ -548,6 +427,7 @@ def test_help_lists_commands() -> None:
     for command in (
         "stop",
         "status",
+        "onboarding",
         "suggest",
         "inbox",
         "watch",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+from datetime import datetime
 import getpass
 import json
 import os
@@ -97,6 +98,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers.add_parser("stop", help="Gracefully stop the runtime.")
+    subparsers.add_parser(
+        "onboarding",
+        help="Initialize the default team.",
+        description="Create the default root team if none exists.",
+    )
 
     status_parser = subparsers.add_parser(
         "status", help="Show current team/strategy/task hierarchy."
@@ -335,6 +341,24 @@ def _handle_status(args: argparse.Namespace) -> int:
     return status_main(res_args)
 
 
+def _handle_onboarding(args: argparse.Namespace) -> int:
+    init_db()
+    session = next(get_db())
+    try:
+        team = session.query(Team).order_by(Team.id).first()
+        if team is None:
+            team = Team(name="default_team", last_active_at=datetime.utcnow())
+            session.add(team)
+            session.commit()
+            print(f"Created default team: {team.name} (id={team.id}).")
+        else:
+            print(f"Team already exists: {team.name} (id={team.id}).")
+    finally:
+        session.close()
+    print(f"Next: run {SUGGEST_COMMAND} to give the agents a task.")
+    return 0
+
+
 def _handle_suggest(args: argparse.Namespace) -> int:
     try:
         parsed = _parse_suggestion_args(args)
@@ -561,8 +585,12 @@ async def _handle_tool_test(args: argparse.Namespace) -> int:
     executor = getattr(cli_tool, "executor", None)
     started = False
     if executor is not None and hasattr(executor, "start"):
-        await executor.start()
-        started = True
+        try:
+            await executor.start()
+            started = True
+        except Exception as exc:
+            print(f"Failed to start CLI tool executor: {exc}", file=sys.stderr)
+            return 1
 
     try:
         result = await _execute_skill_tool(cli_tool, skill, parsed_args, args.agent_id)
@@ -869,6 +897,7 @@ _HANDLERS = {
     "start": _handle_start,
     "stop": _handle_stop,
     "status": _handle_status,
+    "onboarding": _handle_onboarding,
     "suggest": _handle_suggest,
     "inbox": _handle_inbox,
     "watch": _handle_watch,
