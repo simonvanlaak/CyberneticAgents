@@ -10,6 +10,8 @@ from src.cyberagent.db.models.system import (
     ensure_default_systems_for_team as _ensure_default_systems_for_team,
 )
 from src.rbac.skill_permissions_enforcer import get_enforcer
+from src.cyberagent.services import recursions as recursions_service
+from src.cyberagent.services import teams as teams_service
 
 
 def get_system(system_id: int) -> System | None:
@@ -159,13 +161,14 @@ def can_execute_skill(system_id: int, skill_name: str) -> tuple[bool, str | None
     team_id = _get_team_id_or_raise(system_id)
     enforcer = get_enforcer()
 
-    if not enforcer.enforce(
-        _team_subject(team_id),
-        str(team_id),
-        _skill_resource(skill_name),
-        "allow",
-    ):
-        return False, "team_envelope"
+    if not _is_root_team(team_id):
+        if not enforcer.enforce(
+            _team_subject(team_id),
+            str(team_id),
+            _skill_resource(skill_name),
+            "allow",
+        ):
+            return False, "team_envelope"
 
     if not enforcer.enforce(
         _system_subject(system_id),
@@ -173,6 +176,9 @@ def can_execute_skill(system_id: int, skill_name: str) -> tuple[bool, str | None
         _skill_resource(skill_name),
         "allow",
     ):
+        return False, "system_grant"
+
+    if not _check_recursion_chain(team_id, skill_name, enforcer):
         return False, "system_grant"
 
     return True, None
@@ -186,6 +192,8 @@ def _get_team_id_or_raise(system_id: int) -> int:
 
 
 def _require_envelope_allows(team_id: int, system_id: int, skill_name: str) -> None:
+    if _is_root_team(team_id):
+        return
     enforcer = get_enforcer()
     if enforcer.enforce(
         _team_subject(team_id),
@@ -223,3 +231,23 @@ def _strip_skill_prefix(resource: str) -> str:
     if resource.startswith("skill:"):
         return resource[len("skill:") :]
     return resource
+
+
+def _is_root_team(team_id: int) -> bool:
+    team = teams_service.get_team(team_id)
+    return team is not None and team.name == "default_team"
+
+
+def _check_recursion_chain(team_id: int, skill_name: str, enforcer) -> bool:
+    links = recursions_service.get_recursion_chain(team_id)
+    if not links:
+        return True
+    for link in links:
+        if not enforcer.enforce(
+            _system_subject(link.origin_system_id),
+            str(link.parent_team_id),
+            _skill_resource(skill_name),
+            "allow",
+        ):
+            return False
+    return True

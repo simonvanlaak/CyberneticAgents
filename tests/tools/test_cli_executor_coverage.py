@@ -17,6 +17,7 @@ from src.cyberagent.tools.cli_executor import (
     skill_tools,
 )
 from src.cyberagent.tools.cli_executor.cli_tool import CliTool
+from src.cyberagent.tools.cli_executor.cli_tool import _set_executor_timeout
 from src.cyberagent.tools.cli_executor.docker_env_executor import (
     EnvDockerCommandLineCodeExecutor,
 )
@@ -613,3 +614,8 @@ async def test_cli_tool_execute_requires_agent_id_for_skill() -> None:
     assert result["success"] is False
     assert "agent_id" in result["error"]
     assert tool.executor.executed is False
+
+
+def test_set_executor_timeout_rejects_zero() -> None:
+    with pytest.raises(ValueError, match="Timeout must be greater"):
+        _set_executor_timeout(object(), 0)
