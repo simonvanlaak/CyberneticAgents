@@ -13,18 +13,20 @@ ONBOARDING = getattr(cyberagent, "onboarding_cli", cyberagent)
 
 
 def _handle_onboarding(args: argparse.Namespace) -> int:
-    if hasattr(ONBOARDING, "handle_onboarding"):
-        return ONBOARDING.handle_onboarding(args, cyberagent.SUGGEST_COMMAND)
+    handle_onboarding = getattr(ONBOARDING, "handle_onboarding", None)
+    if handle_onboarding is not None:
+        return handle_onboarding(args, cyberagent.SUGGEST_COMMAND)
     return ONBOARDING._handle_onboarding(args)
 
 
 def _patch_run_checks(monkeypatch: pytest.MonkeyPatch, value: bool) -> None:
-    attr = (
-        "run_technical_onboarding_checks"
-        if hasattr(ONBOARDING, "run_technical_onboarding_checks")
-        else "_run_technical_onboarding_checks"
-    )
-    monkeypatch.setattr(ONBOARDING, attr, lambda: value)
+    run_checks = getattr(ONBOARDING, "run_technical_onboarding_checks", None)
+    if run_checks is None:
+        monkeypatch.setattr(
+            ONBOARDING, "_run_technical_onboarding_checks", lambda: value
+        )
+        return
+    monkeypatch.setattr(ONBOARDING, "run_technical_onboarding_checks", lambda: value)
 
 
 def _clear_teams() -> None:

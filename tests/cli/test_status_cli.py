@@ -34,6 +34,8 @@ def _insert_strategy(
             (team_id, purpose_id, status, name, description, ""),
         )
         conn.commit()
+        if cursor.lastrowid is None:
+            raise RuntimeError("No strategy row id returned.")
         return int(cursor.lastrowid)
     finally:
         conn.close()
@@ -51,6 +53,8 @@ def _insert_initiative(
             (team_id, strategy_id, status, name, description, None),
         )
         conn.commit()
+        if cursor.lastrowid is None:
+            raise RuntimeError("No initiative row id returned.")
         return int(cursor.lastrowid)
     finally:
         conn.close()
@@ -73,6 +77,8 @@ def _insert_task(
             (team_id, initiative_id, status, assignee, name, content, None),
         )
         conn.commit()
+        if cursor.lastrowid is None:
+            raise RuntimeError("No task row id returned.")
         return int(cursor.lastrowid)
     finally:
         conn.close()

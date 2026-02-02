@@ -17,7 +17,7 @@ def test_contact_user_args_accepts_question():
 
 
 def test_contact_user_args_accepts_content_alias():
-    args = ContactUserArgsType(content="What is the timeline?")
+    args = ContactUserArgsType.model_validate({"content": "What is the timeline?"})
     assert args.question == "What is the timeline?"
 
 
@@ -27,7 +27,7 @@ def test_inform_user_args_accepts_message():
 
 
 def test_inform_user_args_accepts_content_alias():
-    args = InformUserArgsType(content="Status update")
+    args = InformUserArgsType.model_validate({"content": "Status update"})
     assert args.message == "Status update"
 
 

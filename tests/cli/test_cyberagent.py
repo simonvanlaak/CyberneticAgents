@@ -8,7 +8,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any, Iterator, Sequence, cast
 
 import pytest
 from autogen_core import AgentId
@@ -374,7 +374,7 @@ def test_handle_config_displays_teams(
         def close(self) -> None:
             return None
 
-    def fake_get_db() -> Sequence[DummySession]:
+    def fake_get_db() -> Iterator[DummySession]:
         yield DummySession([DummyTeam()])
 
     monkeypatch.setattr(cyberagent, "init_db", lambda: None)
@@ -445,7 +445,7 @@ def test_python_module_start_uses_stub(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_start_spawns_serve_process(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    recorded: dict[str, Sequence[str]] = {}
+    recorded: dict[str, object] = {}
 
     class DummyProcess:
         def __init__(
@@ -471,7 +471,8 @@ def test_start_spawns_serve_process(
     assert exit_code == 0
     assert recorded["cmd"][0] == sys.executable
     assert recorded["cmd"][3] == cyberagent.SERVE_COMMAND
-    assert recorded["env"]["CYBERAGENT_ACTIVE_TEAM_ID"] == "7"
+    recorded_env = cast(dict[str, str], recorded["env"])
+    assert recorded_env["CYBERAGENT_ACTIVE_TEAM_ID"] == "7"
     assert target_pid.read_text(encoding="utf-8") == "4242"
 
 
