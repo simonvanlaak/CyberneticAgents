@@ -113,6 +113,15 @@ class SystemSkillGrantUpdateMessage(BaseTextChatMessage):
     content: str
 
 
+class RecursionCreateMessage(BaseTextChatMessage):
+    """Used to request creation of a recursion linkage by System 5."""
+
+    sub_team_id: int
+    origin_system_id: int
+    parent_team_id: int
+    content: str
+
+
 class ConfirmationMessage(BaseTextChatMessage):
     """Used by a system to confirm an action has been completed."""
 

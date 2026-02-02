@@ -6,6 +6,7 @@ from src.agents.messages import (
     PolicySuggestionMessage,
     PolicyVagueMessage,
     PolicyViolationMessage,
+    RecursionCreateMessage,
     ResearchReviewMessage,
     StrategyReviewMessage,
     SystemSkillGrantUpdateMessage,
@@ -13,6 +14,7 @@ from src.agents.messages import (
 )
 from src.agents.system_base import SystemBase
 from src.cyberagent.services import policies as policy_service
+from src.cyberagent.services import recursions as recursions_service
 from src.cyberagent.services import strategies as strategy_service
 from src.cyberagent.services import systems as systems_service
 from src.cyberagent.services import tasks as task_service
@@ -390,5 +392,45 @@ class System5(SystemBase):
         return ConfirmationMessage(
             content=f"Unknown system grant action '{message.action}'.",
             is_error=True,
+            source=self.agent_id.__str__(),
+        )
+
+    @message_handler
+    async def handle_recursion_create_message(
+        self, message: RecursionCreateMessage, context: MessageContext
+    ) -> ConfirmationMessage:
+        """
+        Handle recursion linkage creation within the active team.
+        """
+        if message.parent_team_id != self.team_id:
+            return ConfirmationMessage(
+                content=(
+                    f"System5 cannot create recursion for team {message.parent_team_id} "
+                    f"from team {self.team_id}."
+                ),
+                is_error=True,
+                source=self.agent_id.__str__(),
+            )
+
+        try:
+            recursions_service.create_recursion(
+                sub_team_id=message.sub_team_id,
+                origin_system_id=message.origin_system_id,
+                parent_team_id=message.parent_team_id,
+                actor_id=self.agent_id.__str__(),
+            )
+        except ValueError as exc:
+            return ConfirmationMessage(
+                content=str(exc),
+                is_error=True,
+                source=self.agent_id.__str__(),
+            )
+
+        return ConfirmationMessage(
+            content=(
+                f"Created recursion link for sub_team {message.sub_team_id} "
+                f"from origin system {message.origin_system_id}."
+            ),
+            is_error=False,
             source=self.agent_id.__str__(),
         )
