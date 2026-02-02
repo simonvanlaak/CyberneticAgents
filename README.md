@@ -49,6 +49,15 @@ python main.py --message "hello"
 
 ## CLI (primary)
 
+- Install the CLI entrypoint (uv):
+```bash
+uv tool install -e .
+```
+- Run the CLI:
+```bash
+cyberagent start
+```
+
 - Use `cyberagent start` to boot the VSM runtime in the background for CLI workflows.
 - `cyberagent status` shows the active strategy/task hierarchy, while `cyberagent suggest` lets you pipe JSON/YAML payloads into System 4.
 - Observability helpers (`cyberagent logs`, `cyberagent inbox`, `cyberagent watch`) and the `cyberagent login` command (which stores a keyring-backed token) round out the current CLI surface.

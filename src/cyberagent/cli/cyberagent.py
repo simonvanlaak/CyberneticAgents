@@ -447,13 +447,23 @@ async def _send_suggestion(parsed: ParsedSuggestion) -> None:
     enforcer.clear_policy()
     runtime = get_runtime()
     message = UserMessage(content=parsed.payload_text, source="User")
-    await runtime.send_message(
-        message=message,
-        recipient=SYSTEM4_AGENT_ID,
-        sender=AgentId(type="UserAgent", key="root"),
-    )
-    print("Suggestion delivered to System4.")
-    await stop_runtime()
+    try:
+        await runtime.send_message(
+            message=message,
+            recipient=SYSTEM4_AGENT_ID,
+            sender=AgentId(type="UserAgent", key="root"),
+        )
+        print("Suggestion delivered to System4.")
+    except Exception as exc:  # pragma: no cover - safety net for runtime errors
+        if getattr(exc, "code", None) == "output_parse_failed":
+            print(
+                "Model output could not be parsed. Try rephrasing the request or "
+                "using a more explicit payload."
+            )
+            return
+        raise
+    finally:
+        await stop_runtime()
 
 
 _HANDLERS = {
