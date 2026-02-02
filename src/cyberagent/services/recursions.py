@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -16,6 +17,9 @@ class RecursionLink:
     sub_team_id: int
     origin_system_id: int
     parent_team_id: int
+
+
+logger = logging.getLogger(__name__)
 
 
 def create_recursion(
@@ -72,6 +76,15 @@ def create_recursion(
         )
         session.add(recursion)
         session.commit()
+        logger.info(
+            "recursion_link_created",
+            extra={
+                "sub_team_id": sub_team_id,
+                "origin_system_id": origin_system_id,
+                "parent_team_id": parent_team_id,
+                "actor_id": actor_id,
+            },
+        )
         return recursion
     finally:
         session.close()

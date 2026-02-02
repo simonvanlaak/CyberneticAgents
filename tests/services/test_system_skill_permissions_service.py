@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from uuid import uuid4
 
 import pytest
@@ -122,3 +123,24 @@ def test_can_execute_skill_deny_precedence() -> None:
     allowed, reason = systems_service.can_execute_skill(system_id, "skill.delta")
     assert allowed is True
     assert reason is None
+
+
+def test_can_execute_skill_logs_decision(caplog: pytest.LogCaptureFixture) -> None:
+    team_id = _create_team_id()
+    system_id = _create_system_id(team_id)
+
+    caplog.set_level(logging.INFO, logger="src.cyberagent.services.systems")
+
+    allowed, reason = systems_service.can_execute_skill(system_id, "skill.log")
+
+    assert allowed is False
+    assert reason == "team_envelope"
+    assert any(
+        record.message == "skill_permission_decision"
+        and record.__dict__.get("team_id") == team_id
+        and record.__dict__.get("system_id") == system_id
+        and record.__dict__.get("skill_name") == "skill.log"
+        and record.__dict__.get("allowed") is False
+        and record.__dict__.get("failed_rule_category") == "team_envelope"
+        for record in caplog.records
+    )

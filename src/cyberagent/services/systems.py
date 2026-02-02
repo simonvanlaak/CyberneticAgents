@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from src.cyberagent.db.models.system import (
     System,
     get_system as _get_system,
@@ -12,6 +14,8 @@ from src.cyberagent.db.models.system import (
 from src.rbac.skill_permissions_enforcer import get_enforcer
 from src.cyberagent.services import recursions as recursions_service
 from src.cyberagent.services import teams as teams_service
+
+logger = logging.getLogger(__name__)
 
 
 def get_system(system_id: int) -> System | None:
@@ -70,23 +74,35 @@ def add_skill_grant(system_id: int, skill_name: str, actor_id: str) -> bool:
         PermissionError: If the team envelope blocks the skill or the system limit
             is exceeded.
     """
-    _ = actor_id
     team_id = _get_team_id_or_raise(system_id)
-    _require_envelope_allows(team_id, system_id, skill_name)
+    _require_envelope_allows(team_id, system_id, skill_name, actor_id)
 
     current = list_granted_skills(system_id)
     if skill_name in current:
         return False
     if len(current) >= 5:
-        _raise_permission_error(team_id, system_id, skill_name, "system_skill_limit")
+        _raise_permission_error(
+            team_id, system_id, skill_name, "system_skill_limit", actor_id
+        )
 
     enforcer = get_enforcer()
-    return enforcer.add_policy(
+    added = enforcer.add_policy(
         _system_subject(system_id),
         str(team_id),
         _skill_resource(skill_name),
         "allow",
     )
+    logger.info(
+        "skill_grant_add",
+        extra={
+            "team_id": team_id,
+            "system_id": system_id,
+            "skill_name": skill_name,
+            "actor_id": actor_id,
+            "added": added,
+        },
+    )
+    return added
 
 
 def remove_skill_grant(system_id: int, skill_name: str, actor_id: str) -> bool:
@@ -101,15 +117,25 @@ def remove_skill_grant(system_id: int, skill_name: str, actor_id: str) -> bool:
     Returns:
         True if the policy existed and was removed.
     """
-    _ = actor_id
     team_id = _get_team_id_or_raise(system_id)
     enforcer = get_enforcer()
-    return enforcer.remove_policy(
+    removed = enforcer.remove_policy(
         _system_subject(system_id),
         str(team_id),
         _skill_resource(skill_name),
         "allow",
     )
+    logger.info(
+        "skill_grant_remove",
+        extra={
+            "team_id": team_id,
+            "system_id": system_id,
+            "skill_name": skill_name,
+            "actor_id": actor_id,
+            "removed": removed,
+        },
+    )
+    return removed
 
 
 def set_skill_grants(system_id: int, skill_names: list[str], actor_id: str) -> None:
@@ -124,18 +150,18 @@ def set_skill_grants(system_id: int, skill_names: list[str], actor_id: str) -> N
     Raises:
         PermissionError: If the team envelope blocks any skill or the limit is exceeded.
     """
-    _ = actor_id
     if len(skill_names) > 5:
         _raise_permission_error(
             _get_team_id_or_raise(system_id),
             system_id,
             skill_names[0] if skill_names else "",
             "system_skill_limit",
+            actor_id,
         )
 
     team_id = _get_team_id_or_raise(system_id)
     for skill_name in skill_names:
-        _require_envelope_allows(team_id, system_id, skill_name)
+        _require_envelope_allows(team_id, system_id, skill_name, actor_id)
 
     current = set(list_granted_skills(system_id))
     desired = set(skill_names)
@@ -145,6 +171,15 @@ def set_skill_grants(system_id: int, skill_names: list[str], actor_id: str) -> N
 
     for skill_name in desired - current:
         add_skill_grant(system_id, skill_name, actor_id)
+    logger.info(
+        "skill_grant_set",
+        extra={
+            "team_id": team_id,
+            "system_id": system_id,
+            "actor_id": actor_id,
+            "skill_count": len(skill_names),
+        },
+    )
 
 
 def can_execute_skill(system_id: int, skill_name: str) -> tuple[bool, str | None]:
@@ -161,6 +196,8 @@ def can_execute_skill(system_id: int, skill_name: str) -> tuple[bool, str | None
     team_id = _get_team_id_or_raise(system_id)
     enforcer = get_enforcer()
 
+    deny_category: str | None = None
+
     if not _is_root_team(team_id):
         if not enforcer.enforce(
             _team_subject(team_id),
@@ -168,20 +205,33 @@ def can_execute_skill(system_id: int, skill_name: str) -> tuple[bool, str | None
             _skill_resource(skill_name),
             "allow",
         ):
-            return False, "team_envelope"
+            deny_category = "team_envelope"
 
-    if not enforcer.enforce(
-        _system_subject(system_id),
-        str(team_id),
-        _skill_resource(skill_name),
-        "allow",
-    ):
-        return False, "system_grant"
+    if deny_category is None:
+        if not enforcer.enforce(
+            _system_subject(system_id),
+            str(team_id),
+            _skill_resource(skill_name),
+            "allow",
+        ):
+            deny_category = "system_grant"
 
-    if not _check_recursion_chain(team_id, skill_name, enforcer):
-        return False, "system_grant"
+    if deny_category is None:
+        if not _check_recursion_chain(team_id, skill_name, enforcer):
+            deny_category = "system_grant"
 
-    return True, None
+    allowed = deny_category is None
+    logger.info(
+        "skill_permission_decision",
+        extra={
+            "team_id": team_id,
+            "system_id": system_id,
+            "skill_name": skill_name,
+            "allowed": allowed,
+            "failed_rule_category": deny_category,
+        },
+    )
+    return allowed, deny_category
 
 
 def _get_team_id_or_raise(system_id: int) -> int:
@@ -191,7 +241,9 @@ def _get_team_id_or_raise(system_id: int) -> int:
     return system.team_id
 
 
-def _require_envelope_allows(team_id: int, system_id: int, skill_name: str) -> None:
+def _require_envelope_allows(
+    team_id: int, system_id: int, skill_name: str, actor_id: str | None
+) -> None:
     if _is_root_team(team_id):
         return
     enforcer = get_enforcer()
@@ -202,12 +254,26 @@ def _require_envelope_allows(team_id: int, system_id: int, skill_name: str) -> N
         "allow",
     ):
         return
-    _raise_permission_error(team_id, system_id, skill_name, "team_envelope")
+    _raise_permission_error(team_id, system_id, skill_name, "team_envelope", actor_id)
 
 
 def _raise_permission_error(
-    team_id: int, system_id: int, skill_name: str, category: str
+    team_id: int,
+    system_id: int,
+    skill_name: str,
+    category: str,
+    actor_id: str | None,
 ) -> None:
+    logger.warning(
+        "skill_permission_denied",
+        extra={
+            "team_id": team_id,
+            "system_id": system_id,
+            "skill_name": skill_name,
+            "actor_id": actor_id,
+            "failed_rule_category": category,
+        },
+    )
     raise PermissionError(
         "Permission denied for team_id="
         f"{team_id} system_id={system_id} "
