@@ -20,7 +20,11 @@ from src.cyberagent.core.state import get_last_team_id
 from src.cyberagent.core.logging import configure_autogen_logging
 from src.rbac.enforcer import get_enforcer
 from src.registry import register_systems
-from src.cyberagent.core.runtime import get_runtime, stop_runtime
+from src.cyberagent.core.runtime import (
+    get_runtime,
+    start_cli_executor,
+    stop_runtime,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -57,6 +61,7 @@ async def run_headless_session(initial_message: str | None = None) -> None:
     configure_autogen_logging(logs_dir)
 
     runtime = get_runtime()
+    await start_cli_executor()
     recipient = AgentId(type=UserAgent.__name__, key="root")
     if initial_message:
         await runtime.send_message(

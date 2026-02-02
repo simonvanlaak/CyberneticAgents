@@ -15,11 +15,14 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
+from src.cyberagent.tools.cli_executor.docker_env_executor import (
+    EnvDockerCommandLineCodeExecutor,
+)
 from src.cyberagent.tools.cli_executor.factory import create_cli_executor
 
 # Singleton runtime instance
 _runtime: SingleThreadedAgentRuntime | None = None
-_cli_executor = None
+_cli_executor: EnvDockerCommandLineCodeExecutor | None = None
 logger = logging.getLogger(__name__)
 
 
@@ -75,10 +78,40 @@ def get_runtime() -> SingleThreadedAgentRuntime:
     return _runtime
 
 
+def get_cli_executor() -> EnvDockerCommandLineCodeExecutor | None:
+    """Return the shared CLI executor instance if available."""
+    return _cli_executor
+
+
+async def start_cli_executor() -> None:
+    """Start the shared CLI executor container if configured."""
+    executor = _cli_executor
+    if executor is None:
+        return
+    if getattr(executor, "_running", False):
+        return
+    try:
+        await executor.start()
+    except Exception as exc:
+        logger.warning("Failed to start CLI executor: %s", exc)
+
+
+async def stop_cli_executor() -> None:
+    """Stop the shared CLI executor container if running."""
+    executor = _cli_executor
+    if executor is None:
+        return
+    try:
+        await executor.stop()
+    except Exception as exc:
+        logger.warning("Failed to stop CLI executor: %s", exc)
+
+
 async def stop_runtime() -> None:
     """Stop the runtime gracefully."""
     global _runtime
     if _runtime is None:
         return
     await _runtime.stop_when_idle()
+    await stop_cli_executor()
     _runtime = None
