@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -10,6 +9,7 @@ from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.models.recursion import Recursion
 from src.cyberagent.db.models.system import System
 from src.cyberagent.db.models.team import Team
+from src.cyberagent.services.audit import log_event
 
 
 @dataclass(frozen=True)
@@ -17,9 +17,6 @@ class RecursionLink:
     sub_team_id: int
     origin_system_id: int
     parent_team_id: int
-
-
-logger = logging.getLogger(__name__)
 
 
 def create_recursion(
@@ -76,14 +73,13 @@ def create_recursion(
         )
         session.add(recursion)
         session.commit()
-        logger.info(
+        log_event(
             "recursion_link_created",
-            extra={
-                "sub_team_id": sub_team_id,
-                "origin_system_id": origin_system_id,
-                "parent_team_id": parent_team_id,
-                "actor_id": actor_id,
-            },
+            service="recursions",
+            sub_team_id=sub_team_id,
+            origin_system_id=origin_system_id,
+            parent_team_id=parent_team_id,
+            actor_id=actor_id,
         )
         return recursion
     finally:

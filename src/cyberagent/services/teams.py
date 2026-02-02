@@ -2,15 +2,13 @@
 
 from __future__ import annotations
 
-import logging
 from typing import Iterable
 
 import casbin
 
 from src.cyberagent.db.models.team import Team, get_team as _get_team
+from src.cyberagent.services.audit import log_event
 from src.rbac.skill_permissions_enforcer import get_enforcer
-
-logger = logging.getLogger(__name__)
 
 
 def get_team(team_id: int) -> Team | None:
@@ -57,14 +55,13 @@ def add_allowed_skill(team_id: int, skill_name: str, actor_id: str) -> bool:
         _skill_resource(skill_name),
         "allow",
     )
-    logger.info(
+    log_event(
         "skill_envelope_add",
-        extra={
-            "team_id": team_id,
-            "skill_name": skill_name,
-            "actor_id": actor_id,
-            "added": added,
-        },
+        service="teams",
+        team_id=team_id,
+        skill_name=skill_name,
+        actor_id=actor_id,
+        added=added,
     )
     return added
 
@@ -96,15 +93,14 @@ def remove_allowed_skill(team_id: int, skill_name: str, actor_id: str) -> int:
         skill_resource,
         "allow",
     )
-    logger.info(
+    log_event(
         "skill_envelope_remove",
-        extra={
-            "team_id": team_id,
-            "skill_name": skill_name,
-            "actor_id": actor_id,
-            "removed": removed,
-            "revoked_grants": revoked_grants,
-        },
+        service="teams",
+        team_id=team_id,
+        skill_name=skill_name,
+        actor_id=actor_id,
+        removed=removed,
+        revoked_grants=revoked_grants,
     )
     return revoked_grants
 
@@ -126,13 +122,12 @@ def set_allowed_skills(team_id: int, skill_names: list[str], actor_id: str) -> N
 
     for skill_name in desired - current:
         add_allowed_skill(team_id, skill_name, actor_id)
-    logger.info(
+    log_event(
         "skill_envelope_set",
-        extra={
-            "team_id": team_id,
-            "actor_id": actor_id,
-            "skill_count": len(skill_names),
-        },
+        service="teams",
+        team_id=team_id,
+        actor_id=actor_id,
+        skill_count=len(skill_names),
     )
 
 

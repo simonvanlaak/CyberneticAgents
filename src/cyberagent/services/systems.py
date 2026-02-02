@@ -14,6 +14,7 @@ from src.cyberagent.db.models.system import (
 from src.rbac.skill_permissions_enforcer import get_enforcer
 from src.cyberagent.services import recursions as recursions_service
 from src.cyberagent.services import teams as teams_service
+from src.cyberagent.services.audit import log_event
 
 logger = logging.getLogger(__name__)
 
@@ -92,15 +93,14 @@ def add_skill_grant(system_id: int, skill_name: str, actor_id: str) -> bool:
         _skill_resource(skill_name),
         "allow",
     )
-    logger.info(
+    log_event(
         "skill_grant_add",
-        extra={
-            "team_id": team_id,
-            "system_id": system_id,
-            "skill_name": skill_name,
-            "actor_id": actor_id,
-            "added": added,
-        },
+        service="systems",
+        team_id=team_id,
+        system_id=system_id,
+        skill_name=skill_name,
+        actor_id=actor_id,
+        added=added,
     )
     return added
 
@@ -125,15 +125,14 @@ def remove_skill_grant(system_id: int, skill_name: str, actor_id: str) -> bool:
         _skill_resource(skill_name),
         "allow",
     )
-    logger.info(
+    log_event(
         "skill_grant_remove",
-        extra={
-            "team_id": team_id,
-            "system_id": system_id,
-            "skill_name": skill_name,
-            "actor_id": actor_id,
-            "removed": removed,
-        },
+        service="systems",
+        team_id=team_id,
+        system_id=system_id,
+        skill_name=skill_name,
+        actor_id=actor_id,
+        removed=removed,
     )
     return removed
 
@@ -171,14 +170,13 @@ def set_skill_grants(system_id: int, skill_names: list[str], actor_id: str) -> N
 
     for skill_name in desired - current:
         add_skill_grant(system_id, skill_name, actor_id)
-    logger.info(
+    log_event(
         "skill_grant_set",
-        extra={
-            "team_id": team_id,
-            "system_id": system_id,
-            "actor_id": actor_id,
-            "skill_count": len(skill_names),
-        },
+        service="systems",
+        team_id=team_id,
+        system_id=system_id,
+        actor_id=actor_id,
+        skill_count=len(skill_names),
     )
 
 
@@ -221,15 +219,14 @@ def can_execute_skill(system_id: int, skill_name: str) -> tuple[bool, str | None
             deny_category = "system_grant"
 
     allowed = deny_category is None
-    logger.info(
+    log_event(
         "skill_permission_decision",
-        extra={
-            "team_id": team_id,
-            "system_id": system_id,
-            "skill_name": skill_name,
-            "allowed": allowed,
-            "failed_rule_category": deny_category,
-        },
+        service="systems",
+        team_id=team_id,
+        system_id=system_id,
+        skill_name=skill_name,
+        allowed=allowed,
+        failed_rule_category=deny_category,
     )
     return allowed, deny_category
 
@@ -264,15 +261,15 @@ def _raise_permission_error(
     category: str,
     actor_id: str | None,
 ) -> None:
-    logger.warning(
+    log_event(
         "skill_permission_denied",
-        extra={
-            "team_id": team_id,
-            "system_id": system_id,
-            "skill_name": skill_name,
-            "actor_id": actor_id,
-            "failed_rule_category": category,
-        },
+        level=logging.WARNING,
+        service="systems",
+        team_id=team_id,
+        system_id=system_id,
+        skill_name=skill_name,
+        actor_id=actor_id,
+        failed_rule_category=category,
     )
     raise PermissionError(
         "Permission denied for team_id="

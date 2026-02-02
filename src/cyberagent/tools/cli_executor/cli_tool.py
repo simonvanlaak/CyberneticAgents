@@ -193,7 +193,8 @@ class CliTool:
 
 
 def _get_executor_timeout(executor: Any) -> Optional[int]:
-    return getattr(executor, "_timeout", None)
+    timeout = getattr(executor, "_timeout", None)
+    return timeout if isinstance(timeout, int) else None
 
 
 def _set_executor_timeout(executor: Any, timeout_seconds: int) -> None:
