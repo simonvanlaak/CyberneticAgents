@@ -125,10 +125,11 @@ def list_inbox_pending_questions() -> list[PendingQuestion]:
     state = _load_inbox_state()
     if state is None:
         return get_pending_questions()
+    pending = state.get("pending")
+    if not isinstance(pending, list):
+        return get_pending_questions()
     return [
-        PendingQuestion(**payload)
-        for payload in state.get("pending", [])
-        if isinstance(payload, dict)
+        PendingQuestion(**payload) for payload in pending if isinstance(payload, dict)
     ]
 
 
@@ -136,10 +137,11 @@ def list_inbox_answered_questions() -> list[AnsweredQuestion]:
     state = _load_inbox_state()
     if state is None:
         return get_answered_questions()
+    answered = state.get("answered")
+    if not isinstance(answered, list):
+        return get_answered_questions()
     return [
-        AnsweredQuestion(**payload)
-        for payload in state.get("answered", [])
-        if isinstance(payload, dict)
+        AnsweredQuestion(**payload) for payload in answered if isinstance(payload, dict)
     ]
 
 

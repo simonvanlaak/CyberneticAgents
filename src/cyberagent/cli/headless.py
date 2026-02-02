@@ -5,7 +5,7 @@ import logging
 import os
 from typing import Protocol
 
-from autogen_core import AgentId
+from autogen_core import AgentId, CancellationToken
 
 from src.agents.messages import UserMessage
 from src.agents.user_agent import UserAgent
@@ -32,10 +32,13 @@ logger = logging.getLogger(__name__)
 class SuggestionRuntime(Protocol):
     async def send_message(  # noqa: D401
         self,
-        message: UserMessage,
+        message: object,
         recipient: AgentId,
+        *,
         sender: AgentId | None = None,
-    ) -> None:
+        cancellation_token: CancellationToken | None = None,
+        message_id: str | None = None,
+    ) -> object:
         """Send a message to the runtime."""
 
 

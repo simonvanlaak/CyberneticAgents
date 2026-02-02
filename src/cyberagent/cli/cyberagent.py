@@ -810,7 +810,7 @@ def _parse_suggestion_args(args: argparse.Namespace) -> ParsedSuggestion:
         raise ValueError("payload is required")
     parsed: Any
     if args.format == "yaml":
-        if not YAML_AVAILABLE:
+        if not YAML_AVAILABLE or yaml is None:
             raise ValueError("YAML support requires PyYAML")
         parsed = yaml.safe_load(raw)
     else:

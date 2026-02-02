@@ -123,7 +123,7 @@ async def handle_tool_test(
     try:
         result = await execute_skill_tool(cli_tool, skill, parsed_args, args.agent_id)
     finally:
-        if started and hasattr(executor, "stop"):
+        if started and executor is not None and hasattr(executor, "stop"):
             await executor.stop()
     print(json.dumps(result, indent=2, default=str))
     return 0 if result.get("success") else 1
