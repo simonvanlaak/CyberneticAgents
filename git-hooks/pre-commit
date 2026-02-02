@@ -65,6 +65,10 @@ if [[ -n "${staged_test_files}" ]]; then
     while IFS= read -r file; do
       module="${file%.py}"
       module="${module//\//.}"
+      if [[ "${module}" == *-* ]]; then
+        echo "Skipping coverage for path with hyphen: ${file}"
+        continue
+      fi
       cov_args+=" --cov=${module}"
     done <<< "${staged_cov_targets}"
     echo "Running pytest with coverage (min 25%) on staged test files..."

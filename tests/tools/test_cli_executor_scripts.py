@@ -47,6 +47,11 @@ def _load_file_reader() -> ModuleType:
     return _load_module(path, "file_reader_skill")
 
 
+def _load_speech_to_text() -> ModuleType:
+    path = SKILLS_ROOT / "speech-to-text" / "speech_to_text.py"
+    return _load_module(path, "speech_to_text_skill")
+
+
 def test_web_fetch_requires_url(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -188,6 +193,93 @@ def test_file_reader_outputs_json(
     output = capsys.readouterr().out.strip()
     assert excinfo.value.code == 0
     assert '"output": "ok\\n"' in output
+
+
+def test_speech_to_text_requires_file(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(sys, "argv", ["speech-to-text", "run"])
+    speech_to_text = _load_speech_to_text()
+
+    with pytest.raises(SystemExit) as excinfo:
+        speech_to_text.main()
+
+    assert excinfo.value.code == 2
+    assert "--file" in capsys.readouterr().err
+
+
+def test_speech_to_text_requires_api_key(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    audio_path = tmp_path / "audio.wav"
+    audio_path.write_bytes(b"fake")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "speech-to-text",
+            "run",
+            "--file",
+            str(audio_path),
+            "--provider",
+            "openai",
+        ],
+    )
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+
+    speech_to_text = _load_speech_to_text()
+
+    with pytest.raises(SystemExit) as excinfo:
+        speech_to_text.main()
+
+    assert "OPENAI_API_KEY" in str(excinfo.value)
+
+
+def test_speech_to_text_outputs_json(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    audio_path = tmp_path / "audio.wav"
+    audio_path.write_bytes(b"fake")
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "speech-to-text",
+            "run",
+            "--file",
+            str(audio_path),
+            "--provider",
+            "groq",
+            "--model",
+            "whisper-large-v3-turbo",
+            "--response-format",
+            "text",
+        ],
+    )
+    monkeypatch.setenv("GROQ_API_KEY", "token")
+
+    def _fake_post(url: str, headers: dict[str, str], files: dict[str, object], data):
+        assert url == "https://api.groq.com/openai/v1/audio/transcriptions"
+        assert headers["Authorization"] == "Bearer token"
+        assert data["model"] == "whisper-large-v3-turbo"
+        assert data["response_format"] == "text"
+
+        class _Response:
+            text = "hello world"
+
+            def raise_for_status(self) -> None:
+                return None
+
+        return _Response()
+
+    monkeypatch.setitem(sys.modules, "requests", SimpleNamespace(post=_fake_post))
+
+    speech_to_text = _load_speech_to_text()
+    speech_to_text.main()
+
+    output = capsys.readouterr().out
+    assert '"text": "hello world"' in output
+    assert '"provider": "groq"' in output
 
 
 def test_build_authed_url_adds_token() -> None:

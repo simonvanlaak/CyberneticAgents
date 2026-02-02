@@ -39,6 +39,10 @@ RUN chmod +x /usr/local/bin/file-reader
 COPY src/tools/skills/git-readonly-sync/git_readonly_sync.py /usr/local/bin/git-readonly-sync
 RUN chmod +x /usr/local/bin/git-readonly-sync
 
+# Speech-to-text transcription helper exposed as a CLI.
+COPY src/tools/skills/speech-to-text/speech_to_text.py /usr/local/bin/speech-to-text
+RUN chmod +x /usr/local/bin/speech-to-text
+
 RUN git --version && rg --version
 
 CMD ["bash"]
