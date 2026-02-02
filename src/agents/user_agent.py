@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from dataclasses import dataclass
 
 from autogen_agentchat.messages import TextMessage
@@ -128,6 +129,8 @@ class UserAgent(RoutedAgent):
         )
 
     async def _send_telegram_prompt(self, chat_id: int, text: str) -> None:
+        if not os.environ.get("TELEGRAM_BOT_TOKEN"):
+            return
         try:
             await asyncio.to_thread(send_telegram_message, chat_id, text)
         except Exception:  # pragma: no cover - safety net
