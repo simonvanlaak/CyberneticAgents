@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import threading
 import time
 from concurrent.futures import Future
@@ -22,7 +23,9 @@ from src.cyberagent.channels.telegram.parser import (
     classify_text_message,
     extract_text_messages,
     extract_voice_messages,
+    is_allowed,
     is_valid_secret,
+    parse_allowlist,
 )
 
 logger = logging.getLogger(__name__)
@@ -63,6 +66,12 @@ class TelegramWebhookServer:
         self._thread: threading.Thread | None = None
         self._stt_config = telegram_stt.load_config()
         self._stt_cache_dir = telegram_stt.get_cache_dir()
+        self._allowed_chat_ids = parse_allowlist(
+            os.environ.get("TELEGRAM_ALLOWED_CHAT_IDS")
+        )
+        self._allowed_user_ids = parse_allowlist(
+            os.environ.get("TELEGRAM_ALLOWED_USER_IDS")
+        )
 
     def start(self, webhook_url: str) -> None:
         handler = self._build_handler()
@@ -124,6 +133,14 @@ class TelegramWebhookServer:
         return TelegramWebhookHandler
 
     def _handle_inbound(self, inbound: TelegramInboundMessage) -> None:
+        if not is_allowed(
+            inbound.chat_id,
+            inbound.user_id,
+            self._allowed_chat_ids,
+            self._allowed_user_ids,
+        ):
+            self._client.send_message(inbound.chat_id, "Not authorized.")
+            return
         kind, value = classify_text_message(inbound.text)
         if kind == "command":
             if value == "/start":
@@ -155,6 +172,14 @@ class TelegramWebhookServer:
         self._forward_message(inbound.text, session_id, inbound.chat_id)
 
     def _handle_voice_inbound(self, inbound: TelegramInboundVoiceMessage) -> None:
+        if not is_allowed(
+            inbound.chat_id,
+            inbound.user_id,
+            self._allowed_chat_ids,
+            self._allowed_user_ids,
+        ):
+            self._client.send_message(inbound.chat_id, "Not authorized.")
+            return
         session_id = build_session_id(inbound.chat_id, inbound.user_id)
         if (
             inbound.duration is not None

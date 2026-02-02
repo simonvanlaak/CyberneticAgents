@@ -49,6 +49,21 @@ def is_valid_secret(headers: Mapping[str, str], expected: str | None) -> bool:
     return lowered.get("x-telegram-bot-api-secret-token") == expected
 
 
+def parse_allowlist(value: str | None) -> set[int]:
+    if not value:
+        return set()
+    entries = [item.strip() for item in value.split(",")]
+    return {int(item) for item in entries if item.isdigit()}
+
+
+def is_allowed(
+    chat_id: int, user_id: int, allowed_chats: set[int], allowed_users: set[int]
+) -> bool:
+    if not allowed_chats and not allowed_users:
+        return True
+    return chat_id in allowed_chats or user_id in allowed_users
+
+
 def extract_text_messages(
     updates: list[dict[str, object]],
 ) -> list[TelegramInboundMessage]:

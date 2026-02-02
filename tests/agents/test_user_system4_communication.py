@@ -244,7 +244,7 @@ async def test_user_agent_includes_question_context_in_reply():
     user_agent = UserAgent("test_user")
 
     user_agent.publish_message = AsyncMock()
-    user_agent._runtime = cast(AgentRuntime, object())
+    setattr(user_agent, "_runtime", cast(AgentRuntime, object()))
     ctx = MessageContext(
         sender=AgentId(type="UserAgent", key="root"),
         topic_id=TopicId(type="UserAgent", source="root"),
@@ -274,7 +274,7 @@ async def test_user_agent_enqueues_pending_question_with_channel_metadata(
     clear_pending_questions()
     user_agent = UserAgent("test_user")
     user_agent.publish_message = AsyncMock()
-    user_agent._runtime = cast(AgentRuntime, object())
+    setattr(user_agent, "_runtime", cast(AgentRuntime, object()))
 
     ctx = MessageContext(
         sender=AgentId(type="UserAgent", key="root"),

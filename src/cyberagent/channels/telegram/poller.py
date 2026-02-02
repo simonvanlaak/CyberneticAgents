@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from typing import Protocol
 
@@ -19,6 +20,8 @@ from src.cyberagent.channels.telegram.parser import (
     classify_text_message,
     extract_text_messages,
     extract_voice_messages,
+    is_allowed,
+    parse_allowlist,
     TelegramInboundMessage,
 )
 
@@ -57,6 +60,12 @@ class TelegramPoller:
         self._offset: int | None = None
         self._stt_config = telegram_stt.load_config()
         self._stt_cache_dir = telegram_stt.get_cache_dir()
+        self._allowed_chat_ids = parse_allowlist(
+            os.environ.get("TELEGRAM_ALLOWED_CHAT_IDS")
+        )
+        self._allowed_user_ids = parse_allowlist(
+            os.environ.get("TELEGRAM_ALLOWED_USER_IDS")
+        )
 
     async def run(self) -> None:
         while not self._stop_event.is_set():
@@ -70,6 +79,15 @@ class TelegramPoller:
                 continue
             messages = extract_text_messages(updates)
             for inbound in messages:
+                if not is_allowed(
+                    inbound.chat_id,
+                    inbound.user_id,
+                    self._allowed_chat_ids,
+                    self._allowed_user_ids,
+                ):
+                    await self._send_reply(inbound.chat_id, "Not authorized.")
+                    self._offset = inbound.update_id + 1
+                    continue
                 if await self._handle_command(inbound):
                     self._offset = inbound.update_id + 1
                     continue
@@ -82,6 +100,17 @@ class TelegramPoller:
                 self._offset = inbound.update_id + 1
             voice_messages = extract_voice_messages(updates)
             for voice in voice_messages:
+                if not is_allowed(
+                    voice.chat_id,
+                    voice.user_id,
+                    self._allowed_chat_ids,
+                    self._allowed_user_ids,
+                ):
+                    await asyncio.to_thread(
+                        send_telegram_message, voice.chat_id, "Not authorized."
+                    )
+                    self._offset = voice.update_id + 1
+                    continue
                 session_id = build_session_id(voice.chat_id, voice.user_id)
                 if (
                     voice.duration is not None

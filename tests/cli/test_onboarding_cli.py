@@ -332,6 +332,35 @@ def test_prompt_store_secret_creates_vault_and_item(
     assert any("--title" in cmd and "BRAVE_API_KEY" in cmd for cmd in calls)
 
 
+def test_optional_telegram_setup_prompts_when_missing(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.setattr(onboarding_cli.shutil, "which", lambda *_: "/usr/bin/op")
+    monkeypatch.setattr(onboarding_cli, "_has_onepassword_auth", lambda: True)
+    monkeypatch.setattr(
+        onboarding_cli, "_check_onepassword_write_access", lambda *_: True
+    )
+    monkeypatch.setattr(onboarding_cli, "_prompt_yes_no", lambda *_: True)
+    monkeypatch.setattr(onboarding_cli.getpass, "getpass", lambda *_: "secret")
+
+    stored = {}
+
+    def fake_create(vault: str, title: str, secret: str) -> bool:
+        stored["vault"] = vault
+        stored["title"] = title
+        stored["secret"] = secret
+        return True
+
+    monkeypatch.setattr(onboarding_cli, "_create_onepassword_item", fake_create)
+    monkeypatch.setattr(onboarding_cli, "_ensure_onepassword_vault", lambda *_: True)
+
+    onboarding_cli._offer_optional_telegram_setup()
+    captured = capsys.readouterr().out
+    assert "Telegram" in captured
+    assert stored["title"] == "TELEGRAM_BOT_TOKEN"
+
+
 def test_check_docker_socket_access_denied(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

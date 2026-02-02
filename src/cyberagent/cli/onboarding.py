@@ -255,6 +255,7 @@ def run_technical_onboarding_checks() -> bool:
             return False
 
     _warn_optional_api_keys()
+    _offer_optional_telegram_setup()
     _save_technical_onboarding_state({"state": state, "ok": True})
     print("Technical onboarding checks passed.")
     return True
@@ -270,6 +271,7 @@ def _collect_technical_onboarding_state() -> dict[str, object]:
         "has_langfuse_public": bool(os.environ.get("LANGFUSE_PUBLIC_KEY")),
         "has_langfuse_secret": bool(os.environ.get("LANGFUSE_SECRET_KEY")),
         "has_langsmith": bool(os.environ.get("LANGSMITH_API_KEY")),
+        "has_telegram_token": bool(os.environ.get("TELEGRAM_BOT_TOKEN")),
         "has_onepassword_auth": _has_onepassword_auth(),
         "has_op_session": bool(_get_onepassword_session_env()),
         "skills_root_exists": DEFAULT_SKILLS_ROOT.exists(),
@@ -600,6 +602,21 @@ def _warn_optional_api_keys() -> None:
     if missing:
         missing_str = ", ".join(missing)
         print(f"Optional API keys not set: {missing_str}.")
+
+
+def _offer_optional_telegram_setup() -> None:
+    if os.environ.get("TELEGRAM_BOT_TOKEN"):
+        return
+    print(
+        "Telegram is not configured. You can add TELEGRAM_BOT_TOKEN now to enable the "
+        "Telegram channel."
+    )
+    if not _prompt_store_secret_in_1password(
+        env_name="TELEGRAM_BOT_TOKEN",
+        description="Telegram bot token",
+        doc_hint=None,
+    ):
+        return
 
 
 def _prompt_store_secret_in_1password(
