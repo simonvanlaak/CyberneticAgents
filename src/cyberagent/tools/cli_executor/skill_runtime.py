@@ -13,6 +13,8 @@ from src.cyberagent.tools.cli_executor.skill_loader import (
     load_skill_definitions,
 )
 from src.cyberagent.tools.cli_executor.skill_tools import build_skill_tools
+from src.cyberagent.db.models.system import get_system_from_agent_id
+from src.cyberagent.services import systems as systems_service
 
 DEFAULT_SKILLS_ROOT = Path("src/tools/skills")
 MAX_AGENT_SKILLS = 5
@@ -29,7 +31,10 @@ def get_agent_skill_tools(agent_id: str) -> list[FunctionTool]:
     skills = load_skill_definitions(DEFAULT_SKILLS_ROOT)
     if not skills:
         return []
-    return build_skill_tools(cli_tool, skills[:MAX_AGENT_SKILLS], agent_id=agent_id)
+    filtered = _filter_granted_skills(skills, agent_id)
+    if not filtered:
+        return []
+    return build_skill_tools(cli_tool, filtered[:MAX_AGENT_SKILLS], agent_id=agent_id)
 
 
 def get_agent_skill_prompt_entries(agent_id: str) -> list[str]:
@@ -40,12 +45,27 @@ def get_agent_skill_prompt_entries(agent_id: str) -> list[str]:
     skills = load_skill_definitions(DEFAULT_SKILLS_ROOT)
     if not skills:
         return []
-    return [_format_skill_prompt_entry(skill) for skill in skills[:MAX_AGENT_SKILLS]]
+    filtered = _filter_granted_skills(skills, agent_id)
+    if not filtered:
+        return []
+    return [_format_skill_prompt_entry(skill) for skill in filtered[:MAX_AGENT_SKILLS]]
 
 
 def _format_skill_prompt_entry(skill: SkillDefinition) -> str:
     location = skill.location.as_posix()
     return f"{skill.name}: {skill.description} (location: {location})"
+
+
+def _filter_granted_skills(
+    skills: list[SkillDefinition], agent_id: str
+) -> list[SkillDefinition]:
+    system = get_system_from_agent_id(agent_id)
+    if system is None:
+        return []
+    granted = set(systems_service.list_granted_skills(system.id))
+    if not granted:
+        return []
+    return [skill for skill in skills if skill.name in granted]
 
 
 def _get_shared_cli_tool() -> CliTool | None:

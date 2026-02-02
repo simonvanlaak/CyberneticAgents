@@ -38,6 +38,20 @@ def test_get_agent_skill_tools_applies_max_limit(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     skills = [_make_skill(f"skill-{i}") for i in range(7)]
+    monkeypatch.setattr(
+        skill_runtime,
+        "get_system_from_agent_id",
+        lambda _agent_id: type("obj", (), {"id": 1}),
+    )
+    monkeypatch.setattr(
+        skill_runtime,
+        "systems_service",
+        type(
+            "obj",
+            (),
+            {"list_granted_skills": lambda _system_id: [s.name for s in skills]},
+        ),
+    )
     monkeypatch.setattr(skill_runtime, "_get_shared_cli_tool", lambda: object())
     monkeypatch.setattr(skill_runtime, "load_skill_definitions", lambda _root: skills)
 
@@ -54,10 +68,44 @@ def test_get_agent_skill_tools_applies_max_limit(
     assert built_count["count"] == skill_runtime.MAX_AGENT_SKILLS
 
 
+def test_get_agent_skill_tools_returns_empty_when_no_grants(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    skills = [_make_skill("skill-0")]
+    monkeypatch.setattr(
+        skill_runtime,
+        "get_system_from_agent_id",
+        lambda _agent_id: type("obj", (), {"id": 1}),
+    )
+    monkeypatch.setattr(
+        skill_runtime,
+        "systems_service",
+        type("obj", (), {"list_granted_skills": lambda _system_id: []}),
+    )
+    monkeypatch.setattr(skill_runtime, "_get_shared_cli_tool", lambda: object())
+    monkeypatch.setattr(skill_runtime, "load_skill_definitions", lambda _root: skills)
+
+    assert skill_runtime.get_agent_skill_tools("System4/root") == []
+
+
 def test_get_agent_skill_prompt_entries_include_locations(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     skills = [_make_skill(f"skill-{i}") for i in range(2)]
+    monkeypatch.setattr(
+        skill_runtime,
+        "get_system_from_agent_id",
+        lambda _agent_id: type("obj", (), {"id": 1}),
+    )
+    monkeypatch.setattr(
+        skill_runtime,
+        "systems_service",
+        type(
+            "obj",
+            (),
+            {"list_granted_skills": lambda _system_id: [s.name for s in skills]},
+        ),
+    )
     monkeypatch.setattr(skill_runtime, "_shared_cli_tool", object())
     monkeypatch.setattr(skill_runtime, "_get_shared_cli_tool", lambda: object())
     monkeypatch.setattr(skill_runtime, "load_skill_definitions", lambda _root: skills)
