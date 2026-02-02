@@ -27,8 +27,26 @@ This document outlines the requirements for integrating **Telegram** as a commun
 ## Dependencies
 Depends on docs/product_requirements/communication_channels.md
 
+## Phase Scoping
+
+### Phase 1 (MVP)
+- Webhook secret validation plus config docs / 1Password onboarding flow
+- Authentication / authorization (allowlist + blocklist)
+- Session persistence (chat/user/session metadata)
+- Inbox integration beyond System4 prompts (per-user inbox view)
+- Basic logging for inbound/outbound and auth decisions
+
+### Phase 2 (Deferred)
+- Media handling (photos, documents, videos)
+- Rich formatting (Markdown/HTML), inline keyboards, message edits
+- Group chat support
+- Rate limiting / abuse protection
+- Streaming responses
+- Advanced telemetry and analytics
+- STT enhancements (diarization, chunking, preprocessing)
+
 ## Out of Scope (Phase 1)
-- Speech-to-Text pipeline (see docs/product_requirements/speech_to_text.md)
+- Media/formatting features listed in Phase 2
 
 ---
 
