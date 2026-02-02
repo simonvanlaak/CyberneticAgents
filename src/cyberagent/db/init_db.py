@@ -72,9 +72,12 @@ def get_database_path() -> str:
     if raw_path:
         if raw_path == "/:memory:":
             return ":memory:"
-        normalized = os.path.normpath(raw_path)
         if raw_path.startswith("//"):
+            normalized = os.path.normpath(raw_path)
+            if normalized.startswith("//"):
+                return "/" + normalized.lstrip("/")
             return normalized
+        normalized = os.path.normpath(raw_path)
         if normalized.startswith("/"):
             return normalized.lstrip("/")
         return normalized
