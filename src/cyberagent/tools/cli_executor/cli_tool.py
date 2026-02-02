@@ -2,6 +2,7 @@
 
 import json
 import logging
+import shlex
 from typing import Any, Dict, Optional
 
 from autogen_core import CancellationToken
@@ -162,11 +163,11 @@ class CliTool:
             # Handle lists
             if isinstance(value, list):
                 for item in value:
-                    args.append(f"--{key} {item}")
+                    args.append(f"--{key} {shlex.quote(str(item))}")
                 continue
 
             # Handle strings/numbers
-            args.append(f"--{key} {value}")
+            args.append(f"--{key} {shlex.quote(str(value))}")
 
         return " ".join(args)
 

@@ -324,6 +324,16 @@ def test_cli_tool_build_cli_args() -> None:
     assert "--verbose" in args
 
 
+def test_cli_tool_build_cli_args_quotes_values_with_spaces() -> None:
+    tool = CliTool(_FakeExecutor("{}"))
+
+    args = tool._build_cli_args({"command": "ls -la", "paths": ["a b", "c"]})
+
+    assert "--command 'ls -la'" in args
+    assert "--paths 'a b'" in args
+    assert "--paths c" in args
+
+
 def test_cli_tool_parse_result_json() -> None:
     tool = CliTool(_FakeExecutor("{}"))
     result = SimpleNamespace(exit_code=0, output=json.dumps({"ok": True}))
