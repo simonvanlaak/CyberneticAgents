@@ -522,7 +522,7 @@ def test_start_spawns_serve_process(
 
     monkeypatch.setenv("CYBERAGENT_TEST_NO_RUNTIME", "")
     monkeypatch.setattr(subprocess, "Popen", DummyProcess)
-    monkeypatch.setattr(cyberagent, "get_or_create_last_team_id", lambda: 7)
+    monkeypatch.setattr(cyberagent, "get_last_team_id", lambda: 7)
     monkeypatch.setattr(cyberagent, "init_db", lambda: None)
     target_pid = tmp_path / "serve.pid"
     monkeypatch.setattr(cyberagent, "RUNTIME_PID_FILE", target_pid)
@@ -532,6 +532,25 @@ def test_start_spawns_serve_process(
     assert recorded["cmd"][3] == cyberagent.SERVE_COMMAND
     assert recorded["env"]["CYBERAGENT_ACTIVE_TEAM_ID"] == "7"
     assert target_pid.read_text(encoding="utf-8") == "4242"
+
+
+def test_start_suggests_onboarding_when_no_team(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    class DummyProcess:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            raise AssertionError("Runtime should not start without a team.")
+
+    monkeypatch.setenv("CYBERAGENT_TEST_NO_RUNTIME", "")
+    monkeypatch.setattr(subprocess, "Popen", DummyProcess)
+    monkeypatch.setattr(cyberagent, "get_last_team_id", lambda: None)
+    monkeypatch.setattr(cyberagent, "init_db", lambda: None)
+
+    exit_code = cyberagent.main(["start"])
+
+    output = capsys.readouterr().out
+    assert exit_code == 1
+    assert "cyberagent onboarding" in output
 
 
 @pytest.mark.asyncio

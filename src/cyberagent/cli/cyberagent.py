@@ -47,7 +47,7 @@ from src.cyberagent.tools.cli_executor.skill_runtime import DEFAULT_SKILLS_ROOT
 from src.rbac.enforcer import get_enforcer
 from src.registry import register_systems
 from src.cyberagent.core.runtime import get_runtime, stop_runtime
-from src.cyberagent.core.state import get_or_create_last_team_id, mark_team_active
+from src.cyberagent.core.state import get_last_team_id, mark_team_active
 
 KEYRING_SERVICE = "cyberagent-cli"
 SYSTEM4_AGENT_ID = AgentId(type="System4", key="root")
@@ -59,6 +59,7 @@ TEST_START_ENV = "CYBERAGENT_TEST_NO_RUNTIME"
 TEST_START_ENV = "CYBERAGENT_TEST_NO_RUNTIME"
 SUGGEST_COMMAND = 'cyberagent suggest "Describe the task"'
 START_COMMAND = "cyberagent start"
+ONBOARDING_COMMAND = "cyberagent onboarding"
 INBOX_COMMAND = "cyberagent inbox"
 WATCH_COMMAND = "cyberagent watch"
 STATUS_COMMAND = "cyberagent status"
@@ -239,7 +240,9 @@ async def _handle_start(args: argparse.Namespace) -> int:
         print(f"Next: run {SUGGEST_COMMAND} to give the agents a task.")
         return 0
     init_db()
-    team_id = get_or_create_last_team_id()
+    team_id = _require_existing_team()
+    if team_id is None:
+        return 1
     cmd = [sys.executable, "-m", "src.cyberagent.cli.cyberagent", SERVE_COMMAND]
     if args.message:
         cmd.extend(["--message", args.message])
@@ -257,6 +260,14 @@ async def _handle_start(args: argparse.Namespace) -> int:
     print(f"Runtime starting in background (pid {proc.pid}).")
     print(f"Next: run {SUGGEST_COMMAND} to give the agents a task.")
     return 0
+
+
+def _require_existing_team() -> int | None:
+    team_id = get_last_team_id()
+    if team_id is None:
+        print(f"No teams found. Run '{ONBOARDING_COMMAND}' to create your first team.")
+        return None
+    return team_id
 
 
 def _ensure_background_runtime() -> int | None:
@@ -289,7 +300,9 @@ def _start_runtime_background() -> int | None:
     if os.environ.get(TEST_START_ENV) == "1":
         return None
     init_db()
-    team_id = get_or_create_last_team_id()
+    team_id = _require_existing_team()
+    if team_id is None:
+        return None
     cmd = [sys.executable, "-m", "src.cyberagent.cli.cyberagent", SERVE_COMMAND]
     env = os.environ.copy()
     env["CYBERAGENT_ACTIVE_TEAM_ID"] = str(team_id)
