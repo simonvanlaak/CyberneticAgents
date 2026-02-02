@@ -66,9 +66,8 @@ Each entry should include:
 
 ## Risks & Open Questions
 1. **Channel Identity**: How to map a Telegram user to the CLI user?
-2. **Threading Model**: One global thread or per‑channel thread?
-3. **Notification Strategy**: When should we push vs wait?
-4. **Privacy**: Which messages can safely be mirrored across channels?
+2. **Notification Strategy**: When should we push vs wait?
+3. **Privacy**: Which messages can safely be mirrored across channels?
 
 ## Roadmap
 1. **Phase 1**: CLI + Telegram, shared Inbox, minimal setup.
@@ -83,12 +82,10 @@ Each entry should include:
 ## OpenClaw‑Aligned Requirements (Routing & Sessions)
 The communication experience should match OpenClaw’s routing model:
 1. **Deterministic routing**: Replies must return to the same channel that received the message. The model does not choose the channel.
-2. **Channel + session keys**: Messages are grouped by a session key derived from agent + channel + conversation scope.
+2. **Channel + session keys**: Messages are grouped by a session key derived from agent + channel + session_id + conversation scope.
 3. **Direct messages**: By default, direct chats collapse into a single “main” session for continuity.
 4. **Group/room isolation**: Groups and channels remain isolated per channel + group/channel id.
-5. **Thread isolation**:
-   - Slack/Discord threads append a thread id to the base session.
-   - Telegram forum topics embed a topic id in the group session key.
+5. **Thread isolation**: Out of scope for v1 because CLI and Telegram do not require thread mapping.
 6. **Multi‑account awareness**: Account identity is part of the routing context when the user has multiple accounts.
 7. **Configurable DM scoping**: Direct message scoping should support:
    - `main` (all DMs share the main session),
