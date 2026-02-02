@@ -146,8 +146,7 @@ def _check_llm_credentials() -> bool:
             field_label="credential",
         )
         if loaded:
-            os.environ["GROQ_API_KEY"] = loaded
-            print(f"Loaded GROQ_API_KEY from 1Password vault {VAULT_NAME}.")
+            print(f"Found GROQ_API_KEY in 1Password vault {VAULT_NAME}.")
             return True
         print("Missing GROQ_API_KEY.")
         print(
@@ -168,8 +167,7 @@ def _check_llm_credentials() -> bool:
                 field_label="credential",
             )
             if loaded:
-                os.environ["MISTRAL_API_KEY"] = loaded
-                print(f"Loaded MISTRAL_API_KEY from 1Password vault {VAULT_NAME}.")
+                print(f"Found MISTRAL_API_KEY in 1Password vault {VAULT_NAME}.")
                 return True
             print("Missing MISTRAL_API_KEY.")
             print(
@@ -208,20 +206,14 @@ def _check_docker_available() -> bool:
 
 
 def _has_onepassword_auth() -> bool:
-    if os.getenv("OP_SERVICE_ACCOUNT_TOKEN"):
-        return True
-    for key, value in os.environ.items():
-        if key.startswith("OP_SESSION_") and value:
-            return True
-    return False
+    return bool(os.getenv("OP_SERVICE_ACCOUNT_TOKEN"))
 
 
 def _check_onepassword_auth() -> bool:
     if _has_onepassword_auth():
         return True
-    print("Missing 1Password authentication.")
-    for line in _format_op_signin_hint():
-        print(line)
+    print("Missing 1Password service account token.")
+    print("Export OP_SERVICE_ACCOUNT_TOKEN and re-run onboarding.")
     return False
 
 
@@ -231,45 +223,10 @@ def _format_op_signin_hint() -> list[str]:
             "Install the 1Password CLI (`op`) and re-run onboarding.",
             "Docs: https://developer.1password.com/docs/cli/",
         ]
-    shorthand = _detect_op_account_shorthand()
-    if shorthand:
-        return [
-            "Run the following in the same shell, then re-run onboarding:",
-            f'eval "$(op signin --account {shorthand})"',
-            "Alternatively: export OP_SERVICE_ACCOUNT_TOKEN=... (service accounts).",
-        ]
     return [
-        "Run the following in the same shell, then re-run onboarding:",
-        'eval "$(op signin)"',
-        "If you have multiple accounts: op account list, then",
-        'eval "$(op signin --account <shorthand>)"',
-        "Alternatively: export OP_SERVICE_ACCOUNT_TOKEN=... (service accounts).",
+        "Set OP_SERVICE_ACCOUNT_TOKEN for a 1Password service account, then re-run onboarding.",
+        "Docs: https://developer.1password.com/docs/cli/service-accounts/",
     ]
-
-
-def _detect_op_account_shorthand() -> str | None:
-    try:
-        result = subprocess.run(
-            ["op", "account", "list", "--format", "json"],
-            capture_output=True,
-            text=True,
-            timeout=3,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        return None
-    if result.returncode != 0 or not result.stdout:
-        return None
-    try:
-        accounts = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        return None
-    if not isinstance(accounts, list) or len(accounts) != 1:
-        return None
-    shorthand = accounts[0].get("shorthand") if isinstance(accounts[0], dict) else None
-    if isinstance(shorthand, str) and shorthand:
-        return shorthand
-    return None
 
 
 def _check_required_tool_secrets() -> bool:
@@ -280,8 +237,7 @@ def _check_required_tool_secrets() -> bool:
             field_label="credential",
         )
         if loaded:
-            os.environ["BRAVE_API_KEY"] = loaded
-            print(f"Loaded BRAVE_API_KEY from 1Password vault {VAULT_NAME}.")
+            print(f"Found BRAVE_API_KEY in 1Password vault {VAULT_NAME}.")
             return True
         print("Missing BRAVE_API_KEY for web-search.")
         print(
@@ -358,7 +314,6 @@ def _prompt_store_secret_in_1password(
         if doc_hint:
             print(f"See {doc_hint} for details.")
         return False
-    os.environ[env_name] = secret_value
     print(f"Stored {env_name} in 1Password.")
     return True
 

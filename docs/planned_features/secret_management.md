@@ -19,12 +19,7 @@ This document summarizes the work done to integrate **1Password service accounts
   `TOOL_SECRET_ENV_VARS = {"web_search": ["BRAVE_API_KEY"]}`
 - Users must name secrets in 1Password to match the required env var names.
 
-### 3. **Runtime Injection (No Secret Persistence)**
-- Prefer `op run` to inject secrets for the lifetime of a process.
-- Avoid writing secrets to disk or committing `.env` files.
-- If a file is unavoidable (e.g., Docker compose env file), create it in a temp dir and delete it immediately after use.
-
-### 4. **Service Account Token Handling**
+### 3. **Service Account Token Handling**
 - Pass the service account token via environment injection (not inline on the command line).
 - Avoid putting tokens in shell history or process lists.
 

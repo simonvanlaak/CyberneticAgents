@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import argparse
-import os
-
 import pytest
 
 from src.cyberagent.cli import onboarding as onboarding_cli
@@ -136,29 +134,7 @@ def test_technical_onboarding_requires_onepassword_auth(
 
     assert onboarding_cli.run_technical_onboarding_checks() is False
     captured = capsys.readouterr().out
-    assert "1Password" in captured
-    assert "op signin" in captured
-
-
-def test_onepassword_hint_includes_account_shorthand(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr(onboarding_cli, "_has_onepassword_auth", lambda: False)
-    monkeypatch.setattr(onboarding_cli.shutil, "which", lambda *_: "/usr/bin/op")
-
-    class DummyResult:
-        def __init__(self) -> None:
-            self.returncode = 0
-            self.stdout = '[{"shorthand":"dev"}]'
-            self.stderr = ""
-
-    monkeypatch.setattr(
-        onboarding_cli.subprocess, "run", lambda *args, **kwargs: DummyResult()
-    )
-
-    assert onboarding_cli._check_onepassword_auth() is False
-    captured = capsys.readouterr().out
-    assert 'eval "$(op signin --account dev)"' in captured
+    assert "1Password service account token" in captured
 
 
 def test_onepassword_hint_when_op_missing(
@@ -169,7 +145,7 @@ def test_onepassword_hint_when_op_missing(
 
     assert onboarding_cli._check_onepassword_auth() is False
     captured = capsys.readouterr().out
-    assert "Install the 1Password CLI" in captured
+    assert "OP_SERVICE_ACCOUNT_TOKEN" in captured
 
 
 def test_missing_brave_key_explains_vault_and_item(
@@ -230,7 +206,6 @@ def test_prompt_store_secret_creates_vault_and_item(
         )
         is True
     )
-    assert os.environ.get("BRAVE_API_KEY") == "secret"
     assert ["op", "vault", "get", "CyberneticAgents"] in calls
     assert ["op", "vault", "create", "CyberneticAgents"] in calls
     assert any(cmd[:3] == ["op", "item", "create"] for cmd in calls)
@@ -287,6 +262,5 @@ def test_loads_brave_key_from_onepassword(
 
     monkeypatch.setattr(onboarding_cli, "_load_secret_from_1password", _load_secret)
     assert onboarding_cli._check_required_tool_secrets() is True
-    assert os.environ.get("BRAVE_API_KEY") == "brave-secret"
     captured = capsys.readouterr().out
-    assert "Loaded BRAVE_API_KEY" in captured
+    assert "Found BRAVE_API_KEY" in captured
