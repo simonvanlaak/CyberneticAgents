@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, Any, List
 
 from autogen_agentchat.agents import AssistantAgent
 from autogen_agentchat.base import Response, TaskResult
@@ -23,7 +23,7 @@ from autogen_core import (
     message_handler,
 )
 from autogen_core.models import ModelInfo, SystemMessage
-from autogen_core.tools import StaticStreamWorkbench
+from autogen_core.tools import BaseTool, StaticStreamWorkbench
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 from opentelemetry import trace
 from pydantic import BaseModel
@@ -32,6 +32,7 @@ from src.agents.messages import CapabilityGapMessage
 from src.cyberagent.services import policies as policy_service
 from src.cyberagent.services import systems as system_service
 from src.cyberagent.services import teams as team_service
+from src.enums import SystemType
 from src.cyberagent.core.state import get_last_team_id, mark_team_active
 from src.cyberagent.tools.cli_executor import (
     get_agent_skill_prompt_entries,
@@ -109,7 +110,9 @@ class SystemBase(RoutedAgent):
         self.trace_context = trace_context or {}
         self.identity_prompt = identity_prompt
         self.responsibility_prompts = responsibility_prompts
-        self.available_tools = get_agent_skill_tools(self.agent_id.__str__())
+        self.available_tools: list[BaseTool[Any, Any]] = list(
+            get_agent_skill_tools(self.agent_id.__str__())
+        )
         self.tools = self.available_tools
         # Create a valid Python identifier for the AssistantAgent
         # Replace slashes with underscores for the agent name
@@ -338,14 +341,24 @@ class SystemBase(RoutedAgent):
             SystemMessage(content=message) for message in messages
         ]
 
-    def _was_tool_called(self, response: Response, tool_name: str) -> bool:
-        # TODO change this to task result
-        if response.inner_messages:
-            for inner_message in response.inner_messages:
-                if isinstance(inner_message, ToolCallExecutionEvent):
-                    for functionExecutionResult in inner_message.content:
-                        if functionExecutionResult.name == tool_name:
-                            return True
+    def _was_tool_called(self, response: TaskResult | Response, tool_name: str) -> bool:
+        def _iter_events() -> list[BaseAgentEvent]:
+            events: list[BaseAgentEvent] = []
+            if isinstance(response, TaskResult):
+                for message in response.messages:
+                    if isinstance(message, BaseAgentEvent):
+                        events.append(message)
+            else:
+                for message in response.inner_messages or []:
+                    if isinstance(message, BaseAgentEvent):
+                        events.append(message)
+            return events
+
+        for inner_message in _iter_events():
+            if isinstance(inner_message, ToolCallExecutionEvent):
+                for functionExecutionResult in inner_message.content:
+                    if functionExecutionResult.name == tool_name:
+                        return True
         return False
 
     async def _publish_message_to_agent(
@@ -360,7 +373,9 @@ class SystemBase(RoutedAgent):
             agent_id.type,
             topic_source,
         )
-        if hasattr(message, "content") and isinstance(message.content, str):
+        if isinstance(message, BaseTextChatMessage) and isinstance(
+            message.content, str
+        ):
             summary = message.content.replace("\n", " ")
             if len(summary) > 200:
                 summary = f"{summary[:200]}..."
@@ -371,7 +386,7 @@ class SystemBase(RoutedAgent):
             topic_id=TopicId(topic_type, topic_source),
         )
 
-    def _get_systems_by_type(self, type: int) -> List["System"]:
+    def _get_systems_by_type(self, type: SystemType) -> List["System"]:
         if not self.team_id:
             raise ValueError("Team id is not set for this agent.")
         return system_service.get_systems_by_type(self.team_id, type)
@@ -409,7 +424,9 @@ class SystemBase(RoutedAgent):
 
         if structured_message is None:
             last_message = self._get_last_message(result)
-            if isinstance(last_message.content, str):
+            if isinstance(last_message, BaseTextChatMessage) and isinstance(
+                last_message.content, str
+            ):
                 try:
                     return expected_type.model_validate_json(last_message.content)
                 except Exception as e:

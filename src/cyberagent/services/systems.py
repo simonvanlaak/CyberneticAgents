@@ -11,6 +11,7 @@ from src.cyberagent.db.models.system import (
     get_systems_by_type as _get_systems_by_type,
     ensure_default_systems_for_team as _ensure_default_systems_for_team,
 )
+from src.enums import SystemType
 from src.rbac.skill_permissions_enforcer import get_enforcer
 from src.cyberagent.services import recursions as recursions_service
 from src.cyberagent.services import teams as teams_service
@@ -24,12 +25,12 @@ def get_system(system_id: int) -> System | None:
     return _get_system(system_id)
 
 
-def get_system_by_type(team_id: int, system_type: int) -> System:
+def get_system_by_type(team_id: int, system_type: SystemType) -> System:
     """Return a system by type for a team."""
     return _get_system_by_type(team_id, system_type)
 
 
-def get_systems_by_type(team_id: int, system_type: int) -> list[System]:
+def get_systems_by_type(team_id: int, system_type: SystemType) -> list[System]:
     """Return systems by type for a team."""
     return _get_systems_by_type(team_id, system_type)
 

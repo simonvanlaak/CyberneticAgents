@@ -86,7 +86,7 @@ def get_system(system_id: int) -> System:
         db.close()
 
 
-def get_system_by_type(team_id: int, system_type: int) -> System:
+def get_system_by_type(team_id: int, system_type: SystemType) -> System:
     if system_type == SystemType.OPERATION:
         raise ValueError(
             f"There can be multipel OPERATION Systems in a team. Use {get_systems_by_type.__name__}."
@@ -101,7 +101,7 @@ def get_system_by_type(team_id: int, system_type: int) -> System:
     return systems[0]
 
 
-def get_systems_by_type(team_id: int, system_type: int) -> List[System]:
+def get_systems_by_type(team_id: int, system_type: SystemType) -> List[System]:
     db = next(get_db())
     try:
         return (

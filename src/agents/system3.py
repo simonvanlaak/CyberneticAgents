@@ -96,8 +96,7 @@ class System3(SystemBase):
             "description": getattr(initiative, "description", ""),
             "result": getattr(initiative, "result", None),
         }
-        systems = self._get_systems_by_type(SystemType.OPERATION)
-        systems_list = systems.systems if hasattr(systems, "systems") else systems
+        systems_list = self._get_systems_by_type(SystemType.OPERATION)
         systems_payload = [
             {
                 "id": system.id,
@@ -225,7 +224,10 @@ class System3(SystemBase):
         if not task.assignee:
             raise ValueError("Task has no assignee")
         policy_chunk = policy_service.get_system_policy_prompts(task.assignee)
-        system_5_id = self._get_systems_by_type(SystemType.POLICY)[0].get_agent_id()
+        policy_systems = self._get_systems_by_type(SystemType.POLICY)
+        if not policy_systems:
+            raise ValueError("No policy system found for team.")
+        system_5_id = policy_systems[0].get_agent_id()
         # break down policies into chunks of 5
         if len(policy_chunk) == 0:
             # TODO: send a policy suggestion here
@@ -279,7 +281,11 @@ class System3(SystemBase):
 
     async def assign_task(self, system_id: int, task_id: int):
         assignee = system_service.get_system(system_id)
+        if assignee is None:
+            raise ValueError(f"System {system_id} not found.")
         task = task_service.get_task_by_id(task_id)
+        if assignee.agent_id_str is None:
+            raise ValueError(f"System {system_id} has no agent id.")
         task_service.assign_task(task, assignee.agent_id_str)
         await self._publish_message_to_agent(
             TaskAssignMessage(

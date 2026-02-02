@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from autogen_core.tools import FunctionTool
+from autogen_core.tools import BaseTool, FunctionTool
 
 from src.cyberagent.tools.cli_executor.skill_loader import SkillDefinition
 
@@ -14,9 +14,9 @@ def build_skill_tools(
     cli_tool: Any,
     skills: list[SkillDefinition],
     agent_id: str | None = None,
-) -> list[FunctionTool]:
+) -> list[BaseTool[Any, Any]]:
     """Create one FunctionTool wrapper for each loaded skill."""
-    tools: list[FunctionTool] = []
+    tools: list[BaseTool[Any, Any]] = []
     for skill in skills:
         runner = _build_skill_runner(cli_tool, skill, agent_id)
         tool_name = skill.name.replace("-", "_")

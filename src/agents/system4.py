@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, List, Tuple
+from typing import TYPE_CHECKING, Any, List, Tuple
 
 from autogen_agentchat.messages import TextMessage
 from autogen_core import MessageContext, message_handler
@@ -36,8 +36,11 @@ try:
     from src.cyberagent.db.models.initiative import Initiative
     from src.cyberagent.db.models.strategy import Strategy
 except Exception:  # pragma: no cover - fallback only for partial test/runtime setups
-    Initiative = object
-    Strategy = object
+    from typing import Any
+
+    Initiative = Any  # type: ignore[assignment]
+    Strategy = Any  # type: ignore[assignment]
+
 
 # Legacy monkeypatch compatibility for tests that patch module-level callables.
 get_or_create_default_purpose = purpose_service.get_or_create_default_purpose
@@ -442,9 +445,12 @@ class System4(SystemBase):
 
     async def assign_initiative_tool(self, initiative_id: int, system3_id: int):
         """Assign initiative to System3 for execution."""
+        system3 = system_service.get_system(system3_id)
+        if system3 is None:
+            raise ValueError(f"System {system3_id} not found.")
         await self._publish_message_to_agent(
             initiative_service.get_initiative_by_id(initiative_id).get_assign_message(),
-            system_service.get_system(system3_id).get_agent_id(),
+            system3.get_agent_id(),
         )
 
     async def suggest_policy_tool(self, policy_id: int | None, suggestion: str):
@@ -499,8 +505,8 @@ class System4(SystemBase):
             return (False, e)
 
     async def _select_next_initiative(
-        self, message, ctx, prompts, strategy: "Strategy"
-    ) -> "Initiative":
+        self, message, ctx, prompts, strategy: Any
+    ) -> Any:
         # Identify initative to start first
         assign_initiative_prompts = prompts + [
             "## STRATEGY",

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from autogen_core.tools import FunctionTool
+from typing import Any
+
+from autogen_core.tools import BaseTool
 
 from src.cyberagent.tools.cli_executor.cli_tool import CliTool
 from src.cyberagent.tools.cli_executor.factory import create_cli_executor
@@ -22,7 +24,7 @@ MAX_AGENT_SKILLS = 5
 _shared_cli_tool: CliTool | None = None
 
 
-def get_agent_skill_tools(agent_id: str) -> list[FunctionTool]:
+def get_agent_skill_tools(agent_id: str) -> list[BaseTool[Any, Any]]:
     """Return skill-backed FunctionTool objects for the given agent id."""
     cli_tool = _get_shared_cli_tool()
     if cli_tool is None:

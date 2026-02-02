@@ -1,7 +1,7 @@
 # Product Requirements – Communication Channels
 
 ## Summary
-CyberneticAgents should feel reachable wherever the user already communicates. We need a coherent product experience across channels (CLI first, Telegram next, later email/Slack/web), with a shared **Inbox** so messages are never “lost” and users can continue a conversation from any channel.
+CyberneticAgents should feel reachable wherever the user already communicates. We need a coherent product experience across channels (CLI first, later Telegram/email/Slack/web), with a shared **Inbox** so messages are never “lost” and users can continue a conversation from any channel.
 
 This document defines the product goals, user experience, and a high‑level roadmap for multi‑channel communication. Technical implementation details are intentionally light at this stage.
 
@@ -12,7 +12,7 @@ Today the user only interacts via CLI. That’s limiting for:
 3. Continuity: messages can feel disconnected without a shared thread.
 
 ## Goals
-1. **Reachability**: Users can receive and send messages via CLI and Telegram (MVP).
+1. **Reachability**: Users can receive and send messages via CLI (MVP). Other channels follow once the framework is in place.
 2. **Continuity**: A single Inbox shows all messages regardless of channel.
 3. **Clarity**: Users always know where a message came from and where replies go.
 4. **Trust**: Sensitive content is handled carefully and channels are explicit.
@@ -37,15 +37,15 @@ An individual building with CyberneticAgents who wants rapid feedback while away
 3. **Low Friction**: Minimal setup once; onboarding should guide the user.
 4. **Graceful Degradation**: If a channel is offline, the user still sees the message.
 
-## MVP Scope (CLI + Telegram)
+## MVP Scope (Framework + CLI)
+### Framework
+- Define a channel abstraction and routing contract for message ingress/egress.
+- Support a unified inbox that can aggregate messages across channels.
+- Provide clear metadata for channel, session, and sender in each inbox entry.
+
 ### CLI
 - Inbox shows new questions and answers.
 - A reply in CLI continues the conversation.
-
-### Telegram
-- Incoming Telegram messages appear in the Inbox.
-- The system can respond back in Telegram.
-- Telegram messages are clearly labeled as “Telegram” in the Inbox.
 
 ## Shared Inbox (Product Definition)
 The Inbox is a single feed that aggregates:
@@ -54,29 +54,29 @@ The Inbox is a single feed that aggregates:
 3. **System responses** (delivered back to the originating channel)
 
 Each entry should include:
-1. Channel (CLI, Telegram)
+1. Channel (CLI today; other channels later)
 2. Timestamp
 3. Sender (User, System4, etc.)
 4. Conversation/thread identifier
 
 ## Setup & Onboarding
 1. Onboarding should detect which channels are configured.
-2. Users should be prompted to connect Telegram with clear steps.
+2. Users should be prompted to connect new channels with clear steps.
 3. If a channel isn’t available, the system should explain why and how to fix it.
 
 ## Risks & Open Questions
-1. **Channel Identity**: How to map a Telegram user to the CLI user?
+1. **Channel Identity**: How to map external channel users to the CLI identity?
 2. **Notification Strategy**: When should we push vs wait?
 3. **Privacy**: Which messages can safely be mirrored across channels?
 
 ## Roadmap
-1. **Phase 1**: CLI + Telegram, shared Inbox, minimal setup.
-2. **Phase 2**: Email or Slack, more advanced notification preferences.
+1. **Phase 1**: Framework + CLI, shared Inbox, minimal setup.
+2. **Phase 2**: Telegram or Email/Slack, more advanced notification preferences.
 3. **Phase 3**: Multi‑user teams and shared inboxes.
 
 ## Success Metrics
 1. % of users who connect at least one external channel.
-2. Response time to system questions (before vs after Telegram).
+2. Response time to system questions (before vs after additional channels).
 3. Reduced “missed question” events (no pending questions >24h).
 
 ## OpenClaw‑Aligned Requirements (Routing & Sessions)
@@ -85,7 +85,7 @@ The communication experience should match OpenClaw’s routing model:
 2. **Channel + session keys**: Messages are grouped by a session key derived from agent + channel + session_id + conversation scope.
 3. **Direct messages**: By default, direct chats collapse into a single “main” session for continuity.
 4. **Group/room isolation**: Groups and channels remain isolated per channel + group/channel id.
-5. **Thread isolation**: Out of scope for v1 because CLI and Telegram do not require thread mapping.
+5. **Thread isolation**: Out of scope for v1 because the CLI does not require thread mapping.
 6. **Multi‑account awareness**: Account identity is part of the routing context when the user has multiple accounts.
 7. **Configurable DM scoping**: Direct message scoping should support:
    - `main` (all DMs share the main session),
