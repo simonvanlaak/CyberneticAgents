@@ -150,3 +150,6 @@ The next step is to implement the docs/planned_features/agent_skills.md plan and
 
 ### 2026-02-02
 I completed the refactoring and pushed.
+Skills and skill permissions are now implemented. See docs/features/agent_skills.md & /home/simon/Projects/2025/CyberneticAgents/docs/features/skill_permissions.md
+
+- [ ] In /home/simon/Projects/2025/CyberneticAgents/src/cyberagent/tools/cli_executor there are skills implemented as src/cyberagent/tools/cli_executor/web_fetch.py for example. This does not follow the agentskill architecture, they should be in their respective directory in src/tools/skills following the agentskill.io spec.

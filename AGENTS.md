@@ -212,3 +212,11 @@ focus reports on your edits; avoid guard-rail disclaimers unless truly blocked; 
 1. Ensure the ./requirements.txt file always reflects the required dependencies for the project
 2. If dependencies are missing install them in a virtual environment from ./requirements.txt
 3. If new dependencies are required, modify the ./requirements.txt file first.
+
+## Debug Mode
+When you receive an error message you should get into debug mode.
+During debug mode you repeat the following:
+1. Decide if a test should be written to reproduce the error provided, and create them if needed.
+2. Fix the provided error
+3. Re run the command that threw the error before
+4. If the command still throws an error, repeat this. If no errors are throw. Commit the changes and exit this loop.
