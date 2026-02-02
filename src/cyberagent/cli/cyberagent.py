@@ -31,7 +31,7 @@ except ImportError:
 from autogen_core import AgentId
 
 from src.agents.messages import UserMessage
-from src.cli_session import get_answered_questions, get_pending_questions
+from src.cli_session import list_inbox_answered_questions, list_inbox_pending_questions
 from src.cyberagent.cli import dev as dev_cli
 from src.cyberagent.cli import onboarding as onboarding_cli
 from src.cyberagent.cli.headless import run_headless_session
@@ -385,8 +385,8 @@ def _handle_suggest(args: argparse.Namespace) -> int:
 def _handle_inbox(args: argparse.Namespace) -> int:
     if _require_existing_team() is None:
         return 1
-    pending = get_pending_questions()
-    answered = get_answered_questions() if args.answered else []
+    pending = list_inbox_pending_questions()
+    answered = list_inbox_answered_questions() if args.answered else []
     if not pending and not answered:
         print("No messages in inbox.")
         print(f"Next: run {WATCH_COMMAND} to wait, or {SUGGEST_COMMAND}.")
@@ -411,7 +411,7 @@ async def _handle_watch(args: argparse.Namespace) -> int:
     print("Watching inbox (Ctrl-C to stop)...")
     try:
         while True:
-            pending = get_pending_questions()
+            pending = list_inbox_pending_questions()
             for question in pending:
                 if question.question_id in seen:
                     continue

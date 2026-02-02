@@ -174,8 +174,8 @@ def test_handle_inbox_prints_entries(
             answered_at=1,
         )
     ]
-    monkeypatch.setattr(cyberagent, "get_pending_questions", lambda: pending)
-    monkeypatch.setattr(cyberagent, "get_answered_questions", lambda: answered)
+    monkeypatch.setattr(cyberagent, "list_inbox_pending_questions", lambda: pending)
+    monkeypatch.setattr(cyberagent, "list_inbox_answered_questions", lambda: answered)
     result = cyberagent._handle_inbox(argparse.Namespace(answered=True))
     captured = capsys.readouterr()
     assert result == 0
@@ -202,7 +202,7 @@ async def test_handle_watch_prints_pending(
     question = PendingQuestion(
         question_id=7, content="Watch this", asked_by="System4", created_at=0
     )
-    monkeypatch.setattr(cyberagent, "get_pending_questions", lambda: [question])
+    monkeypatch.setattr(cyberagent, "list_inbox_pending_questions", lambda: [question])
 
     async def fake_sleep(interval: float) -> None:
         raise KeyboardInterrupt
@@ -276,7 +276,7 @@ def test_check_recent_runtime_errors_counts_new(
 
     cyberagent._check_recent_runtime_errors("status")
     output = capsys.readouterr().out
-    assert "2 warnings/errors" in output
+    assert "1 errors, 1 warnings" in output
     assert "cyberagent logs" in output
 
     # Second call should be quiet when no new lines exist.
@@ -312,7 +312,7 @@ def test_check_recent_runtime_errors_resets_on_new_log(
 
     cyberagent._check_recent_runtime_errors("status")
     output = capsys.readouterr().out
-    assert "1 warnings/errors" in output
+    assert "0 errors, 1 warnings" in output
     assert "cyberagent logs" in output
 
 
