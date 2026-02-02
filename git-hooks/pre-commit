@@ -6,6 +6,10 @@ PYTHON_BIN="python3"
 if [[ -x ".venv/bin/python" ]]; then
   PYTHON_BIN=".venv/bin/python"
 fi
+BASEDPYRIGHT_BIN="basedpyright"
+if [[ -x ".venv/bin/basedpyright" ]]; then
+  BASEDPYRIGHT_BIN=".venv/bin/basedpyright"
+fi
 
 # Staged Python files
 staged_py_files=$(git diff --cached --name-only --diff-filter=ACM | rg '\.py$' || true)
@@ -40,7 +44,7 @@ if [[ -n "${staged_py_files}" ]]; then
     ${PYTHON_BIN} -m ruff check "${file}"
   done
   echo "Running basedpyright on staged Python files..."
-  ${PYTHON_BIN} -m basedpyright ${staged_py_files}
+  ${BASEDPYRIGHT_BIN} ${staged_py_files}
 else
   echo "No staged Python files for black/ruff/basedpyright."
 fi
