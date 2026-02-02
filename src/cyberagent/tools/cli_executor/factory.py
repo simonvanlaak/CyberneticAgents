@@ -1,6 +1,4 @@
-"""
-Factory for creating the OpenClaw CLI executor.
-"""
+"""Factory for creating the shared CLI executor."""
 
 from __future__ import annotations
 
@@ -15,7 +13,7 @@ from src.cyberagent.tools.cli_executor.docker_env_executor import (
 
 def create_cli_executor() -> Optional[EnvDockerCommandLineCodeExecutor]:
     """
-    Create a code executor for OpenClaw tools.
+    Create a code executor for CLI tools.
 
     Returns:
         Code executor instance or None if AutoGen not available.
@@ -25,8 +23,8 @@ def create_cli_executor() -> Optional[EnvDockerCommandLineCodeExecutor]:
 
     try:
         image = os.getenv(
-            "OPENCLAW_TOOLS_IMAGE",
-            "ghcr.io/simonvanlaak/cyberneticagents-openclaw-tools:latest",
+            "CLI_TOOLS_IMAGE",
+            "ghcr.io/simonvanlaak/cyberneticagents-cli-tools:latest",
         )
         return EnvDockerCommandLineCodeExecutor(
             work_dir=work_dir,

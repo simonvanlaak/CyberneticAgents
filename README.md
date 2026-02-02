@@ -88,8 +88,8 @@ CyberneticAgents/
 - `main.py` routes into the headless CLI runtime (`src/cyberagent/cli/headless.py`).
 - The headless runtime initializes DB state and registers agent factories.
 - `UserAgent` receives user input and forwards it to System 4.
-- System agents coordinate tasks and policies via internal workflows and OpenClaw tooling.
-- OpenClaw tools are executed through a Docker CLI executor when configured.
+- System agents coordinate tasks and policies via internal workflows and CLI tooling.
+- CLI tools are executed through a Docker CLI executor when configured.
 - Messages and tool usage are logged to stdout and runtime logs, with optional tracing.
 
 ## Known Transitional Modules

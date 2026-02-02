@@ -270,7 +270,7 @@ m = (r.sub == p.sub) && (r.team == p.team) && (r.skill == p.skill) && (r.act == 
   - root team can grant and execute any supported skill
 
 ### Runtime Enforcement Tests
-- `tests/tools/test_openclaw_tool_skill_permissions.py`
+- `tests/tools/test_cli_executor_coverage.py`
   - deny when team envelope fails
   - deny when system grant missing
   - allow when both pass

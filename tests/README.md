@@ -137,7 +137,7 @@ class TestRBACEnforcer:
 
 ### Integration Test Example
 
-The integration suite focuses on agent workflows and OpenClaw tool execution.
+The integration suite focuses on agent workflows and CLI tool execution.
 Legacy delegate/escalate tool examples have been removed.
 
 ## Test Data and Fixtures

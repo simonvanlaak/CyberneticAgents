@@ -86,7 +86,7 @@ These keep policy rows readable, queryable, and migration-safe.
 ## Core Components and Responsibilities
 
 ### Runtime and Execution
-- `src/cyberagent/tools/cli_executor/openclaw_tool.py`
+- `src/cyberagent/tools/cli_executor/cli_tool.py`
   - Integrate skill permission gate before skill invocation.
   - Return deterministic error envelope on deny.
 
@@ -222,38 +222,38 @@ These keep policy rows readable, queryable, and migration-safe.
 ## Implementation Checklist
 
 ### Foundation
-- [ ] Add `src/rbac/skill_permissions_model.conf`.
-- [ ] Add dedicated skill-permissions enforcer module in `src/rbac/`.
-- [ ] Define subject/resource/action naming helpers (`team:*`, `system:*`, `skill:*`, `allow`).
+- [x] Add `src/rbac/skill_permissions_model.conf`.
+- [x] Add dedicated skill-permissions enforcer module in `src/rbac/`.
+- [x] Define subject/resource/action naming helpers (`team:*`, `system:*`, `skill:*`, `allow`).
 
 ### Services
-- [ ] Extend `src/cyberagent/services/teams.py` with envelope CRUD APIs.
-- [ ] Extend `src/cyberagent/services/systems.py` with grant CRUD APIs.
-- [ ] Implement grant-time max-5 enforcement in system grant services.
-- [ ] Implement envelope revoke cascade to remove matching system grants in-team.
-- [ ] Implement `can_execute_skill` with deny precedence (`team_envelope` then `system_grant`).
+- [x] Extend `src/cyberagent/services/teams.py` with envelope CRUD APIs.
+- [x] Extend `src/cyberagent/services/systems.py` with grant CRUD APIs.
+- [x] Implement grant-time max-5 enforcement in system grant services.
+- [x] Implement envelope revoke cascade to remove matching system grants in-team.
+- [x] Implement `can_execute_skill` with deny precedence (`team_envelope` then `system_grant`).
 
 ### Runtime Enforcement
-- [ ] Integrate permission gate in CLI skill execution path.
-- [ ] Return structured deny payload with `team_id`, `system_id`, `skill_name`, `failed_rule_category`.
-- [ ] Emit structured allow/deny events with traceable decision context.
+- [x] Integrate permission gate in CLI skill execution path.
+- [x] Return structured deny payload with `team_id`, `system_id`, `skill_name`, `failed_rule_category`.
+- [x] Emit structured allow/deny events with traceable decision context.
 
 ### System5 Integration
-- [ ] Add/extend System5 permission CRUD handlers in `src/agents/system5.py`.
-- [ ] Ensure System5 uses services only (no direct Casbin writes).
-- [ ] Enforce team-scope boundaries for System5 operations.
+- [x] Add/extend System5 permission CRUD handlers in `src/agents/system5.py`.
+- [x] Ensure System5 uses services only (no direct Casbin writes).
+- [x] Enforce team-scope boundaries for System5 operations.
 
 ### Testing (TDD)
-- [ ] Add unit tests for team envelope service behavior.
-- [ ] Add unit tests for system grant service behavior.
-- [ ] Add unit tests for max-5 grant-time rule.
-- [ ] Add unit tests for deny precedence behavior.
-- [ ] Add integration tests for System5 grant/revoke and runtime execute checks.
+- [x] Add unit tests for team envelope service behavior.
+- [x] Add unit tests for system grant service behavior.
+- [x] Add unit tests for max-5 grant-time rule.
+- [x] Add unit tests for deny precedence behavior.
+- [x] Add integration tests for System5 grant/revoke and runtime execute checks.
 
 ### Observability and Audit
-- [ ] Add structured audit logs for envelope/grant CRUD events.
-- [ ] Add structured audit logs for execution permission decisions.
-- [ ] Verify actor identity and timestamp are included in all mutation logs.
+- [x] Add structured audit logs for envelope/grant CRUD events.
+- [x] Add structured audit logs for execution permission decisions.
+- [x] Verify actor identity and timestamp are included in all mutation logs.
 
 ## TDD-First Test Strategy
 - Unit tests:

@@ -93,8 +93,8 @@ def test_get_runtime_starts_singleton(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_create_cli_executor_uses_configured_image(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    expected_image = "ghcr.io/example/openclaw-tools:latest"
-    monkeypatch.setenv("OPENCLAW_TOOLS_IMAGE", expected_image)
+    expected_image = "ghcr.io/example/cli-tools:latest"
+    monkeypatch.setenv("CLI_TOOLS_IMAGE", expected_image)
 
     captured: dict[str, object] = {}
 

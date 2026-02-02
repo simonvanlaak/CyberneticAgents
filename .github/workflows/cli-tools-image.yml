@@ -1,4 +1,4 @@
-name: Build OpenClaw Tools Image
+name: Build CLI Tools Image
 
 on:
   push:
@@ -10,7 +10,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/cyberneticagents-openclaw-tools
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/cyberneticagents-cli-tools
 
 jobs:
   build-and-push:
@@ -42,7 +42,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: src/tools/cli_executor/Dockerfile.openclaw-tools
+          file: src/cyberagent/tools/cli_executor/Dockerfile.cli-tools
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

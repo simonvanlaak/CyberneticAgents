@@ -1,23 +1,23 @@
-# Test OpenClaw + AutoGen Integration
+# Test CLI Tools + AutoGen Integration
 # TDD: Write failing tests first
 
 import os
 import subprocess
-from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
 
 # Check if Docker is available
-def is_docker_available():
+def is_docker_available() -> bool:
     """Check if Docker daemon is running."""
     try:
         result = subprocess.run(
             ["docker", "info"], capture_output=True, text=True, timeout=5
         )
         return result.returncode == 0
-    except:
+    except Exception:
         return False
 
 
@@ -25,15 +25,15 @@ def is_docker_available():
 @pytest.mark.docker
 @pytest.mark.skipif(not is_docker_available(), reason="Docker daemon not running")
 def test_dockerfile_builds():
-    """Test that the OpenClaw tools Docker image builds successfully."""
+    """Test that the CLI tools Docker image builds successfully."""
     result = subprocess.run(
         [
             "docker",
             "build",
             "-t",
-            "openclaw-tools:test",
+            "cli-tools:test",
             "-f",
-            "src/cyberagent/tools/cli_executor/Dockerfile.openclaw-tools",
+            "src/cyberagent/tools/cli_executor/Dockerfile.cli-tools",
             ".",
         ],
         capture_output=True,
@@ -43,31 +43,26 @@ def test_dockerfile_builds():
     assert result.returncode == 0, f"Docker build failed: {result.stderr}"
 
 
-# Test 2: Docker executor can run OpenClaw commands
+# Test 2: Docker executor can run CLI commands
 @pytest.mark.asyncio
-@patch(
-    "autogen_ext.code_executors.docker.DockerCommandLineCodeExecutor.execute_code_blocks"
-)
-async def test_openclaw_command_execution(mock_execute):
-    """Test that OpenClaw commands can be executed via Docker executor."""
-    from src.cyberagent.tools.cli_executor.openclaw_tool import OpenClawTool
+async def test_cli_tool_command_execution() -> None:
+    """Test that CLI commands can be executed via Docker executor."""
+    from src.cyberagent.tools.cli_executor.cli_tool import CliTool
 
     # Mock successful execution
-    mock_execute.return_value = type(
-        "obj",
-        (object,),
-        {
-            "exit_code": 0,
-            "output": '{"success": true, "result": "test output"}',
-            "code_file": "/workspace/tmp_test.py",
-        },
+    mock_execute = AsyncMock(
+        return_value=SimpleNamespace(
+            exit_code=0,
+            output='{"success": true, "result": "test output"}',
+            code_file="/workspace/tmp_test.py",
+        )
     )
 
     executor = AsyncMock()
     executor.execute_code_blocks = mock_execute
 
-    tool = OpenClawTool(executor)
-    result = await tool.execute("skills", subcommand="list")
+    tool = CliTool(executor)
+    result = await tool.execute("git", subcommand="--version")
 
     assert result["success"] is True
     assert "result" in result["output"]
@@ -76,9 +71,9 @@ async def test_openclaw_command_execution(mock_execute):
 
 # Test 3: Web search tool works
 @pytest.mark.asyncio
-@patch("src.cyberagent.tools.cli_executor.openclaw_tool.OpenClawTool.execute")
-async def test_web_search_integration(mock_execute):
-    """Test that web_search tool can be called through OpenClaw integration."""
+@patch("src.cyberagent.tools.cli_executor.cli_tool.CliTool.execute")
+async def test_web_search_integration(mock_execute: AsyncMock) -> None:
+    """Test that web_search can be called through the CLI tools integration."""
     mock_execute.return_value = {
         "success": True,
         "output": {
@@ -92,9 +87,9 @@ async def test_web_search_integration(mock_execute):
         },
     }
 
-    from src.cyberagent.tools.cli_executor.openclaw_tool import OpenClawTool
+    from src.cyberagent.tools.cli_executor.cli_tool import CliTool
 
-    result = await OpenClawTool(None).execute("web_search", query="test", count=1)
+    result = await CliTool(None).execute("web_search", query="test", count=1)
 
     assert result["success"] is True
     assert len(result["output"]["results"]) == 1
@@ -103,14 +98,14 @@ async def test_web_search_integration(mock_execute):
 
 # Test 4: RBAC enforcement
 @pytest.mark.asyncio
-async def test_rbac_enforcement():
+async def test_rbac_enforcement() -> None:
     """Test that RBAC prevents unauthorized tool usage."""
     from src.rbac.enforcer import check_tool_permission
-    from src.cyberagent.tools.cli_executor.openclaw_tool import OpenClawTool
+    from src.cyberagent.tools.cli_executor.cli_tool import CliTool
 
     # Mock RBAC to deny access
     with patch("src.rbac.enforcer.check_tool_permission", return_value=False):
-        result = await OpenClawTool(None).execute("exec", agent_id="unauthorized_agent")
+        result = await CliTool(None).execute("exec", agent_id="unauthorized_agent")
 
         assert result["success"] is False
         assert "not authorized" in result["error"]
@@ -120,25 +115,24 @@ async def test_rbac_enforcement():
 @pytest.mark.asyncio
 @pytest.mark.docker
 @pytest.mark.skipif(
-    not is_docker_available() or os.getenv("RUN_OPENCLAW_INTEGRATION") != "1",
+    not is_docker_available() or os.getenv("RUN_CLI_TOOLS_INTEGRATION") != "1",
     reason="Docker integration tests are opt-in.",
 )
-async def test_real_openclaw_execution():
+async def test_real_cli_tool_execution() -> None:
     """Integration test with real Docker executor (requires Docker running)."""
     from src.cyberagent.tools.cli_executor.factory import create_cli_executor
-    from src.cyberagent.tools.cli_executor.openclaw_tool import OpenClawTool
+    from src.cyberagent.tools.cli_executor.cli_tool import CliTool
 
     executor = create_cli_executor()
     if executor is None:
         pytest.skip("Docker executor not available")
-    tool = OpenClawTool(executor)
+    tool = CliTool(executor)
 
     await executor.start()
     try:
-        # Test a simple OpenClaw command
-        result = await tool.execute("skills", subcommand="list")
+        result = await tool.execute("git", subcommand="--version")
     finally:
         await executor.stop()
 
     assert result["success"] is True
-    assert "coding-agent" in result["output"]
+    assert "git version" in result["output"]
