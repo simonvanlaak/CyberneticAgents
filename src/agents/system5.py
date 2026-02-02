@@ -194,14 +194,19 @@ class System5(SystemBase):
             "Respond with a ConfirmationMessage indicating your decision and rationale.",
         ]
 
-        response = await self.run(
-            [message],
-            context,
-            message_specific_prompts,
-            output_content_type=ConfirmationMessage,
-        )
+        response = await self.run([message], context, message_specific_prompts)
+        return self._confirmation_from_response(response)
 
-        return self._get_structured_message(response, ConfirmationMessage)
+    def _confirmation_from_response(
+        self, response: "TaskResult"
+    ) -> ConfirmationMessage:
+        last_message = self._get_last_message(response)
+        content = (
+            last_message.to_model_text()
+            if hasattr(last_message, "to_model_text")
+            else last_message.to_text()
+        )
+        return ConfirmationMessage(content=content, is_error=False, source=self.name)
 
     @message_handler
     async def handle_strategy_review_message(

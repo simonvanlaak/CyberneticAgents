@@ -4,6 +4,9 @@
 import pytest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
+
+from autogen_agentchat.base import TaskResult
+from autogen_agentchat.messages import TextMessage
 from autogen_core import MessageContext, AgentId
 
 from src.agents.system5 import System5
@@ -172,10 +175,9 @@ async def test_system5_policy_suggestion_missing_policy(
     monkeypatch: pytest.MonkeyPatch,
 ):
     system5 = System5("System5/root")
-    system5.run = AsyncMock(return_value=object())
-    system5._get_structured_message = MagicMock(
-        return_value=ConfirmationMessage(
-            content="ok", is_error=False, source="System5/root"
+    system5.run = AsyncMock(
+        return_value=TaskResult(
+            messages=[TextMessage(content="ok", source="System5/root")]
         )
     )
     monkeypatch.setattr(
