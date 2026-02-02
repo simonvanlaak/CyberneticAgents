@@ -1,3 +1,5 @@
+import logging
+
 from autogen_agentchat.messages import TextMessage
 from autogen_core import AgentId, MessageContext, RoutedAgent, TopicId, message_handler
 
@@ -5,6 +7,8 @@ from src.agents.messages import UserMessage
 from src.cli_session import get_pending_question, resolve_pending_question
 from src.cli_session import enqueue_pending_question
 from src.agents.system4 import System4
+
+logger = logging.getLogger(__name__)
 
 
 class UserAgent(RoutedAgent):
@@ -17,7 +21,7 @@ class UserAgent(RoutedAgent):
     async def handle_user_message(
         self, message: UserMessage, ctx: MessageContext
     ) -> None:
-        print(f"[user]: {message.content}", flush=True)
+        logger.debug("[user]: %s", message.content)
         resolved = resolve_pending_question(message.content)
         if resolved:
             message.content = (
@@ -26,10 +30,12 @@ class UserAgent(RoutedAgent):
                 f"Answer: {resolved.answer}"
             )
         message.source = self.id.key
-        print(f"{'-' * 80}\n[{self.id.__str__()}]:{message.content}")
         topic_id = TopicId(f"{System4.__name__}:", "root")
-        print(
-            f"{self.id.__str__()} -> {message.__class__.__name__} -> {System4.__name__}/root"
+        logger.debug(
+            "%s -> %s -> %s/root",
+            self.id.__str__(),
+            message.__class__.__name__,
+            System4.__name__,
         )
         await self.publish_message(
             message,
@@ -40,8 +46,7 @@ class UserAgent(RoutedAgent):
     async def handle_assistant_text_message(
         self, message: TextMessage, ctx: MessageContext
     ) -> None:
-        print(f"{'-' * 80} You received a message! {'-' * 80}")
-        print(f"[{ctx.sender.__str__()}]: {message.content}")
+        logger.debug("[%s]: %s", ctx.sender.__str__(), message.content)
         if message.metadata:
             ask_user_flag = str(message.metadata.get("ask_user", "")).lower() in {
                 "true",
@@ -53,7 +58,7 @@ class UserAgent(RoutedAgent):
                 enqueue_pending_question(message.content, asked_by=asked_by)
         pending_question = get_pending_question()
         if pending_question:
-            print(f"Pending question (System4): {pending_question.content}")
+            logger.debug("Pending question (System4): %s", pending_question.content)
 
     async def handle_task_result(
         self, message: TextMessage, ctx: MessageContext

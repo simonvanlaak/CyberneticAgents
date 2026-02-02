@@ -4,6 +4,7 @@ Central runtime manager for the VSM multi-agent system.
 """
 
 import base64
+import logging
 import os
 
 from autogen_core import SingleThreadedAgentRuntime
@@ -19,6 +20,7 @@ from src.cyberagent.tools.cli_executor.factory import create_cli_executor
 # Singleton runtime instance
 _runtime: SingleThreadedAgentRuntime | None = None
 _cli_executor = None
+logger = logging.getLogger(__name__)
 
 
 def configure_tracing():
@@ -27,16 +29,16 @@ def configure_tracing():
     secret_key = os.environ.get("LANGFUSE_SECRET_KEY", "")
 
     if not public_key or not secret_key:
-        print("Langfuse credentials not found, running without tracing")
+        logger.info("Langfuse credentials not found, running without tracing")
         return None
 
     try:
         langfuse = Langfuse()
 
         if langfuse.auth_check():
-            print("Langfuse client is authenticated and ready!")
+            logger.info("Langfuse client is authenticated and ready.")
         else:
-            print("Authentication failed. Please check your credentials and host.")
+            logger.warning("Langfuse authentication failed. Check credentials/host.")
             return None
 
         tracer_provider = TracerProvider(
@@ -58,7 +60,7 @@ def configure_tracing():
 
         return tracer_provider
     except Exception as e:
-        print(f"Failed to configure tracing: {e}. Running without tracing.")
+        logger.warning("Failed to configure tracing: %s. Running without tracing.", e)
         return None
 
 

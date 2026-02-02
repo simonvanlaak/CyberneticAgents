@@ -1,3 +1,4 @@
+import logging
 import os
 from typing import TYPE_CHECKING, List
 
@@ -48,6 +49,7 @@ SYSTEM_TYPES = {
     5: "policy",
     6: "user",
 }
+logger = logging.getLogger(__name__)
 
 
 def get_model_client(
@@ -96,7 +98,7 @@ class SystemBase(RoutedAgent):
             self.team_id = get_or_create_last_team_id()
         system_service.ensure_default_systems_for_team(self.team_id)
         mark_team_active(self.team_id)
-        print(f"Initializing {self.name}")
+        logger.info("Initializing %s", self.name)
         super().__init__(self.name)
         self.trace_context = trace_context or {}
         self.identity_prompt = identity_prompt
@@ -208,17 +210,17 @@ class SystemBase(RoutedAgent):
                     log_line = (
                         f"...[{self.agent_id.__str__()}] use tool {func_call.name}"
                     )
-                    print(log_line)
+                    logger.debug(log_line)
             elif isinstance(message, ToolCallExecutionEvent):
                 for func_result in message.content:
                     log_line = f"...[{func_result.name}]: {func_result.content}"
-                    print(log_line)
+                    logger.debug(log_line)
             else:
                 log_line = (
                     f"...[{self.agent_id.__str__()}]: {message.__class__.__name__} - "
                     f"{message.to_text()[:50]}"
                 )
-                print(log_line)
+                logger.debug(log_line)
         # attach trace context to response using proper W3C format
         if task_result.messages[-1].metadata is None:
             task_result.messages[-1].metadata = {}
@@ -240,11 +242,15 @@ class SystemBase(RoutedAgent):
         message: ToolCallSummaryMessage,
         ctx: MessageContext,
     ) -> TextMessage:
-        print(f"[{self.agent_id.key}] Received tool call summary: {message.content}")
+        logger.debug(
+            "[%s] Received tool call summary: %s", self.agent_id.key, message.content
+        )
 
         response = await self.run([message], ctx)
         text_message = self._get_structured_message(response, TextMessage)
-        print(f"[{self.agent_id.key}] Response completed: {text_message.content}")
+        logger.debug(
+            "[%s] Response completed: %s", self.agent_id.key, text_message.content
+        )
         return text_message
 
     @message_handler
@@ -253,13 +259,17 @@ class SystemBase(RoutedAgent):
         message: HandoffMessage,
         ctx: MessageContext,
     ) -> TextMessage:
-        print(f"[{self.agent_id.key}] Received handoff message: {message.content}")
+        logger.debug(
+            "[%s] Received handoff message: %s", self.agent_id.key, message.content
+        )
 
         response = await self.run([message], ctx)
         text_message = self._get_structured_message(response, TextMessage)
 
-        print(
-            f"[{self.agent_id.key}] Handoff message completed: {text_message.content}"
+        logger.debug(
+            "[%s] Handoff message completed: %s",
+            self.agent_id.key,
+            text_message.content,
         )
         return text_message
 
@@ -337,15 +347,19 @@ class SystemBase(RoutedAgent):
     ):
         topic_type = f"{agent_id.type}:"
         topic_source = agent_id.key.replace("/", "_")
-        print(
-            f"{self.id.__str__()} -> {message.__class__.__name__} -> {agent_id.type}/{topic_source}"
+        logger.debug(
+            "%s -> %s -> %s/%s",
+            self.id.__str__(),
+            message.__class__.__name__,
+            agent_id.type,
+            topic_source,
         )
         if hasattr(message, "content") and isinstance(message.content, str):
             summary = message.content.replace("\n", " ")
             if len(summary) > 200:
                 summary = f"{summary[:200]}..."
             detail_line = f"...[{self.id.__str__()}] message content: {summary}"
-            print(detail_line)
+            logger.debug(detail_line)
         return await self.publish_message(
             message=message,
             topic_id=TopicId(topic_type, topic_source),
