@@ -20,6 +20,11 @@ def _load_web_fetch(
     return importlib.reload(module)
 
 
+def _load_web_search(monkeypatch: pytest.MonkeyPatch) -> ModuleType:
+    module = importlib.import_module("src.cyberagent.tools.cli_executor.web_search")
+    return importlib.reload(module)
+
+
 def test_web_fetch_requires_url(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -59,6 +64,72 @@ def test_web_fetch_outputs_summary(
     web_fetch.main()
 
     assert capsys.readouterr().out.strip() == "<p>summary</p>"
+
+
+def test_web_search_requires_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["web_search", "run", "--query", "cats"],
+    )
+    monkeypatch.delenv("BRAVE_API_KEY", raising=False)
+
+    web_search = _load_web_search(monkeypatch)
+
+    with pytest.raises(SystemExit) as excinfo:
+        web_search.main()
+
+    assert "BRAVE_API_KEY" in str(excinfo.value)
+
+
+def test_web_search_outputs_results(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "web_search",
+            "run",
+            "--query",
+            "cats",
+            "--count",
+            "5",
+            "--offset",
+            "1",
+            "--freshness",
+            "day",
+        ],
+    )
+    monkeypatch.setenv("BRAVE_API_KEY", "token")
+
+    def _fake_get(url: str, headers: dict[str, str], params: dict[str, object]):
+        assert url == "https://api.search.brave.com/res/v1/web/search"
+        assert headers["X-Subscription-Token"] == "token"
+        assert params == {
+            "q": "cats",
+            "count": 5,
+            "offset": 1,
+            "freshness": "day",
+        }
+
+        class _Response:
+            def raise_for_status(self) -> None:
+                return None
+
+            def json(self) -> dict[str, object]:
+                return {"web": {"results": [{"title": "Cats"}]}}
+
+        return _Response()
+
+    monkeypatch.setitem(sys.modules, "requests", SimpleNamespace(get=_fake_get))
+
+    web_search = _load_web_search(monkeypatch)
+    web_search.main()
+
+    assert '"title": "Cats"' in capsys.readouterr().out
 
 
 def test_build_authed_url_adds_token() -> None:

@@ -9,14 +9,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     less \
     python3 \
     python3-pip \
+    python3-venv \
     ripgrep \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Install Brave search CLI from upstream repository.
-RUN python3 -m pip install --no-cache-dir \
-    git+https://github.com/joshsisto/brave-search-cli.git
+# Use a virtualenv to avoid PEP 668 externally-managed environment errors.
+ENV VIRTUAL_ENV=/opt/venv
+RUN python3 -m venv $VIRTUAL_ENV
+ENV PATH="$VIRTUAL_ENV/bin:$PATH"
 
 # Readability-based web fetch helper exposed as a CLI.
 RUN python3 -m pip install --no-cache-dir \
@@ -24,6 +26,10 @@ RUN python3 -m pip install --no-cache-dir \
     git+https://github.com/buriy/python-readability.git
 COPY src/cyberagent/tools/cli_executor/web_fetch.py /usr/local/bin/web-fetch
 RUN chmod +x /usr/local/bin/web-fetch
+
+# Brave search CLI wrapper exposed as a CLI.
+COPY src/cyberagent/tools/cli_executor/web_search.py /usr/local/bin/web_search
+RUN chmod +x /usr/local/bin/web_search
 
 # Read-only git sync helper exposed as a CLI.
 COPY src/cyberagent/tools/cli_executor/git_readonly_sync.py /usr/local/bin/git-readonly-sync
