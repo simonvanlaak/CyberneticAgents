@@ -100,6 +100,9 @@ def test_technical_onboarding_requires_groq_key(
     monkeypatch.setattr(onboarding_cli, "_is_path_writable", lambda *_: True)
     monkeypatch.setattr(onboarding_cli, "_check_path_writable", lambda *_: True)
     monkeypatch.setattr(onboarding_cli, "_check_docker_available", lambda: True)
+    monkeypatch.setattr(
+        onboarding_cli, "_check_cli_tools_image_available", lambda: True
+    )
     monkeypatch.setattr(onboarding_cli, "_check_skill_root_access", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_check_network_access", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_check_required_tool_secrets", lambda: True)
@@ -125,6 +128,9 @@ def test_technical_onboarding_requires_onepassword_auth(
     monkeypatch.setattr(onboarding_cli, "_is_path_writable", lambda *_: True)
     monkeypatch.setattr(onboarding_cli, "_check_path_writable", lambda *_: True)
     monkeypatch.setattr(onboarding_cli, "_check_docker_available", lambda: True)
+    monkeypatch.setattr(
+        onboarding_cli, "_check_cli_tools_image_available", lambda: True
+    )
     monkeypatch.setattr(onboarding_cli, "_check_skill_root_access", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_check_network_access", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_check_required_tool_secrets", lambda: True)
@@ -328,3 +334,50 @@ def test_check_network_access_skips_without_network_skills(
 
     monkeypatch.setattr(onboarding_cli, "_probe_network_access", _fail_probe)
     assert onboarding_cli._check_network_access() is True
+
+
+def test_check_docker_optional_when_no_skills(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(onboarding_cli, "load_skill_definitions", lambda *_: [])
+    monkeypatch.setattr(onboarding_cli.shutil, "which", lambda *_: None)
+
+    assert onboarding_cli._check_docker_available() is True
+    captured = capsys.readouterr().out
+    assert "Continuing without tool execution" in captured
+
+
+def test_check_cli_tools_image_available_missing(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    skill = SkillDefinition(
+        name="web-search",
+        description="Search the web",
+        location=Path("src/tools/skills/web-search"),
+        tool_name="web_search",
+        subcommand=None,
+        required_env=("BRAVE_API_KEY",),
+        timeout_class="short",
+        timeout_seconds=30,
+        input_schema={},
+        output_schema={},
+        skill_file=Path("src/tools/skills/web-search/SKILL.md"),
+        instructions="",
+    )
+    monkeypatch.setattr(onboarding_cli, "load_skill_definitions", lambda *_: [skill])
+    monkeypatch.setattr(onboarding_cli.shutil, "which", lambda *_: "/usr/bin/docker")
+
+    class DummyResult:
+        def __init__(self, returncode: int) -> None:
+            self.returncode = returncode
+            self.stdout = ""
+            self.stderr = ""
+
+    def fake_run(*_args: object, **_kwargs: object) -> DummyResult:
+        return DummyResult(returncode=1)
+
+    monkeypatch.setattr(onboarding_cli.subprocess, "run", fake_run)
+
+    assert onboarding_cli._check_cli_tools_image_available() is False
+    captured = capsys.readouterr().out
+    assert "CLI tools image is not available" in captured

@@ -62,6 +62,7 @@ def run_technical_onboarding_checks() -> bool:
         _check_logs_writable,
         _check_llm_credentials,
         _check_docker_available,
+        _check_cli_tools_image_available,
         _check_onepassword_auth,
         _check_required_tool_secrets,
         _check_skill_root_access,
@@ -197,6 +198,12 @@ def _check_llm_credentials() -> bool:
 def _check_docker_available() -> bool:
     docker_path = shutil.which("docker")
     if not docker_path:
+        if not _skills_require_docker():
+            print(
+                "Docker not found, but no Docker-based skills are configured. "
+                "Continuing without tool execution."
+            )
+            return True
         print("Docker is required for tool execution but was not found in PATH.")
         return False
     try:
@@ -211,6 +218,13 @@ def _check_docker_available() -> bool:
         print("Docker is installed but not reachable. Is the daemon running?")
         return False
     if result.returncode != 0:
+        if not _skills_require_docker():
+            print(
+                "Docker is installed but not reachable. "
+                "Continuing without tool execution because no Docker-based "
+                "skills are configured."
+            )
+            return True
         print("Docker is installed but not reachable. Is the daemon running?")
         return False
     return True
@@ -234,6 +248,42 @@ def _check_onepassword_auth() -> bool:
         return True
     print("Missing 1Password authentication (service account or session).")
     print("Export OP_SERVICE_ACCOUNT_TOKEN or OP_SESSION_* and re-run onboarding.")
+    return False
+
+
+def _skills_require_docker() -> bool:
+    skills = load_skill_definitions(DEFAULT_SKILLS_ROOT)
+    return len(skills) > 0
+
+
+def _check_cli_tools_image_available() -> bool:
+    if not _skills_require_docker():
+        return True
+    docker_path = shutil.which("docker")
+    if not docker_path:
+        return False
+    image = os.getenv(
+        "CLI_TOOLS_IMAGE",
+        "ghcr.io/simonvanlaak/cyberneticagents-cli-tools:latest",
+    )
+    try:
+        result = subprocess.run(
+            [docker_path, "image", "inspect", image],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        print("Unable to verify the CLI tools image. Is Docker running?")
+        return False
+    if result.returncode == 0:
+        return True
+    print(
+        "CLI tools image is not available. Build or pull the image, then re-run "
+        "onboarding."
+    )
+    print(f"Expected image: {image}")
     return False
 
 
