@@ -32,6 +32,10 @@ from src.cyberagent.services import policies as policy_service
 from src.cyberagent.services import systems as system_service
 from src.cyberagent.services import teams as team_service
 from src.cyberagent.core.state import get_or_create_last_team_id, mark_team_active
+from src.cyberagent.tools.cli_executor import (
+    get_agent_skill_prompt_entries,
+    get_agent_skill_tools,
+)
 
 if TYPE_CHECKING:
     from src.cyberagent.db.models.system import System
@@ -95,7 +99,7 @@ class SystemBase(RoutedAgent):
         self.trace_context = trace_context or {}
         self.identity_prompt = identity_prompt
         self.responsibility_prompts = responsibility_prompts
-        self.available_tools = []
+        self.available_tools = get_agent_skill_tools(self.agent_id.__str__())
         self.tools = self.available_tools
         # Create a valid Python identifier for the AssistantAgent
         # Replace slashes with underscores for the agent name
@@ -295,6 +299,12 @@ class SystemBase(RoutedAgent):
         )
         messages.append("# RESPONSIBILITIES")
         messages.extend(self.responsibility_prompts)
+        messages.append("# SKILLS")
+        skill_entries = get_agent_skill_prompt_entries(self.agent_id.__str__())
+        if skill_entries:
+            messages.extend(skill_entries)
+        else:
+            messages.append("No skills available")
         messages.append("# TOOLS")
         if len(self._agent._workbench) > 0:
             for workbench in self._agent._workbench:

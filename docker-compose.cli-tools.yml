@@ -1,0 +1,6 @@
+services:
+  cli-tools:
+    image: cyberneticagents-cli-tools:local
+    build:
+      context: .
+      dockerfile: src/cyberagent/tools/cli_executor/Dockerfile.cli-tools
