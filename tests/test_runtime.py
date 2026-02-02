@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from typing import cast
 
 from src.cyberagent.core import runtime as runtime_module
 from src.cyberagent.tools.cli_executor import factory as factory_module
@@ -83,8 +84,8 @@ def test_get_runtime_starts_singleton(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(runtime_module, "SingleThreadedAgentRuntime", DummyRuntime)
     monkeypatch.setattr(runtime_module, "configure_tracing", lambda: "trace")
 
-    first = runtime_module.get_runtime()
-    second = runtime_module.get_runtime()
+    first = cast(DummyRuntime, runtime_module.get_runtime())
+    second = cast(DummyRuntime, runtime_module.get_runtime())
 
     assert first is second
     assert first.start_count == 1

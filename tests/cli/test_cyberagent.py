@@ -469,8 +469,9 @@ def test_start_spawns_serve_process(
     monkeypatch.setattr(cyberagent, "RUNTIME_PID_FILE", target_pid)
     exit_code = cyberagent.main(["start"])
     assert exit_code == 0
-    assert recorded["cmd"][0] == sys.executable
-    assert recorded["cmd"][3] == cyberagent.SERVE_COMMAND
+    recorded_cmd = cast(Sequence[str], recorded["cmd"])
+    assert recorded_cmd[0] == sys.executable
+    assert recorded_cmd[3] == cyberagent.SERVE_COMMAND
     recorded_env = cast(dict[str, str], recorded["env"])
     assert recorded_env["CYBERAGENT_ACTIVE_TEAM_ID"] == "7"
     assert target_pid.read_text(encoding="utf-8") == "4242"

@@ -24,6 +24,9 @@ This document outlines the requirements for integrating **Telegram** as a commun
 - ✅ Users can authenticate securely with the bot
 - ✅ Bot supports both 1:1 and group chat scenarios
 
+## Dependencies
+Depends on docs/product_requirements/communication_channels.md
+
 ---
 
 ## User Stories

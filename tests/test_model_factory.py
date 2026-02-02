@@ -3,6 +3,7 @@ from __future__ import annotations
 import builtins
 import sys
 import types
+from typing import Any
 
 import pytest
 from autogen_ext.models.openai import OpenAIChatCompletionClient
@@ -69,7 +70,7 @@ def test_create_model_client_mistral_returns_openai_fallback(
 ) -> None:
     real_import = builtins.__import__
 
-    def fake_import(name: str, *args: object, **kwargs: object):
+    def fake_import(name: str, *args: Any, **kwargs: Any):
         if name == "autogen_ext.models.mistral":
             raise ImportError("mistral client not available")
         return real_import(name, *args, **kwargs)
@@ -93,7 +94,7 @@ def test_create_mistral_client_uses_native_when_available(
         def __init__(self, **kwargs: object) -> None:
             captured.update(kwargs)
 
-    dummy_module.MistralChatCompletionClient = DummyMistralClient
+    setattr(dummy_module, "MistralChatCompletionClient", DummyMistralClient)
     monkeypatch.setitem(sys.modules, "autogen_ext.models.mistral", dummy_module)
 
     config = LLMConfig(
@@ -125,7 +126,7 @@ def test_create_mistral_client_falls_back_to_openai(
 ) -> None:
     real_import = builtins.__import__
 
-    def fake_import(name: str, *args: object, **kwargs: object):
+    def fake_import(name: str, *args: Any, **kwargs: Any):
         if name == "autogen_ext.models.mistral":
             raise ImportError("mistral client not available")
         return real_import(name, *args, **kwargs)

@@ -2,6 +2,14 @@
 ## Goal
 The system needs to receive triggers from the environment, for example an email that gets received.
 
+## Dependencies
+Depends on docs/product_requirements/communication_channels.md
+
+## Notes
+Some external triggers (e.g., user messages from Telegram or other channels) overlap with the
+communication channel ingress model. We should align the trigger envelope and routing metadata
+with the channel/session model defined in docs/product_requirements/communication_channels.md.
+
 ## Approach:
 - Triggers are sent via messages on the runtime, similar to how agents communicate.
 - The VSM can decide which systems should receive which triggers and manage this itself.

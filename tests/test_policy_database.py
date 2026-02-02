@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import cast
 
 import pytest
 from sqlalchemy import create_engine
@@ -26,8 +27,8 @@ def test_create_and_get_policy_prompt(temp_policy_db: None) -> None:
     policy = policy_database.get_policy_prompt("system-1")
 
     assert policy is not None
-    assert policy.system_id == "system-1"
-    assert policy.content == "policy content"
+    assert cast(str, policy.system_id) == "system-1"
+    assert cast(str, policy.content) == "policy content"
 
 
 def test_create_policy_prompt_duplicate_raises(temp_policy_db: None) -> None:
@@ -50,7 +51,7 @@ def test_update_policy_prompt(temp_policy_db: None) -> None:
     updated = policy_database.update_policy_prompt("system-update", "new")
 
     assert updated is not None
-    assert updated.content == "new"
+    assert cast(str, updated.content) == "new"
 
 
 def test_update_policy_prompt_missing_returns_none(temp_policy_db: None) -> None:

@@ -7,7 +7,7 @@ import json
 import os
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Any, Dict, List
+from typing import Any, Dict, List, cast
 
 import pytest
 from autogen_core import CancellationToken
@@ -183,7 +183,7 @@ def test_create_cli_executor_uses_env(monkeypatch: pytest.MonkeyPatch) -> None:
         factory, "EnvDockerCommandLineCodeExecutor", _FakeDockerExecutor
     )
 
-    executor = factory.create_cli_executor()
+    executor = cast(_FakeDockerExecutor, factory.create_cli_executor())
 
     assert executor is not None
     assert executor.image == "example/image:tag"
@@ -195,7 +195,7 @@ def test_create_cli_executor_default_image(monkeypatch: pytest.MonkeyPatch) -> N
         factory, "EnvDockerCommandLineCodeExecutor", _FakeDockerExecutor
     )
 
-    executor = factory.create_cli_executor()
+    executor = cast(_FakeDockerExecutor, factory.create_cli_executor())
 
     assert executor is not None
     assert executor.image == "ghcr.io/simonvanlaak/cyberneticagents-cli-tools:latest"
@@ -416,7 +416,7 @@ async def test_env_executor_requires_running() -> None:
 async def test_env_executor_executes_command(monkeypatch: pytest.MonkeyPatch) -> None:
     executor = _make_env_executor()
     executor.set_exec_env({"KEY": "VALUE"})
-    executor._container = _FakeContainer(0, "ok")
+    setattr(executor, "_container", _FakeContainer(0, "ok"))
     executor._running = True
     executor._loop = asyncio.get_running_loop()
     executor._cancellation_futures = []
@@ -435,7 +435,8 @@ async def test_env_executor_executes_command(monkeypatch: pytest.MonkeyPatch) ->
 
     assert exit_code == 0
     assert output == "ok"
-    assert executor._container.last_env == {"KEY": "VALUE"}
+    container = cast(_FakeContainer, executor._container)
+    assert container.last_env == {"KEY": "VALUE"}
 
 
 def _make_skill_definition(name: str) -> SkillDefinition:

@@ -30,16 +30,14 @@ class TestSystem5Basic:
         assert system5.agent_id.type == "System5"
         assert system5.agent_id.key == "policy1"
 
-    def test_system5_no_tools(self):
-        """Test that System5 has no tools (which is correct)."""
+    def test_system5_tools(self):
+        """Test that System5 has the policy tools it needs."""
         system5 = System5("System5/policy1")
 
-        # System5 should have NO tools - this is correct behavior
-        assert len(system5.tools) == 0
+        assert len(system5.tools) == 1
+        assert system5.tools[0].name == "approve_procedure_tool"
         print(f"System5 tools: {system5.tools}")
-        print(
-            "System5 correctly has no tools - this prevents structured output conflicts"
-        )
+        print("System5 has the approve procedure tool")
 
     def test_system5_identity_and_responsibilities(self):
         """Test System5 identity and responsibility prompts."""
@@ -189,7 +187,9 @@ async def test_system5_policy_suggestion_missing_policy(
         source="System4/root",
     )
     ctx = SimpleNamespace()
-    result = await system5.handle_policy_suggestion_message(message, ctx)
+    result = await system5.handle_policy_suggestion_message(
+        message=message, ctx=ctx
+    )  # type: ignore[call-arg]
     assert result.content == "ok"
 
 
@@ -199,8 +199,8 @@ async def test_system5_no_conflicts():
     system5 = System5("System5/policy1")
 
     print(f"System5 created: {system5.name}")
-    print(f"Available tools: {len(system5.tools)} (should be 0)")
-    print("System5 correctly has no tools - no structured output conflicts possible")
+    print(f"Available tools: {len(system5.tools)} (should be 1)")
+    print("System5 has policy tools registered without structured output conflicts")
 
     # Test message creation
     cap_message = CapabilityGapMessage(
@@ -222,7 +222,7 @@ async def test_system5_no_conflicts():
     print(f"Policy violation message: {policy_message.content}")
 
     print("\nSystem5 validation completed successfully!")
-    print("✅ No structured output conflicts (no tools registered)")
+    print("✅ No structured output conflicts (tools registered)")
     print("✅ All methods use ConfirmationMessage structured output")
     print("✅ System5 implementation is correct as-is")
 
