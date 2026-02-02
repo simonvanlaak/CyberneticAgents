@@ -99,6 +99,7 @@ def test_technical_onboarding_requires_groq_key(
     monkeypatch.setenv("LLM_PROVIDER", "groq")
     monkeypatch.setattr(onboarding_cli, "_is_path_writable", lambda *_: True)
     monkeypatch.setattr(onboarding_cli, "_check_path_writable", lambda *_: True)
+    monkeypatch.setattr(onboarding_cli, "_check_docker_socket_access", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_check_docker_available", lambda: True)
     monkeypatch.setattr(
         onboarding_cli, "_check_cli_tools_image_available", lambda: True
@@ -127,6 +128,7 @@ def test_technical_onboarding_requires_onepassword_auth(
     monkeypatch.setenv("LLM_PROVIDER", "groq")
     monkeypatch.setattr(onboarding_cli, "_is_path_writable", lambda *_: True)
     monkeypatch.setattr(onboarding_cli, "_check_path_writable", lambda *_: True)
+    monkeypatch.setattr(onboarding_cli, "_check_docker_socket_access", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_check_docker_available", lambda: True)
     monkeypatch.setattr(
         onboarding_cli, "_check_cli_tools_image_available", lambda: True
@@ -229,6 +231,33 @@ def test_prompt_store_secret_creates_vault_and_item(
     assert ["op", "vault", "create", "CyberneticAgents"] in calls
     assert any(cmd[:3] == ["op", "item", "create"] for cmd in calls)
     assert any("--title" in cmd and "BRAVE_API_KEY" in cmd for cmd in calls)
+
+
+def test_check_docker_socket_access_denied(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    socket_path = tmp_path / "docker.sock"
+    socket_path.write_text("", encoding="utf-8")
+    socket_path.chmod(0)
+    monkeypatch.setenv("DOCKER_HOST", f"unix://{socket_path}")
+    monkeypatch.setattr(onboarding_cli, "_skills_require_docker", lambda: True)
+    monkeypatch.setattr(onboarding_cli.shutil, "which", lambda *_: "/usr/bin/docker")
+
+    assert onboarding_cli._check_docker_socket_access() is False
+    captured = capsys.readouterr().out
+    assert "Docker socket is not accessible" in captured
+
+
+def test_check_docker_socket_access_remote_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DOCKER_HOST", "tcp://127.0.0.1:2375")
+    monkeypatch.setattr(onboarding_cli, "_skills_require_docker", lambda: True)
+    monkeypatch.setattr(onboarding_cli.shutil, "which", lambda *_: "/usr/bin/docker")
+
+    assert onboarding_cli._check_docker_socket_access() is True
 
 
 def test_prompt_store_secret_requires_write_access(

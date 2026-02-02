@@ -61,6 +61,7 @@ def run_technical_onboarding_checks() -> bool:
         _check_db_writable,
         _check_logs_writable,
         _check_llm_credentials,
+        _check_docker_socket_access,
         _check_docker_available,
         _check_cli_tools_image_available,
         _check_onepassword_auth,
@@ -91,6 +92,7 @@ def _collect_technical_onboarding_state() -> dict[str, object]:
         "has_onepassword_auth": _has_onepassword_auth(),
         "has_op_session": bool(_get_onepassword_session_env()),
         "skills_root_exists": DEFAULT_SKILLS_ROOT.exists(),
+        "docker_host": os.environ.get("DOCKER_HOST", ""),
         "docker_path": shutil.which("docker") or "",
         "data_dir_writable": _is_path_writable(Path("data")),
         "logs_dir_writable": _is_path_writable(LOGS_DIR),
@@ -193,6 +195,35 @@ def _check_llm_credentials() -> bool:
                 doc_hint=None,
             )
     return True
+
+
+def _get_docker_socket_path() -> Path | None:
+    docker_host = os.environ.get("DOCKER_HOST", "")
+    if docker_host.startswith("unix://"):
+        socket_path = docker_host[len("unix://") :]
+        if socket_path:
+            return Path(socket_path)
+        return None
+    if docker_host:
+        return None
+    return Path("/var/run/docker.sock")
+
+
+def _check_docker_socket_access() -> bool:
+    if not _skills_require_docker():
+        return True
+    if not shutil.which("docker"):
+        return False
+    socket_path = _get_docker_socket_path()
+    if socket_path is None:
+        return True
+    if not socket_path.exists():
+        return True
+    if os.access(socket_path, os.R_OK | os.W_OK):
+        return True
+    print(f"Docker socket is not accessible: {socket_path}")
+    print("Fix Docker socket permissions and re-run onboarding.")
+    return False
 
 
 def _check_docker_available() -> bool:
