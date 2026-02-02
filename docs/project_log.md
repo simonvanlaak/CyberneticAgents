@@ -150,6 +150,14 @@ The next step is to implement the docs/product_requirements/agent_skills.md plan
 
 ### 2026-02-02
 I completed the refactoring and pushed.
-Skills and skill permissions are now implemented. See docs/features/agent_skills.md & /home/simon/Projects/2025/CyberneticAgents/docs/features/skill_permissions.md
+Implemented:
+  - docs/features/standard_operating_procedures.md
+  - docs/features/technical_onboarding.md
+  - docs/features/speech_to_text.md
+  - docs/features/secret_management.md
+  - docs/features/agent_cli.md
+  - docs/features/skill_permissions.md
+  - docs/features/agent_skills.md
 
-- [ ] In /home/simon/Projects/2025/CyberneticAgents/src/cyberagent/tools/cli_executor there are skills implemented as src/cyberagent/tools/cli_executor/web_fetch.py for example. This does not follow the agentskill architecture, they should be in their respective directory in src/tools/skills following the agentskill.io spec.
+I have further polished my working style with codex. First I discuss product ideas I have with codex and create a PRD in docs/product_requirements then I let an agent implement them. Once their implementation is verified, the PRD gets deleted and a feature entry like the ones above gets created. 
+I still haven't manually tested most of these though. I need to integrate this in the flow the next times.
