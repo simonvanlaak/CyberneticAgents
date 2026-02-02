@@ -1,16 +1,19 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from typing import Iterator
 from uuid import uuid4
 
+import pytest
 from sqlalchemy import func
 
 from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.models.team import Team
-from src.cyberagent.core.state import get_or_create_last_team_id, mark_team_active
+from src.cyberagent.core import state
+from src.cyberagent.core.state import get_last_team_id, mark_team_active
 
 
-def test_get_or_create_last_team_id_uses_last_active() -> None:
+def test_get_last_team_id_uses_last_active() -> None:
     session = next(get_db())
     try:
         latest = session.query(func.max(Team.last_active_at)).scalar()
@@ -29,7 +32,46 @@ def test_get_or_create_last_team_id_uses_last_active() -> None:
     finally:
         session.close()
 
-    assert get_or_create_last_team_id() == newer_id
+    assert get_last_team_id() == newer_id
+
+
+def test_get_last_team_id_returns_none_when_empty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class DummyQuery:
+        def order_by(self, *args: object, **kwargs: object) -> "DummyQuery":
+            return self
+
+        def first(self) -> None:
+            return None
+
+    class DummySession:
+        def __init__(self) -> None:
+            self.commit_called = False
+            self.closed = False
+
+        def query(self, *args: object, **kwargs: object) -> DummyQuery:
+            return DummyQuery()
+
+        def commit(self) -> None:
+            self.commit_called = True
+
+        def close(self) -> None:
+            self.closed = True
+
+    session = DummySession()
+
+    def fake_get_db() -> Iterator[DummySession]:
+        try:
+            yield session
+        finally:
+            session.close()
+
+    monkeypatch.setattr(state, "get_db", fake_get_db)
+
+    assert get_last_team_id() is None
+    assert session.commit_called is False
+    assert session.closed is True
 
 
 def test_mark_team_active_updates_timestamp() -> None:

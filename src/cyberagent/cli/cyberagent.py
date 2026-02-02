@@ -357,6 +357,8 @@ def _handle_suggest(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
+    if _require_existing_team() is None:
+        return 1
     runtime_pid = _ensure_background_runtime()
     enqueue_suggestion(parsed.payload_text)
     if runtime_pid is not None:
@@ -369,6 +371,8 @@ def _handle_suggest(args: argparse.Namespace) -> int:
 
 
 def _handle_inbox(args: argparse.Namespace) -> int:
+    if _require_existing_team() is None:
+        return 1
     pending = get_pending_questions()
     answered = get_answered_questions() if args.answered else []
     if not pending and not answered:
@@ -389,6 +393,8 @@ def _handle_inbox(args: argparse.Namespace) -> int:
 
 
 async def _handle_watch(args: argparse.Namespace) -> int:
+    if _require_existing_team() is None:
+        return 1
     seen: set[int] = set()
     print("Watching inbox (Ctrl-C to stop)...")
     try:
@@ -552,7 +558,17 @@ async def _handle_tool_test(args: argparse.Namespace) -> int:
     else:
         print("Note: running without agent id; permissions not enforced.")
 
-    result = await _execute_skill_tool(cli_tool, skill, parsed_args, args.agent_id)
+    executor = getattr(cli_tool, "executor", None)
+    started = False
+    if executor is not None and hasattr(executor, "start"):
+        await executor.start()
+        started = True
+
+    try:
+        result = await _execute_skill_tool(cli_tool, skill, parsed_args, args.agent_id)
+    finally:
+        if started and hasattr(executor, "stop"):
+            await executor.stop()
     print(json.dumps(result, indent=2, default=str))
     return 0 if result.get("success") else 1
 

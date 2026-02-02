@@ -140,6 +140,21 @@ def test_handle_suggest_enqueues_payload(
     assert "Suggestion queued for System4." in output
 
 
+def test_handle_suggest_requires_team(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(cyberagent, "get_last_team_id", lambda: None)
+    monkeypatch.setattr(cyberagent, "enqueue_suggestion", lambda *_: None)
+    monkeypatch.setattr(cyberagent, "_ensure_background_runtime", lambda: 1234)
+
+    args = argparse.Namespace(message="hello", payload=None, file=None, format="json")
+    exit_code = cyberagent._handle_suggest(args)
+
+    output = capsys.readouterr().out
+    assert exit_code == 1
+    assert "cyberagent onboarding" in output
+
+
 @pytest.mark.asyncio
 async def test_handle_tool_test_invalid_args_json(
     capsys: pytest.CaptureFixture[str],
@@ -259,6 +274,65 @@ async def test_handle_tool_test_executes_skill(
     assert '"ok": true' in captured.out
 
 
+@pytest.mark.asyncio
+async def test_handle_tool_test_starts_executor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from pathlib import Path
+
+    from src.cyberagent.tools.cli_executor.skill_loader import SkillDefinition
+
+    fake_skill = SkillDefinition(
+        name="web-search",
+        description="Test",
+        location=Path("skills/web-search"),
+        tool_name="web_search",
+        subcommand=None,
+        required_env=(),
+        timeout_class="standard",
+        timeout_seconds=60,
+        input_schema={},
+        output_schema={},
+        skill_file=Path("skills/web-search/SKILL.md"),
+        instructions="",
+    )
+
+    class DummyExecutor:
+        def __init__(self) -> None:
+            self.started = False
+            self.stopped = False
+
+        async def start(self) -> None:
+            self.started = True
+
+        async def stop(self) -> None:
+            self.stopped = True
+
+    class DummyTool:
+        def __init__(self) -> None:
+            self.executor = DummyExecutor()
+
+        async def execute(self, *args, **kwargs):  # noqa: ANN001
+            return {"success": True, "output": {"ok": True}}
+
+    dummy_tool = DummyTool()
+    monkeypatch.setattr(
+        cyberagent, "load_skill_definitions", lambda _root: [fake_skill]
+    )
+    monkeypatch.setattr(cyberagent, "_create_cli_tool", lambda: dummy_tool)
+
+    args = argparse.Namespace(
+        tool_name="web-search",
+        args="{}",
+        agent_id=None,
+    )
+    exit_code = await cyberagent._handle_tool_test(args)
+
+    assert exit_code == 0
+    assert dummy_tool.executor.started is True
+    assert dummy_tool.executor.stopped is True
+
+
 def test_handle_inbox_prints_entries(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -288,6 +362,16 @@ def test_handle_inbox_prints_entries(
     assert "[2] What should we build?" in captured.out
 
 
+def test_handle_inbox_requires_team(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(cyberagent, "get_last_team_id", lambda: None)
+    result = cyberagent._handle_inbox(argparse.Namespace(answered=False))
+    captured = capsys.readouterr()
+    assert result == 1
+    assert "cyberagent onboarding" in captured.out
+
+
 @pytest.mark.asyncio
 async def test_handle_watch_prints_pending(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
@@ -304,6 +388,17 @@ async def test_handle_watch_prints_pending(
     await cyberagent._handle_watch(argparse.Namespace(interval=0.1))
     captured = capsys.readouterr()
     assert "[7] Watch this" in captured.out
+
+
+@pytest.mark.asyncio
+async def test_handle_watch_requires_team(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(cyberagent, "get_last_team_id", lambda: None)
+    result = await cyberagent._handle_watch(argparse.Namespace(interval=0.1))
+    captured = capsys.readouterr()
+    assert result == 1
+    assert "cyberagent onboarding" in captured.out
 
 
 def test_filter_logs_applies_pattern_and_limit() -> None:

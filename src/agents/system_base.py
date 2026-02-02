@@ -32,7 +32,7 @@ from src.agents.messages import CapabilityGapMessage
 from src.cyberagent.services import policies as policy_service
 from src.cyberagent.services import systems as system_service
 from src.cyberagent.services import teams as team_service
-from src.cyberagent.core.state import get_or_create_last_team_id, mark_team_active
+from src.cyberagent.core.state import get_last_team_id, mark_team_active
 from src.cyberagent.tools.cli_executor import (
     get_agent_skill_prompt_entries,
     get_agent_skill_tools,
@@ -95,7 +95,13 @@ class SystemBase(RoutedAgent):
                 raise ValueError(f"Team id {team_id} is not registered.")
             self.team_id = team_id
         else:
-            self.team_id = get_or_create_last_team_id()
+            team_id = get_last_team_id()
+            if team_id is None:
+                raise RuntimeError(
+                    "No teams are registered. Run 'cyberagent onboarding' to "
+                    "create your first team."
+                )
+            self.team_id = team_id
         system_service.ensure_default_systems_for_team(self.team_id)
         mark_team_active(self.team_id)
         logger.info("Initializing %s", self.name)

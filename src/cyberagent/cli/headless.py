@@ -16,6 +16,7 @@ from src.cyberagent.cli.suggestion_queue import (
     read_queued_suggestions,
 )
 from src.cyberagent.db.init_db import init_db
+from src.cyberagent.core.state import get_last_team_id
 from src.cyberagent.core.logging import configure_autogen_logging
 from src.rbac.enforcer import get_enforcer
 from src.registry import register_systems
@@ -39,6 +40,14 @@ async def run_headless_session(initial_message: str | None = None) -> None:
     Run the headless CLI session that forwards user input to the runtime.
     """
     init_db()
+    if os.environ.get("CYBERAGENT_ACTIVE_TEAM_ID") is None:
+        team_id = get_last_team_id()
+        if team_id is None:
+            print(
+                "No teams found. Run 'cyberagent onboarding' to create your first team."
+            )
+            return
+        os.environ["CYBERAGENT_ACTIVE_TEAM_ID"] = str(team_id)
     await register_systems()
     enforcer = get_enforcer()
     enforcer.clear_policy()
