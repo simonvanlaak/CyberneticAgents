@@ -32,6 +32,7 @@ from autogen_core import AgentId
 
 from src.agents.messages import UserMessage
 from src.cli_session import get_answered_questions, get_pending_questions
+from src.cyberagent.cli import dev as dev_cli
 from src.cyberagent.cli import onboarding as onboarding_cli
 from src.cyberagent.cli.headless import run_headless_session
 from src.cyberagent.cli.status import main as status_main
@@ -498,97 +499,34 @@ def _handle_login(args: argparse.Namespace) -> int:
 
 
 async def _handle_dev(args: argparse.Namespace) -> int:
-    if args.dev_command == "tool-test":
-        return await _handle_tool_test(args)
-    if args.dev_command == "system-run":
-        return await _handle_dev_system_run(args)
-    print("Unknown dev command.", file=sys.stderr)
-    return 1
+    return await dev_cli.handle_dev(
+        args,
+        handle_tool_test=_handle_tool_test,
+        handle_dev_system_run=_handle_dev_system_run,
+    )
 
 
 async def _handle_dev_system_run(args: argparse.Namespace) -> int:
-    init_db()
-    await register_systems()
-    runtime = get_runtime()
-    try:
-        recipient = AgentId.from_str(args.system_id)
-    except Exception as exc:
-        print(f"Invalid system id '{args.system_id}': {exc}", file=sys.stderr)
-        return 2
-    message = UserMessage(content=args.message, source="Dev")
-    try:
-        await asyncio.wait_for(
-            asyncio.shield(
-                runtime.send_message(
-                    message=message,
-                    recipient=recipient,
-                    sender=AgentId(type="UserAgent", key="root"),
-                )
-            ),
-            timeout=SUGGEST_SEND_TIMEOUT_SECONDS,
-        )
-        print(f"Message delivered to {args.system_id}.")
-        return 0
-    except asyncio.TimeoutError:
-        print(
-            "Message send timed out; the runtime may still be working. "
-            "Check logs with 'cyberagent logs'."
-        )
-        return 1
-    except Exception as exc:  # pragma: no cover - safety net for runtime errors
-        print(f"Failed to send message: {exc}", file=sys.stderr)
-        return 1
-    finally:
-        await _stop_runtime_with_timeout()
+    return await dev_cli.handle_dev_system_run(
+        args,
+        init_db=init_db,
+        register_systems=register_systems,
+        get_runtime=get_runtime,
+        stop_runtime_with_timeout=_stop_runtime_with_timeout,
+        suggest_timeout_seconds=SUGGEST_SEND_TIMEOUT_SECONDS,
+    )
 
 
 async def _handle_tool_test(args: argparse.Namespace) -> int:
-    try:
-        parsed_args = json.loads(args.args or "{}")
-    except json.JSONDecodeError as exc:
-        print(f"Invalid --args JSON: {exc}", file=sys.stderr)
-        return 2
-    if not isinstance(parsed_args, dict):
-        print("--args must decode to a JSON object.", file=sys.stderr)
-        return 2
-
-    skill = _find_skill_definition(args.tool_name)
-    if skill is None:
-        known = _list_skill_names()
-        suffix = f" Available: {', '.join(known)}" if known else ""
-        print(f"Unknown tool '{args.tool_name}'.{suffix}", file=sys.stderr)
-        return 2
-
-    cli_tool = _create_cli_tool()
-    if cli_tool is None:
-        print("CLI tool executor unavailable; check CLI tools image.", file=sys.stderr)
-        return 1
-
-    if args.agent_id:
-        init_db()
-    else:
-        print("Note: running without agent id; permissions not enforced.")
-
-    executor = getattr(cli_tool, "executor", None)
-    started = False
-    if executor is not None and hasattr(executor, "start"):
-        try:
-            await executor.start()
-            started = True
-        except Exception as exc:
-            reexec = _maybe_reexec_tool_test(args, exc)
-            if reexec is not None:
-                return reexec
-            print(f"Failed to start CLI tool executor: {exc}", file=sys.stderr)
-            return 1
-
-    try:
-        result = await _execute_skill_tool(cli_tool, skill, parsed_args, args.agent_id)
-    finally:
-        if started and hasattr(executor, "stop"):
-            await executor.stop()
-    print(json.dumps(result, indent=2, default=str))
-    return 0 if result.get("success") else 1
+    return await dev_cli.handle_tool_test(
+        args,
+        create_cli_tool=_create_cli_tool,
+        find_skill_definition=_find_skill_definition,
+        list_skill_names=_list_skill_names,
+        execute_skill_tool=_execute_skill_tool,
+        maybe_reexec_tool_test=_maybe_reexec_tool_test,
+        init_db=init_db,
+    )
 
 
 def _create_cli_tool() -> CliTool | None:
