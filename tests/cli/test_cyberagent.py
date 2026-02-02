@@ -462,6 +462,40 @@ async def test_send_suggestion_shutdown_timeout_exits(
 
 
 @pytest.mark.asyncio
+async def test_send_suggestion_send_timeout_exits(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    class DummyRuntime:
+        async def send_message(
+            self, message, recipient, sender=None, **kwargs
+        ):  # noqa: ANN001
+            await asyncio.Event().wait()
+
+    async def fake_register() -> None:
+        return None
+
+    async def fake_stop() -> None:
+        return None
+
+    class DummyEnforcer:
+        def clear_policy(self) -> None:
+            return None
+
+    monkeypatch.setattr(cyberagent, "get_runtime", lambda: DummyRuntime())
+    monkeypatch.setattr(cyberagent, "register_systems", fake_register)
+    monkeypatch.setattr(cyberagent, "stop_runtime", fake_stop)
+    monkeypatch.setattr(cyberagent, "get_enforcer", lambda: DummyEnforcer())
+    monkeypatch.setattr(cyberagent, "init_db", lambda: None)
+    monkeypatch.setattr(cyberagent, "SUGGEST_SEND_TIMEOUT_SECONDS", 0.01)
+
+    parsed = cyberagent.ParsedSuggestion(payload_text="hi", payload_object="hi")
+    await asyncio.wait_for(cyberagent._send_suggestion(parsed), timeout=0.2)
+
+    output = capsys.readouterr().out
+    assert "Suggestion send timed out" in output
+
+
+@pytest.mark.asyncio
 async def test_send_suggestion_handles_output_parse_failed(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

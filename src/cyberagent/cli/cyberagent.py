@@ -57,6 +57,7 @@ STATUS_COMMAND = "cyberagent status"
 INBOX_HINT_COMMAND = "cyberagent inbox"
 WATCH_HINT_COMMAND = "cyberagent watch"
 SUGGEST_SHUTDOWN_TIMEOUT_SECONDS = 1.0
+SUGGEST_SEND_TIMEOUT_SECONDS = 30.0
 
 
 @dataclass(frozen=True)
@@ -532,14 +533,22 @@ async def _send_suggestion(parsed: ParsedSuggestion) -> None:
     runtime = get_runtime()
     message = UserMessage(content=parsed.payload_text, source="User")
     try:
-        await runtime.send_message(
-            message=message,
-            recipient=SYSTEM4_AGENT_ID,
-            sender=AgentId(type="UserAgent", key="root"),
+        await asyncio.wait_for(
+            runtime.send_message(
+                message=message,
+                recipient=SYSTEM4_AGENT_ID,
+                sender=AgentId(type="UserAgent", key="root"),
+            ),
+            timeout=SUGGEST_SEND_TIMEOUT_SECONDS,
         )
         print("Suggestion delivered to System4.")
         print(
             f"Next: run {INBOX_HINT_COMMAND} or {WATCH_HINT_COMMAND} to check for incoming messages."
+        )
+    except asyncio.TimeoutError:
+        print(
+            "Suggestion send timed out; the runtime may still be working. "
+            "Check logs with 'cyberagent logs'."
         )
     except Exception as exc:  # pragma: no cover - safety net for runtime errors
         if getattr(exc, "code", None) == "output_parse_failed":
