@@ -53,7 +53,24 @@ def get_agent_skill_prompt_entries(agent_id: str) -> list[str]:
 
 def _format_skill_prompt_entry(skill: SkillDefinition) -> str:
     location = skill.location.as_posix()
-    return f"{skill.name}: {skill.description} (location: {location})"
+    inputs = _schema_keys(skill.input_schema)
+    outputs = _schema_keys(skill.output_schema)
+    secrets = ", ".join(skill.required_env) if skill.required_env else "none"
+    inputs_text = ", ".join(inputs) if inputs else "none"
+    outputs_text = ", ".join(outputs) if outputs else "none"
+    return (
+        f"{skill.name}: {skill.description} "
+        f"(inputs: {inputs_text}; outputs: {outputs_text}; "
+        f"timeout: {skill.timeout_class}; secrets: {secrets}; "
+        f"location: {location})"
+    )
+
+
+def _schema_keys(schema: dict[str, object]) -> list[str]:
+    properties = schema.get("properties") if isinstance(schema, dict) else None
+    if isinstance(properties, dict):
+        return sorted(str(key) for key in properties.keys())
+    return []
 
 
 def _filter_granted_skills(

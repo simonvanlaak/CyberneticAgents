@@ -24,6 +24,16 @@ def _write_skill(root: Path, skill_name: str, body: str = "Use this skill.") -> 
         "    timeout_class: standard\n"
         "    required_env:\n"
         "      - BRAVE_API_KEY\n"
+        "input_schema:\n"
+        "  type: object\n"
+        "  properties:\n"
+        "    query:\n"
+        "      type: string\n"
+        "output_schema:\n"
+        "  type: object\n"
+        "  properties:\n"
+        "    results:\n"
+        "      type: array\n"
         "---\n\n"
         f"{body}\n",
         encoding="utf-8",
@@ -43,6 +53,8 @@ def test_load_skill_definitions_reads_frontmatter(tmp_path: Path) -> None:
     assert skill.required_env == ("BRAVE_API_KEY",)
     assert skill.timeout_class == "standard"
     assert skill.timeout_seconds == 60
+    assert skill.input_schema["properties"]["query"]["type"] == "string"
+    assert skill.output_schema["properties"]["results"]["type"] == "array"
     assert skill.instructions == ""
 
 
@@ -130,4 +142,23 @@ def test_load_skill_definitions_rejects_unknown_timeout_class(
     )
 
     with pytest.raises(ValueError, match="timeout"):
+        load_skill_definitions(tmp_path)
+
+
+def test_load_skill_definitions_rejects_invalid_schema_type(
+    tmp_path: Path,
+) -> None:
+    skill_dir = tmp_path / "web-search"
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    (skill_dir / "SKILL.md").write_text(
+        "---\n"
+        "name: web-search\n"
+        "description: invalid schema\n"
+        "input_schema: []\n"
+        "---\n\n"
+        "body\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match="schema"):
         load_skill_definitions(tmp_path)

@@ -23,6 +23,8 @@ class SkillDefinition:
     required_env: tuple[str, ...]
     timeout_class: str
     timeout_seconds: int
+    input_schema: dict[str, Any]
+    output_schema: dict[str, Any]
     skill_file: Path
     instructions: str
 
@@ -99,6 +101,8 @@ def _build_skill_definition(
     required_env = tuple(str(key) for key in required_env_raw)
     timeout_class = str(cyberagent.get("timeout_class", "standard")).strip()
     timeout_seconds = _resolve_timeout_seconds(timeout_class, skill_file)
+    input_schema = _schema_or_empty(frontmatter.get("input_schema"), skill_file)
+    output_schema = _schema_or_empty(frontmatter.get("output_schema"), skill_file)
 
     return SkillDefinition(
         name=name,
@@ -109,6 +113,8 @@ def _build_skill_definition(
         required_env=required_env,
         timeout_class=timeout_class,
         timeout_seconds=timeout_seconds,
+        input_schema=input_schema,
+        output_schema=output_schema,
         skill_file=skill_file,
         instructions="",
     )
@@ -140,6 +146,14 @@ def _resolve_timeout_seconds(timeout_class: str, skill_file: Path) -> int:
             f"{', '.join(sorted(TIMEOUTS_BY_CLASS))}."
         )
     return TIMEOUTS_BY_CLASS[timeout_class]
+
+
+def _schema_or_empty(value: Any, skill_file: Path) -> dict[str, Any]:
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError(f"{skill_file} schema must be a mapping.")
+    return value
 
 
 def _as_mapping(value: Any) -> dict[str, Any]:

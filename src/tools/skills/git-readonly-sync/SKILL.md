@@ -6,6 +6,28 @@ metadata:
     tool: git_readonly_sync
     subcommand: run
     timeout_class: standard
+input_schema:
+  type: object
+  properties:
+    repo:
+      type: string
+    dest:
+      type: string
+    branch:
+      type: string
+    depth:
+      type: integer
+    token_env:
+      type: string
+    token_username:
+      type: string
+output_schema:
+  type: object
+  properties:
+    output:
+      type: string
+    error:
+      type: string
 ---
 
 Use this skill to retrieve repository content for analysis without pushing changes.

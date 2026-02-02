@@ -346,6 +346,8 @@ async def test_build_skill_tools_runs_cli(monkeypatch: pytest.MonkeyPatch) -> No
         required_env=(),
         timeout_class="standard",
         timeout_seconds=60,
+        input_schema={"properties": {"query": {"type": "string"}}},
+        output_schema={"properties": {"results": {"type": "array"}}},
         skill_file=Path("src/tools/skills/web-search/SKILL.md"),
         instructions="",
     )

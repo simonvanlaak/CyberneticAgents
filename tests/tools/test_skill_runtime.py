@@ -18,6 +18,8 @@ def _make_skill(name: str) -> SkillDefinition:
         required_env=(),
         timeout_class="standard",
         timeout_seconds=60,
+        input_schema={"properties": {"query": {"type": "string"}}},
+        output_schema={"properties": {"results": {"type": "array"}}},
         skill_file=Path(f"src/tools/skills/{name}/SKILL.md"),
         instructions="",
     )
@@ -115,3 +117,5 @@ def test_get_agent_skill_prompt_entries_include_locations(
     assert "skill-0" in entries[0]
     assert "skill-0 desc" in entries[0]
     assert "src/tools/skills/skill-0" in entries[0]
+    assert "inputs:" in entries[0]
+    assert "outputs:" in entries[0]

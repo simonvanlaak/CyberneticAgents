@@ -6,6 +6,18 @@ metadata:
     tool: exec
     subcommand: run
     timeout_class: standard
+input_schema:
+  type: object
+  properties:
+    command:
+      type: string
+output_schema:
+  type: object
+  properties:
+    output:
+      type: string
+    error:
+      type: string
 ---
 
 Use this skill to inspect text files in allowed work directories.

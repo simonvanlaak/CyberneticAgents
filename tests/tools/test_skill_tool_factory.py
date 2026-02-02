@@ -31,6 +31,8 @@ async def test_build_skill_tools_invokes_cli_tool() -> None:
         required_env=("BRAVE_API_KEY",),
         timeout_class="standard",
         timeout_seconds=60,
+        input_schema={"properties": {"query": {"type": "string"}}},
+        output_schema={"properties": {"results": {"type": "array"}}},
         skill_file=Path("skills/web-search/SKILL.md"),
         instructions="",
     )

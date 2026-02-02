@@ -8,6 +8,24 @@ metadata:
     timeout_class: standard
     required_env:
       - BRAVE_API_KEY
+input_schema:
+  type: object
+  properties:
+    query:
+      type: string
+    count:
+      type: integer
+    offset:
+      type: integer
+    freshness:
+      type: string
+output_schema:
+  type: object
+  properties:
+    results:
+      type: array
+    error:
+      type: string
 ---
 
 Use this skill when you need web search results for recent events, niche topics, or source discovery.

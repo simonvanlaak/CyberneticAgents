@@ -6,6 +6,18 @@ metadata:
     tool: web_fetch
     subcommand: run
     timeout_class: standard
+input_schema:
+  type: object
+  properties:
+    url:
+      type: string
+output_schema:
+  type: object
+  properties:
+    content:
+      type: string
+    error:
+      type: string
 ---
 
 Use this skill when you already have a target URL and need clean readable text.
