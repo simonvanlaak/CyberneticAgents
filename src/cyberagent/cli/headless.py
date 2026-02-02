@@ -10,6 +10,8 @@ from autogen_core import AgentId, CancellationToken
 from src.agents.messages import UserMessage
 from src.agents.user_agent import UserAgent
 from src.cli_session import forward_user_messages, read_stdin_loop
+from src.cyberagent.channels.inbox import DEFAULT_CHANNEL, DEFAULT_SESSION_ID
+from src.cyberagent.channels.telegram.poller import TelegramPoller
 from src.cyberagent.cli.suggestion_queue import (
     SUGGEST_QUEUE_POLL_SECONDS,
     ack_suggestion,
@@ -67,10 +69,12 @@ async def run_headless_session(initial_message: str | None = None) -> None:
     await start_cli_executor()
     recipient = AgentId(type=UserAgent.__name__, key="root")
     if initial_message:
-        await runtime.send_message(
-            message=UserMessage(content=initial_message, source="User"),
-            recipient=recipient,
-        )
+        message = UserMessage(content=initial_message, source="User")
+        message.metadata = {
+            "channel": DEFAULT_CHANNEL,
+            "session_id": DEFAULT_SESSION_ID,
+        }
+        await runtime.send_message(message=message, recipient=recipient)
 
     queue: asyncio.Queue[str] = asyncio.Queue()
     stop_event = asyncio.Event()
@@ -81,6 +85,11 @@ async def run_headless_session(initial_message: str | None = None) -> None:
     suggestion_task = asyncio.create_task(
         _process_suggestion_queue(runtime, stop_event)
     )
+    telegram_task: asyncio.Task[None] | None = None
+    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    if token:
+        telegram_poller = TelegramPoller(token, runtime, recipient, stop_event)
+        telegram_task = asyncio.create_task(telegram_poller.run())
 
     try:
         await stop_event.wait()
@@ -88,6 +97,8 @@ async def run_headless_session(initial_message: str | None = None) -> None:
         reader_task.cancel()
         forward_task.cancel()
         suggestion_task.cancel()
+        if telegram_task:
+            telegram_task.cancel()
         await stop_runtime()
 
 
@@ -100,6 +111,10 @@ async def _process_suggestion_queue(
             if stop_event.is_set():
                 break
             message = UserMessage(content=suggestion.payload_text, source="User")
+            message.metadata = {
+                "channel": DEFAULT_CHANNEL,
+                "session_id": DEFAULT_SESSION_ID,
+            }
             try:
                 await runtime.send_message(
                     message=message,

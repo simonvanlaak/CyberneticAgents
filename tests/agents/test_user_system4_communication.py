@@ -2,14 +2,16 @@
 # Tests for communication between UserAgent and System4
 
 import pytest
+from typing import cast
 from unittest.mock import AsyncMock
 from autogen_agentchat.messages import TextMessage
-from autogen_core import AgentId, MessageContext, TopicId
+from autogen_core import AgentId, AgentRuntime, MessageContext, TopicId
 from autogen_core._cancellation_token import CancellationToken
 
 from src.agents.user_agent import UserAgent
 from src.agents.system4 import System4
 from src.agents.messages import UserMessage
+from src.cyberagent.channels.inbox import DEFAULT_CHANNEL, DEFAULT_SESSION_ID
 from src.cli_session import (
     clear_pending_questions,
     enqueue_pending_question,
@@ -140,6 +142,7 @@ async def test_basic_agent_functionality():
     """Basic test to ensure agents can be instantiated."""
     # This is a basic smoke test
     user_agent = UserAgent("test_user")
+    user_agent.publish_message = AsyncMock()
     system4 = System4("test_system4")
 
     # Test that agents have the expected attributes
@@ -160,6 +163,8 @@ async def test_basic_agent_functionality():
 async def test_user_agent_updates_pending_question_on_system4_message():
     clear_pending_questions()
     user_agent = UserAgent("test_user")
+    user_agent.publish_message = AsyncMock()
+    user_agent.publish_message = AsyncMock()
     sender = AgentId(type=System4.__name__, key="root")
     ctx = MessageContext(
         sender=sender,
@@ -239,6 +244,7 @@ async def test_user_agent_includes_question_context_in_reply():
     user_agent = UserAgent("test_user")
 
     user_agent.publish_message = AsyncMock()
+    user_agent._runtime = cast(AgentRuntime, object())
     ctx = MessageContext(
         sender=AgentId(type="UserAgent", key="root"),
         topic_id=TopicId(type="UserAgent", source="root"),
@@ -259,3 +265,80 @@ async def test_user_agent_includes_question_context_in_reply():
     published_message = await_args.args[0]
     assert "What outcome do you want?" in published_message.content
     assert "Build a CLI-first app." in published_message.content
+
+
+@pytest.mark.asyncio
+async def test_user_agent_enqueues_pending_question_with_channel_metadata(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clear_pending_questions()
+    user_agent = UserAgent("test_user")
+    user_agent.publish_message = AsyncMock()
+    user_agent._runtime = cast(AgentRuntime, object())
+
+    ctx = MessageContext(
+        sender=AgentId(type="UserAgent", key="root"),
+        topic_id=TopicId(type="UserAgent", source="root"),
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="test-message",
+    )
+
+    inbound = UserMessage(content="Hi", source="User")
+    inbound.metadata = {
+        "channel": "telegram",
+        "session_id": "telegram:chat-99:user-42",
+        "telegram_chat_id": "99",
+    }
+    await user_agent.handle_user_message(message=inbound, ctx=ctx)  # type: ignore[call-arg]
+
+    sender = AgentId(type=System4.__name__, key="root")
+    reply_ctx = MessageContext(
+        sender=sender,
+        topic_id=TopicId(type="System4", source="root"),
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="test-message-2",
+    )
+    message = TextMessage(
+        content="Need confirmation?",
+        source="System4",
+        metadata={"ask_user": "true"},
+    )
+    await user_agent.handle_assistant_text_message(
+        message=message,
+        ctx=reply_ctx,
+    )  # type: ignore[call-arg]
+
+    pending = get_pending_question()
+    assert pending is not None
+    assert pending.channel == "telegram"
+    assert pending.session_id == "telegram:chat-99:user-42"
+
+
+@pytest.mark.asyncio
+async def test_user_agent_uses_cli_defaults_without_channel_metadata() -> None:
+    clear_pending_questions()
+    user_agent = UserAgent("test_user")
+    sender = AgentId(type=System4.__name__, key="root")
+    ctx = MessageContext(
+        sender=sender,
+        topic_id=TopicId(type="System4", source="root"),
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="test-message",
+    )
+    message = TextMessage(
+        content="Need confirmation?",
+        source="System4",
+        metadata={"ask_user": "true"},
+    )
+    await user_agent.handle_assistant_text_message(
+        message=message,
+        ctx=ctx,
+    )  # type: ignore[call-arg]
+
+    pending = get_pending_question()
+    assert pending is not None
+    assert pending.channel == DEFAULT_CHANNEL
+    assert pending.session_id == DEFAULT_SESSION_ID

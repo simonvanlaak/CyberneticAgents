@@ -11,8 +11,11 @@ from src.cyberagent.db.models.procedure_run import ProcedureRun
 from src.cyberagent.db.models.procedure_task import ProcedureTask
 from src.cyberagent.db.models.system import System
 from src.cyberagent.db.models.team import Team
+from src.cyberagent.services import systems as systems_service
+from src.cyberagent.services import teams as teams_service
 from src.cyberagent.tools.cli_executor.skill_loader import SkillDefinition
 from src.enums import ProcedureStatus
+from src.enums import SystemType
 
 
 def _clear_teams() -> None:
@@ -139,6 +142,28 @@ def test_handle_onboarding_seeds_default_sops(
                 .all()
             )
             assert tasks
+    finally:
+        session.close()
+
+
+def test_handle_onboarding_sets_root_team_envelope() -> None:
+    _clear_teams()
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
+
+    onboarding_cli.handle_onboarding(
+        argparse.Namespace(), 'cyberagent suggest "Describe the task"'
+    )
+    monkeypatch.undo()
+
+    session = next(get_db())
+    try:
+        team = session.query(Team).filter(Team.name == "root").first()
+        assert team is not None
+        allowed = teams_service.list_allowed_skills(team.id)
+        assert "speech-to-text" in allowed
+        system4 = systems_service.get_system_by_type(team.id, SystemType.INTELLIGENCE)
+        assert "speech-to-text" not in systems_service.list_granted_skills(system4.id)
     finally:
         session.close()
 

@@ -27,6 +27,9 @@ This document outlines the requirements for integrating **Telegram** as a commun
 ## Dependencies
 Depends on docs/product_requirements/communication_channels.md
 
+## Out of Scope (Phase 1)
+- Speech-to-Text pipeline (see docs/product_requirements/speech_to_text.md)
+
 ---
 
 ## User Stories
@@ -118,7 +121,9 @@ TelegramSession:
     context: dict    # Custom context/state
 ```
 
-### 5. **Speech-to-Text (STT) Integration**
+### 5. **Speech-to-Text (STT) Integration (Future)**
+
+Out of scope for this implementation. See docs/product_requirements/speech_to_text.md.
 
 Voice messages are a core feature of Telegram and significantly improve user experience for longer inputs. STT integration should be seamless and reliable.
 

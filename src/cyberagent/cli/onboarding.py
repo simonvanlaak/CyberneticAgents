@@ -18,6 +18,7 @@ from src.cyberagent.db.models.system import ensure_default_systems_for_team
 from src.cyberagent.db.models.system import get_system_by_type
 from src.cyberagent.db.models.team import Team
 from src.cyberagent.services import procedures as procedures_service
+from src.cyberagent.services import teams as teams_service
 from src.cyberagent.tools.cli_executor.skill_loader import (
     SkillDefinition,
     load_skill_definitions,
@@ -163,6 +164,9 @@ DEFAULT_PROCEDURES = [
         ],
     },
 ]
+DEFAULT_TEAM_ENVELOPE_SKILLS = [
+    "speech-to-text",
+]
 
 
 def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
@@ -182,6 +186,7 @@ def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
             print(f"Team already exists: {team.name} (id={team.id}).")
     finally:
         session.close()
+    _seed_default_team_envelope(team.id)
     _seed_default_procedures(team.id)
     print(f"Next: run {suggest_command} to give the agents a task.")
     return 0
@@ -219,6 +224,11 @@ def _seed_default_procedures(team_id: int) -> None:
         procedures_service.approve_procedure(
             procedure_id=procedure.id, approved_by_system_id=system5.id
         )
+
+
+def _seed_default_team_envelope(team_id: int) -> None:
+    for skill_name in DEFAULT_TEAM_ENVELOPE_SKILLS:
+        teams_service.add_allowed_skill(team_id, skill_name, actor_id="onboarding")
 
 
 def run_technical_onboarding_checks() -> bool:

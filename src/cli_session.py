@@ -17,6 +17,7 @@ from src.cyberagent.channels.inbox import (
     resolve_pending_question,
     wait_for_answer,
 )
+from src.cyberagent.channels.inbox import DEFAULT_CHANNEL, DEFAULT_SESSION_ID
 
 __all__ = [
     "AnsweredQuestion",
@@ -78,4 +79,8 @@ async def forward_user_messages(
             stop_event.set()
             continue
         message = UserMessage(content=user_input, source="User")
+        message.metadata = {
+            "channel": DEFAULT_CHANNEL,
+            "session_id": DEFAULT_SESSION_ID,
+        }
         await runtime.send_message(message=message, recipient=recipient)
