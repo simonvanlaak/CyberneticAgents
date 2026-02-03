@@ -14,7 +14,7 @@ import pytest
 from autogen_core import AgentId
 
 from src.cyberagent.cli import cyberagent
-from src.cli_session import AnsweredQuestion, PendingQuestion
+from src.cyberagent.channels.inbox import InboxEntry
 
 
 @pytest.mark.parametrize(
@@ -201,34 +201,33 @@ def test_handle_suggest_requires_team(
 def test_handle_inbox_prints_entries(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    pending = [
-        PendingQuestion(
-            question_id=1, content="Need info", asked_by="System4", created_at=0
-        )
-    ]
-    answered = [
-        AnsweredQuestion(
-            question_id=2,
-            content="What should we build?",
-            asked_by="System4",
+    entries = [
+        InboxEntry(
+            entry_id=1,
+            kind="system_question",
+            content="Need info",
             created_at=0,
-            answer="A CLI",
-            answered_at=1,
-        )
+            channel="cli",
+            session_id="cli-main",
+            asked_by="System4",
+            status="pending",
+        ),
+        InboxEntry(
+            entry_id=2,
+            kind="system_response",
+            content="What should we build?",
+            created_at=0,
+            channel="cli",
+            session_id="cli-main",
+        ),
     ]
     monkeypatch.setattr(
         cyberagent,
-        "list_inbox_pending_questions",
-        lambda *_, **__: pending,
-    )
-    monkeypatch.setattr(
-        cyberagent,
-        "list_inbox_answered_questions",
-        lambda *_, **__: answered,
+        "list_inbox_entries",
+        lambda *_, **__: entries,
     )
     result = cyberagent._handle_inbox(
         argparse.Namespace(
-            answered=True,
             channel=None,
             session_id=None,
             telegram_chat_id=None,
@@ -237,8 +236,8 @@ def test_handle_inbox_prints_entries(
     )
     captured = capsys.readouterr()
     assert result == 0
-    assert "Pending questions" in captured.out
-    assert "Answered questions" in captured.out
+    assert "System questions" in captured.out
+    assert "System responses" in captured.out
     assert "[1] Need info" in captured.out
     assert "channel=cli" in captured.out
     assert "[2] What should we build?" in captured.out
@@ -250,7 +249,6 @@ def test_handle_inbox_requires_team(
     monkeypatch.setattr(cyberagent, "get_last_team_id", lambda: None)
     result = cyberagent._handle_inbox(
         argparse.Namespace(
-            answered=False,
             channel=None,
             session_id=None,
             telegram_chat_id=None,
@@ -266,12 +264,17 @@ def test_handle_inbox_requires_team(
 async def test_handle_watch_prints_pending(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    question = PendingQuestion(
-        question_id=7, content="Watch this", asked_by="System4", created_at=0
+    entry = InboxEntry(
+        entry_id=7,
+        kind="system_question",
+        content="Watch this",
+        created_at=0,
+        channel="cli",
+        session_id="cli-main",
+        asked_by="System4",
+        status="pending",
     )
-    monkeypatch.setattr(
-        cyberagent, "list_inbox_pending_questions", lambda *_, **__: [question]
-    )
+    monkeypatch.setattr(cyberagent, "list_inbox_entries", lambda *_, **__: [entry])
 
     async def fake_sleep(interval: float) -> None:
         raise KeyboardInterrupt

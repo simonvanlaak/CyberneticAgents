@@ -11,7 +11,11 @@ from autogen_core._cancellation_token import CancellationToken
 from src.agents.user_agent import ChannelContext, UserAgent
 from src.agents.system4 import System4
 from src.agents.messages import UserMessage
-from src.cyberagent.channels.inbox import DEFAULT_CHANNEL, DEFAULT_SESSION_ID
+from src.cyberagent.channels.inbox import (
+    DEFAULT_CHANNEL,
+    DEFAULT_SESSION_ID,
+    list_inbox_entries,
+)
 from src.cli_session import (
     clear_pending_questions,
     enqueue_pending_question,
@@ -186,6 +190,9 @@ async def test_user_agent_updates_pending_question_on_system4_message():
     pending = get_pending_question()
     assert pending is not None
     assert pending.content == "Any other constraints to consider?"
+    entries = list_inbox_entries(kind="system_question", status="pending")
+    assert len(entries) == 1
+    assert entries[0].content == "Any other constraints to consider?"
 
 
 @pytest.mark.asyncio
@@ -211,6 +218,9 @@ async def test_user_agent_informational_message_does_not_enqueue_question():
     )  # type: ignore[call-arg]
 
     assert get_pending_question() is None
+    entries = list_inbox_entries(kind="system_response")
+    assert len(entries) == 1
+    assert entries[0].content == "Status update: research in progress."
 
 
 @pytest.mark.asyncio
@@ -243,6 +253,9 @@ async def test_user_agent_forwards_informational_message_to_telegram() -> None:
 
     user_agent._send_telegram_prompt.assert_awaited_once_with(99, message.content)
     assert get_pending_question() is None
+    entries = list_inbox_entries(kind="system_response")
+    assert len(entries) == 1
+    assert entries[0].channel == "telegram"
 
 
 @pytest.mark.asyncio
@@ -274,6 +287,9 @@ async def test_user_agent_forwards_question_with_id_to_telegram() -> None:
     )  # type: ignore[call-arg]
 
     user_agent._send_telegram_prompt.assert_awaited_once_with(99, message.content)
+    entries = list_inbox_entries(kind="system_question")
+    assert len(entries) == 1
+    assert entries[0].content == "Hello! How can I help you today?"
 
 
 @pytest.mark.asyncio
@@ -298,6 +314,8 @@ async def test_user_agent_non_question_message_does_not_enqueue_question():
     )  # type: ignore[call-arg]
 
     assert get_pending_question() is None
+    entries = list_inbox_entries()
+    assert entries == []
 
 
 @pytest.mark.asyncio
@@ -328,6 +346,9 @@ async def test_user_agent_includes_question_context_in_reply():
     published_message = await_args.args[0]
     assert "What outcome do you want?" in published_message.content
     assert "Build a CLI-first app." in published_message.content
+    entries = list_inbox_entries(kind="user_prompt")
+    assert len(entries) == 1
+    assert entries[0].content == "Build a CLI-first app."
 
 
 @pytest.mark.asyncio
@@ -377,6 +398,9 @@ async def test_user_agent_enqueues_pending_question_with_channel_metadata(
     assert pending is not None
     assert pending.channel == "telegram"
     assert pending.session_id == "telegram:chat-99:user-42"
+    entries = list_inbox_entries(kind="system_question")
+    assert len(entries) == 1
+    assert entries[0].channel == "telegram"
 
 
 @pytest.mark.asyncio
@@ -405,3 +429,6 @@ async def test_user_agent_uses_cli_defaults_without_channel_metadata() -> None:
     assert pending is not None
     assert pending.channel == DEFAULT_CHANNEL
     assert pending.session_id == DEFAULT_SESSION_ID
+    entries = list_inbox_entries(kind="system_question")
+    assert len(entries) == 1
+    assert entries[0].channel == DEFAULT_CHANNEL

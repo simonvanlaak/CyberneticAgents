@@ -31,7 +31,7 @@ except ImportError:
 from autogen_core import AgentId
 
 from src.agents.messages import UserMessage
-from src.cli_session import list_inbox_answered_questions, list_inbox_pending_questions
+from src.cli_session import list_inbox_entries
 from src.cyberagent.channels.telegram.parser import build_session_id
 from src.cyberagent.cli import dev as dev_cli
 from src.cyberagent.cli import onboarding as onboarding_cli
@@ -144,11 +144,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Payload format (yaml requires PyYAML).",
     )
 
-    inbox_parser = subparsers.add_parser(
-        "inbox", help="Read pending CLI inbox messages."
-    )
+    inbox_parser = subparsers.add_parser("inbox", help="Read inbox entries.")
     inbox_parser.add_argument(
-        "--answered", action="store_true", help="Include answered items."
+        "--answered",
+        action="store_true",
+        help="Include answered system questions.",
     )
     inbox_parser.add_argument(
         "--channel",
@@ -172,7 +172,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     watch_parser = subparsers.add_parser(
-        "watch", help="Watch the inbox for new questions."
+        "watch", help="Watch the inbox for new entries."
     )
     watch_parser.add_argument("--interval", type=float, default=5.0)
     watch_parser.add_argument(
@@ -440,30 +440,47 @@ def _handle_inbox(args: argparse.Namespace) -> int:
     if _require_existing_team() is None:
         return 1
     channel, session_id = _resolve_inbox_filters(args)
-    pending = list_inbox_pending_questions(channel=channel, session_id=session_id)
-    answered = (
-        list_inbox_answered_questions(channel=channel, session_id=session_id)
-        if args.answered
-        else []
-    )
-    if not pending and not answered:
+    entries = list_inbox_entries(channel=channel, session_id=session_id)
+    include_answered = bool(getattr(args, "answered", False))
+    if not include_answered:
+        entries = [
+            entry
+            for entry in entries
+            if not (entry.kind == "system_question" and entry.status == "answered")
+        ]
+    if not entries:
         print("No messages in inbox.")
         print(f"Next: run {WATCH_COMMAND} to wait, or {SUGGEST_COMMAND}.")
         return 0
-    if pending:
-        print("Pending questions:")
-        for question in pending:
+    user_prompts = [entry for entry in entries if entry.kind == "user_prompt"]
+    system_questions = [entry for entry in entries if entry.kind == "system_question"]
+    system_responses = [entry for entry in entries if entry.kind == "system_response"]
+    if user_prompts:
+        print("User prompts:")
+        for entry in user_prompts:
             print(
-                f"- [{question.question_id}] {question.content} "
-                f"(asked by {question.asked_by or 'System4'}, "
-                f"channel={question.channel}, session={question.session_id})"
+                f"- [{entry.entry_id}] {entry.content} "
+                f"(channel={entry.channel}, session={entry.session_id})"
             )
-    if answered:
-        print("\nAnswered questions:")
-        for item in answered:
+    if system_questions:
+        print("System questions:")
+        for entry in system_questions:
+            status = entry.status or "pending"
+            answer_suffix = (
+                f" -> {entry.answer}" if status == "answered" and entry.answer else ""
+            )
             print(
-                f"- [{item.question_id}] {item.content} -> {item.answer} "
-                f"(channel={item.channel}, session={item.session_id})"
+                f"- [{entry.entry_id}] {entry.content}{answer_suffix} "
+                f"(asked by {entry.asked_by or 'System4'}, "
+                f"status={status}, channel={entry.channel}, "
+                f"session={entry.session_id})"
+            )
+    if system_responses:
+        print("System responses:")
+        for entry in system_responses:
+            print(
+                f"- [{entry.entry_id}] {entry.content} "
+                f"(channel={entry.channel}, session={entry.session_id})"
             )
     return 0
 
@@ -476,17 +493,20 @@ async def _handle_watch(args: argparse.Namespace) -> int:
     channel, session_id = _resolve_inbox_filters(args)
     try:
         while True:
-            pending = list_inbox_pending_questions(
-                channel=channel, session_id=session_id
-            )
-            for question in pending:
-                if question.question_id in seen:
+            entries = list_inbox_entries(channel=channel, session_id=session_id)
+            entries = [
+                entry
+                for entry in entries
+                if not (entry.kind == "system_question" and entry.status == "answered")
+            ]
+            for entry in entries:
+                if entry.entry_id in seen:
                     continue
                 print(
-                    f"[{question.question_id}] {question.content} "
-                    f"(channel={question.channel})"
+                    f"[{entry.entry_id}] {entry.content} "
+                    f"(kind={entry.kind}, channel={entry.channel})"
                 )
-                seen.add(question.question_id)
+                seen.add(entry.entry_id)
             await asyncio.sleep(max(0.1, args.interval))
     except KeyboardInterrupt:
         print("Stopped watching inbox.")

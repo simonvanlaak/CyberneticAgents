@@ -62,6 +62,10 @@ Each entry should include:
 3. Sender (User, System4, etc.)
 4. Conversation/thread identifier
 
+## Current Implementation Notes
+- The shared inbox now records user prompts, system questions, and system responses with channel/session metadata.
+- Inbox entries persist in `logs/cli_inbox.json` via `src/cyberagent/channels/inbox.py`.
+
 ## Setup & Onboarding
 1. Onboarding should detect which channels are configured.
 2. Users should be prompted to connect new channels with clear steps.

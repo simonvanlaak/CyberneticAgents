@@ -6,14 +6,18 @@ from autogen_agentchat.messages import TextMessage
 from autogen_core import AgentId, MessageContext, RoutedAgent, TopicId, message_handler
 
 from src.agents.messages import UserMessage
-from src.cli_session import get_pending_question, resolve_pending_question
-from src.cli_session import enqueue_pending_question
+from src.agents.system4 import System4
+from src.cli_session import (
+    add_inbox_entry,
+    enqueue_pending_question,
+    get_pending_question,
+    resolve_pending_question,
+)
 from src.cyberagent.channels.inbox import DEFAULT_CHANNEL, DEFAULT_SESSION_ID
 from src.cyberagent.channels.telegram.outbound import (
     send_message as send_telegram_message,
 )
 from src.cyberagent.secrets import get_secret
-from src.agents.system4 import System4
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +42,25 @@ class UserAgent(RoutedAgent):
     ) -> None:
         logger.debug("[user]: %s", message.content)
         self._capture_channel_context(message)
-        resolved = resolve_pending_question(message.content)
+        channel = (
+            self._last_channel_context.channel
+            if self._last_channel_context
+            else DEFAULT_CHANNEL
+        )
+        session_id = (
+            self._last_channel_context.session_id
+            if self._last_channel_context
+            else DEFAULT_SESSION_ID
+        )
+        add_inbox_entry(
+            "user_prompt",
+            message.content,
+            channel=channel,
+            session_id=session_id,
+        )
+        resolved = resolve_pending_question(
+            message.content, channel=channel, session_id=session_id
+        )
         if resolved:
             message.content = (
                 "User answered a pending question.\n"
@@ -76,18 +98,18 @@ class UserAgent(RoutedAgent):
                 "1",
                 "yes",
             }
+            channel = (
+                self._last_channel_context.channel
+                if self._last_channel_context
+                else DEFAULT_CHANNEL
+            )
+            session_id = (
+                self._last_channel_context.session_id
+                if self._last_channel_context
+                else DEFAULT_SESSION_ID
+            )
             if ask_user_flag and message.metadata.get("question_id") is None:
                 asked_by = str(ctx.sender) if ctx.sender else None
-                channel = (
-                    self._last_channel_context.channel
-                    if self._last_channel_context
-                    else DEFAULT_CHANNEL
-                )
-                session_id = (
-                    self._last_channel_context.session_id
-                    if self._last_channel_context
-                    else DEFAULT_SESSION_ID
-                )
                 enqueue_pending_question(
                     message.content,
                     asked_by=asked_by,
@@ -103,26 +125,41 @@ class UserAgent(RoutedAgent):
                         self._last_channel_context.telegram_chat_id,
                         message.content,
                     )
-            elif (
-                inform_user_flag
-                and self._last_channel_context
-                and self._last_channel_context.channel == "telegram"
-                and self._last_channel_context.telegram_chat_id is not None
-            ):
-                await self._send_telegram_prompt(
-                    self._last_channel_context.telegram_chat_id,
+            elif inform_user_flag:
+                add_inbox_entry(
+                    "system_response",
                     message.content,
+                    channel=channel,
+                    session_id=session_id,
+                    asked_by=str(ctx.sender) if ctx.sender else None,
                 )
-            elif (
-                ask_user_flag
-                and self._last_channel_context
-                and self._last_channel_context.channel == "telegram"
-                and self._last_channel_context.telegram_chat_id is not None
-            ):
-                await self._send_telegram_prompt(
-                    self._last_channel_context.telegram_chat_id,
+                if (
+                    self._last_channel_context
+                    and self._last_channel_context.channel == "telegram"
+                    and self._last_channel_context.telegram_chat_id is not None
+                ):
+                    await self._send_telegram_prompt(
+                        self._last_channel_context.telegram_chat_id,
+                        message.content,
+                    )
+            elif ask_user_flag:
+                add_inbox_entry(
+                    "system_question",
                     message.content,
+                    channel=channel,
+                    session_id=session_id,
+                    asked_by=str(ctx.sender) if ctx.sender else None,
+                    status="pending",
                 )
+                if (
+                    self._last_channel_context
+                    and self._last_channel_context.channel == "telegram"
+                    and self._last_channel_context.telegram_chat_id is not None
+                ):
+                    await self._send_telegram_prompt(
+                        self._last_channel_context.telegram_chat_id,
+                        message.content,
+                    )
         pending_question = get_pending_question()
         if pending_question:
             logger.debug("Pending question (System4): %s", pending_question.content)

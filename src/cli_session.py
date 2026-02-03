@@ -5,13 +5,16 @@ from autogen_core import AgentId
 
 from src.agents.messages import UserMessage
 from src.cyberagent.channels.inbox import (
+    InboxEntry,
     AnsweredQuestion,
     PendingQuestion,
+    add_inbox_entry,
     clear_pending_questions,
     enqueue_pending_question,
     get_answered_questions,
     get_pending_question,
     get_pending_questions,
+    list_inbox_entries,
     list_inbox_answered_questions,
     list_inbox_pending_questions,
     resolve_pending_question,
@@ -20,13 +23,16 @@ from src.cyberagent.channels.inbox import (
 from src.cyberagent.channels.inbox import DEFAULT_CHANNEL, DEFAULT_SESSION_ID
 
 __all__ = [
+    "InboxEntry",
     "AnsweredQuestion",
     "PendingQuestion",
+    "add_inbox_entry",
     "clear_pending_questions",
     "enqueue_pending_question",
     "get_answered_questions",
     "get_pending_question",
     "get_pending_questions",
+    "list_inbox_entries",
     "list_inbox_answered_questions",
     "list_inbox_pending_questions",
     "resolve_pending_question",
@@ -46,7 +52,9 @@ def _read_stdin(
     stop_event: asyncio.Event,
 ) -> None:
     while not stop_event.is_set():
-        pending_question = get_pending_question()
+        pending_question = get_pending_question(
+            channel=DEFAULT_CHANNEL, session_id=DEFAULT_SESSION_ID
+        )
         if pending_question:
             print(f"Pending question (System4): {pending_question.content}", flush=True)
         try:

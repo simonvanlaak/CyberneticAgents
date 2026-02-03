@@ -10,6 +10,7 @@ Telegram integration provides a direct communication channel between users and C
 - **Webhook + polling**: Webhook is preferred when configured; polling is the fallback.
 - **Allowlist/blocklist**: Optional chat/user allow and block lists.
 - **Inline keyboards**: Callback queries are parsed and forwarded to the runtime.
+- **Shared inbox**: Telegram user prompts, system questions, and system responses are recorded in the shared inbox with `channel=telegram` and the Telegram session id.
 
 ## Session Model
 - Session key: `telegram:chat-<chat_id>:user-<user_id>`

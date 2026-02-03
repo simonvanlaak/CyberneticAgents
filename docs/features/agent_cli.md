@@ -12,9 +12,9 @@ The CyberneticAgents CLI provides a thin, user-focused interface for operating t
   - `--json` emits machine-readable JSON.
 - **suggest**: `cyberagent suggest "<message>"` sends a suggestion payload to System4.
   - `--payload` / `--file` supports inline JSON/YAML payloads.
-- **inbox**: `cyberagent inbox` shows pending messages for the CLI user.
-  - `--answered` includes answered items.
-- **watch**: `cyberagent watch` polls the inbox until interrupted.
+- **inbox**: `cyberagent inbox` shows shared inbox entries (user prompts, system questions, system responses).
+  - `--answered` includes answered system questions.
+- **watch**: `cyberagent watch` polls the shared inbox until interrupted.
 - **logs**: `cyberagent logs` prints recent runtime logs.
   - `--filter` substring filter, `--level` and `--errors` for log levels.
   - `--follow` tails logs in real time.
@@ -44,6 +44,7 @@ The CyberneticAgents CLI provides a thin, user-focused interface for operating t
 - Headless runtime: `src/cyberagent/cli/headless.py`
 - Status rendering: `src/cyberagent/cli/status.py`
 - CLI inbox/session: `src/cli_session.py`
+- Shared inbox storage: `src/cyberagent/channels/inbox.py`
 - Logs: `logs/` directory
 
 ## How to Test

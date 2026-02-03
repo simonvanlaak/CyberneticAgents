@@ -7,6 +7,77 @@ import pytest
 from src.cyberagent.channels import inbox
 
 
+def test_inbox_add_entry_records_defaults(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(inbox, "INBOX_STATE_FILE", tmp_path / "inbox.json")
+    inbox.clear_pending_questions()
+
+    entry = inbox.add_inbox_entry("user_prompt", "hello")
+    entries = inbox.list_inbox_entries()
+
+    assert entry.kind == "user_prompt"
+    assert entry.channel == inbox.DEFAULT_CHANNEL
+    assert entry.session_id == inbox.DEFAULT_SESSION_ID
+    assert entries[0].content == "hello"
+
+
+def test_inbox_list_entries_filters_by_kind_channel_session(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(inbox, "INBOX_STATE_FILE", tmp_path / "inbox.json")
+    inbox.clear_pending_questions()
+
+    inbox.add_inbox_entry(
+        "user_prompt",
+        "From telegram",
+        channel="telegram",
+        session_id="telegram:chat-1:user-2",
+    )
+    inbox.add_inbox_entry(
+        "system_response",
+        "From cli",
+        channel="cli",
+        session_id="cli-main",
+    )
+    inbox.enqueue_pending_question(
+        "Need input?",
+        asked_by="System4",
+        channel="telegram",
+        session_id="telegram:chat-1:user-2",
+    )
+
+    telegram_entries = inbox.list_inbox_entries(channel="telegram")
+    assert len(telegram_entries) == 2
+    assert {entry.kind for entry in telegram_entries} == {
+        "user_prompt",
+        "system_question",
+    }
+
+    system_questions = inbox.list_inbox_entries(kind="system_question")
+    assert len(system_questions) == 1
+    assert system_questions[0].content == "Need input?"
+
+    cli_entries = inbox.list_inbox_entries(session_id="cli-main")
+    assert len(cli_entries) == 1
+    assert cli_entries[0].kind == "system_response"
+
+
+def test_inbox_resolve_marks_question_answered(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(inbox, "INBOX_STATE_FILE", tmp_path / "inbox.json")
+    inbox.clear_pending_questions()
+
+    inbox.enqueue_pending_question("Need input?", asked_by="System4")
+    resolved = inbox.resolve_pending_question("done")
+
+    assert resolved is not None
+    answered = inbox.list_inbox_entries(kind="system_question", status="answered")
+    assert len(answered) == 1
+    assert answered[0].answer == "done"
+
+
 def test_inbox_defaults_channel_and_session(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
