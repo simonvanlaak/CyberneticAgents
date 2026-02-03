@@ -12,10 +12,10 @@
 - [x] Define audit logging interface and event schema.
 
 ## Phase 2: Skill Layer
-- [ ] Implement `memory_crud` skill handler entry points (create/read/update/delete/list).
-- [ ] Enforce RBAC + VSM permission checks before any operation.
-- [ ] Enforce scope defaults (agent) when scope is omitted.
-- [ ] Implement cursor-based pagination for list operations.
+- [x] Implement `memory_crud` skill handler entry points (create/read/update/delete/list).
+- [x] Enforce RBAC + VSM permission checks before any operation.
+- [x] Enforce scope defaults (agent) when scope is omitted.
+- [x] Implement cursor-based pagination for list operations.
 
 ## Phase 3: Backends
 - [ ] Implement AutoGen `Memory` protocol adapter.

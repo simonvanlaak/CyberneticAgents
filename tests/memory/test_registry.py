@@ -33,7 +33,12 @@ class DummyStore:
         raise NotImplementedError
 
     def list(
-        self, scope: MemoryScope, namespace: str, limit: int, cursor: str | None
+        self,
+        scope: MemoryScope,
+        namespace: str,
+        limit: int,
+        cursor: str | None,
+        owner_agent_id: str | None = None,
     ) -> MemoryListResult:
         raise NotImplementedError
 

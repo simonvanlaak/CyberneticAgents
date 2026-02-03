@@ -87,6 +87,7 @@ class MemoryQuery:
     limit: int
     cursor: str | None = None
     tags: Sequence[str] | None = None
+    owner_agent_id: str | None = None
 
 
 @dataclass(slots=True)

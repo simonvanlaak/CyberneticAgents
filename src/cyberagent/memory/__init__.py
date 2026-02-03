@@ -10,6 +10,15 @@ from src.cyberagent.memory.models import (
     MemorySource,
 )
 from src.cyberagent.memory.registry import StaticScopeRegistry
+from src.cyberagent.memory.crud import (
+    MemoryActorContext,
+    MemoryCreateRequest,
+    MemoryCrudService,
+    MemoryDeleteRequest,
+    MemoryReadRequest,
+    MemoryUpdateRequest,
+)
+from src.cyberagent.memory.permissions import MemoryAction, check_memory_permission
 from src.cyberagent.memory.store import MemoryStore
 
 __all__ = [
@@ -20,6 +29,14 @@ __all__ = [
     "MemoryPriority",
     "MemoryScope",
     "MemorySource",
+    "MemoryAction",
+    "check_memory_permission",
+    "MemoryActorContext",
+    "MemoryCreateRequest",
+    "MemoryCrudService",
+    "MemoryDeleteRequest",
+    "MemoryReadRequest",
+    "MemoryUpdateRequest",
     "MemoryStore",
     "StaticScopeRegistry",
 ]
