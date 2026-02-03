@@ -14,6 +14,7 @@ from autogen_core import AgentId, CancellationToken
 
 from src.agents.messages import UserMessage
 from src.cyberagent.channels.inbox import add_inbox_entry
+from src.cyberagent.stt.postprocess import format_timestamped_text
 from src.cyberagent.channels.telegram.client import TelegramClient
 from src.cyberagent.channels.telegram import stt as telegram_stt
 from src.cyberagent.channels.telegram import session_store
@@ -271,9 +272,10 @@ class TelegramWebhookServer:
             return
         if self._stt_config.show_transcription:
             self._client.send_message(inbound.chat_id, f"Transcription: {result.text}")
+        inbox_text = format_timestamped_text(result.text, result.segments)
         add_inbox_entry(
             "user_prompt",
-            result.text,
+            inbox_text,
             channel="telegram",
             session_id=session_id,
             metadata={

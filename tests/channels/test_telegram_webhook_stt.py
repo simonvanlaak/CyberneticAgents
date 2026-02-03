@@ -169,3 +169,79 @@ def test_webhook_adds_inbox_entry_for_voice_transcript(
     assert metadata["telegram_message_id"] == "99"
     assert metadata["telegram_file_id"] == "file-1"
     assert "original_audio" not in metadata
+
+
+def test_webhook_injects_timestamps_for_long_transcripts(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    runtime = _Runtime()
+    server = TelegramWebhookServer(
+        token="token",
+        runtime=runtime,
+        recipient=AgentId.from_str("UserAgent/root"),
+        loop=object(),  # type: ignore[arg-type]
+        host="127.0.0.1",
+        port=0,
+        secret=None,
+    )
+
+    monkeypatch.setattr(server._client, "send_message", lambda *_args, **_kwargs: None)
+
+    long_text = "word " * 60
+
+    def _fake_transcribe(
+        *args: object, **kwargs: object
+    ) -> telegram_stt.TranscriptionResult:
+        return telegram_stt.TranscriptionResult(
+            text=long_text,
+            provider="openai",
+            model="whisper-1",
+            language="en",
+            segments=[
+                {"start": 0.0, "text": "Hello"},
+                {"start": 65.4, "text": "World"},
+            ],
+        )
+
+    monkeypatch.setattr(telegram_stt, "transcribe_voice_message", _fake_transcribe)
+
+    class _ImmediateFuture:
+        def __init__(self, value: object) -> None:
+            self._value = value
+
+        def add_done_callback(self, callback: Callable[[object], object]) -> None:
+            callback(self)
+
+        def result(self) -> object:
+            return self._value
+
+    def _run_sync(coro: Coroutine[Any, Any, object], _loop: object) -> _ImmediateFuture:
+        return _ImmediateFuture(asyncio.run(coro))
+
+    monkeypatch.setattr(webhook.asyncio, "run_coroutine_threadsafe", _run_sync)
+
+    recorded: dict[str, object] = {}
+
+    def _fake_add_inbox_entry(*args: object, **kwargs: object) -> None:
+        if args:
+            recorded["content"] = args[1]
+        recorded.update(kwargs)
+
+    monkeypatch.setattr(webhook, "add_inbox_entry", _fake_add_inbox_entry)
+
+    inbound = TelegramInboundVoiceMessage(
+        update_id=1,
+        chat_id=123,
+        user_id=456,
+        message_id=99,
+        file_id="file-1",
+        file_unique_id="uniq",
+        duration=5,
+        mime_type="audio/ogg",
+        file_name=None,
+    )
+
+    server._handle_voice_inbound(inbound)
+
+    assert "[00:00] Hello" in str(recorded["content"])
+    assert "[01:05] World" in str(recorded["content"])
