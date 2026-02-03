@@ -4,16 +4,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+import time
 from typing import Iterable, Sequence
 from uuid import uuid4
 
 from src.cyberagent.memory.models import (
+    MemoryAuditEvent,
     MemoryEntry,
     MemoryListResult,
     MemoryPriority,
     MemoryScope,
     MemorySource,
 )
+from src.cyberagent.memory.observability import MemoryAuditSink, MemoryMetrics
 from src.cyberagent.memory.permissions import MemoryAction, check_memory_permission
 from src.cyberagent.memory.registry import StaticScopeRegistry
 from src.enums import SystemType
@@ -86,12 +89,16 @@ class MemoryCrudService:
         default_scope: MemoryScope = MemoryScope.AGENT,
         default_page_size: int = 25,
         max_page_size: int = 100,
+        metrics: MemoryMetrics | None = None,
+        audit_sink: MemoryAuditSink | None = None,
     ) -> None:
         self._registry = registry
         self._max_bulk_items = max_bulk_items
         self._default_scope = default_scope
         self._default_page_size = default_page_size
         self._max_page_size = max_page_size
+        self._metrics = metrics
+        self._audit_sink = audit_sink
 
     def create_entries(
         self, *, actor: MemoryActorContext, requests: Sequence[MemoryCreateRequest]
@@ -127,7 +134,18 @@ class MemoryCrudService:
                 confidence=request.confidence,
             )
             store = self._registry.resolve(scope)
-            created.append(store.add(entry))
+            created_entry = store.add(entry)
+            created.append(created_entry)
+            self._record_write(count=1)
+            self._record_audit(
+                actor=actor,
+                scope=scope,
+                namespace=request.namespace,
+                resource_id=created_entry.id,
+                action="memory_create",
+                success=True,
+                details={"source": request.source.value},
+            )
         return created
 
     def read_entry(
@@ -144,10 +162,32 @@ class MemoryCrudService:
             target_team_id=target_team_id,
         )
         store = self._registry.resolve(scope)
+        start = time.perf_counter()
         entry = store.get(request.entry_id, scope, request.namespace)
+        self._record_read_latency((time.perf_counter() - start) * 1000)
         if entry is None:
+            self._record_read(hit=False)
+            self._record_audit(
+                actor=actor,
+                scope=scope,
+                namespace=request.namespace,
+                resource_id=request.entry_id,
+                action="memory_read",
+                success=False,
+                details={"reason": "not_found"},
+            )
             return None
         self._require_owner_match(scope, actor.agent_id, entry.owner_agent_id)
+        self._record_read(hit=True)
+        self._record_audit(
+            actor=actor,
+            scope=scope,
+            namespace=request.namespace,
+            resource_id=entry.id,
+            action="memory_read",
+            success=True,
+            details={},
+        )
         return entry
 
     def update_entries(
@@ -181,6 +221,16 @@ class MemoryCrudService:
             entry.expires_at = request.expires_at
             entry.updated_at = _utc_now()
             updated.append(store.update(entry))
+            self._record_write(count=1)
+            self._record_audit(
+                actor=actor,
+                scope=scope,
+                namespace=request.namespace,
+                resource_id=entry.id,
+                action="memory_update",
+                success=True,
+                details={},
+            )
         return updated
 
     def delete_entries(
@@ -203,7 +253,18 @@ class MemoryCrudService:
             entry = store.get(request.entry_id, scope, request.namespace)
             if entry is not None:
                 self._require_owner_match(scope, actor.agent_id, entry.owner_agent_id)
-            results.append(store.delete(request.entry_id, scope, request.namespace))
+            success = store.delete(request.entry_id, scope, request.namespace)
+            results.append(success)
+            self._record_write(count=1)
+            self._record_audit(
+                actor=actor,
+                scope=scope,
+                namespace=request.namespace,
+                resource_id=request.entry_id,
+                action="memory_delete",
+                success=success,
+                details={},
+            )
         return results
 
     def list_entries(
@@ -229,7 +290,22 @@ class MemoryCrudService:
         page_limit = self._normalize_limit(limit)
         store = self._registry.resolve(resolved_scope)
         owner_agent_id = actor.agent_id if resolved_scope == MemoryScope.AGENT else None
-        return store.list(resolved_scope, namespace, page_limit, cursor, owner_agent_id)
+        start = time.perf_counter()
+        result = store.list(
+            resolved_scope, namespace, page_limit, cursor, owner_agent_id
+        )
+        self._record_list_latency((time.perf_counter() - start) * 1000)
+        self._record_list()
+        self._record_audit(
+            actor=actor,
+            scope=resolved_scope,
+            namespace=namespace,
+            resource_id="list",
+            action="memory_list",
+            success=True,
+            details={"count": str(len(result.items))},
+        )
+        return result
 
     def promote_entry(
         self,
@@ -280,7 +356,18 @@ class MemoryCrudService:
                 confidence=entry.confidence,
                 is_conflict=True,
             )
-            return target_store.add(conflict_entry)
+            created_conflict = target_store.add(conflict_entry)
+            self._record_write(count=1)
+            self._record_audit(
+                actor=actor,
+                scope=target_scope,
+                namespace=namespace,
+                resource_id=created_conflict.id,
+                action="memory_promote_conflict",
+                success=True,
+                details={"conflict_with": existing.id},
+            )
+            return created_conflict
 
         promoted = MemoryEntry(
             id=entry.id,
@@ -296,7 +383,18 @@ class MemoryCrudService:
             source=entry.source,
             confidence=entry.confidence,
         )
-        return target_store.add(promoted)
+        created = target_store.add(promoted)
+        self._record_write(count=1)
+        self._record_audit(
+            actor=actor,
+            scope=target_scope,
+            namespace=namespace,
+            resource_id=created.id,
+            action="memory_promote",
+            success=True,
+            details={},
+        )
+        return created
 
     def _normalize_limit(self, limit: int | None) -> int:
         page_limit = limit if limit is not None else self._default_page_size
@@ -312,6 +410,50 @@ class MemoryCrudService:
             raise ValueError(
                 f"bulk memory CRUD limit exceeded (max {self._max_bulk_items})"
             )
+
+    def _record_read(self, hit: bool) -> None:
+        if self._metrics:
+            self._metrics.record_read(hit)
+
+    def _record_write(self, count: int) -> None:
+        if self._metrics:
+            self._metrics.record_write(count)
+
+    def _record_list(self) -> None:
+        if self._metrics:
+            self._metrics.record_list()
+
+    def _record_read_latency(self, latency_ms: float) -> None:
+        if self._metrics:
+            self._metrics.record_read_latency(latency_ms)
+
+    def _record_list_latency(self, latency_ms: float) -> None:
+        if self._metrics:
+            self._metrics.record_list_latency(latency_ms)
+
+    def _record_audit(
+        self,
+        *,
+        actor: MemoryActorContext,
+        scope: MemoryScope,
+        namespace: str,
+        resource_id: str,
+        action: str,
+        success: bool,
+        details: dict[str, str],
+    ) -> None:
+        if not self._audit_sink:
+            return
+        event = MemoryAuditEvent(
+            action=action,
+            actor_id=actor.agent_id,
+            scope=scope,
+            namespace=namespace,
+            resource_id=resource_id,
+            success=success,
+            details=details,
+        )
+        self._audit_sink.record(event)
 
     def _require_permission(
         self,

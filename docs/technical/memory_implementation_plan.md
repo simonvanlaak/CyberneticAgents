@@ -28,9 +28,9 @@
 - [x] Implement conflict detection + versioned merge handling.
 
 ## Phase 5: Observability + Safety
-- [ ] Log CRUD events (who/what/when/where + scope) with redaction rules.
-- [ ] Track retrieval hit rate, injection size, and latency.
-- [ ] Add privacy safeguards for delete + redaction.
+- [x] Log CRUD events (who/what/when/where + scope) with redaction rules.
+- [x] Track retrieval hit rate, injection size, and latency.
+- [x] Add privacy safeguards for delete + redaction.
 
 ## Phase 6: Tests (TDD)
 - [ ] Unit tests for store interface contracts.
