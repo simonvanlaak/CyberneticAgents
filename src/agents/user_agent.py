@@ -11,8 +11,9 @@ from src.cli_session import (
     add_inbox_entry,
     enqueue_pending_question,
     get_pending_question,
-    resolve_pending_question,
+    resolve_pending_question_for_route,
 )
+from src.cyberagent.channels.routing import MessageRoute
 from src.cyberagent.channels.inbox import DEFAULT_CHANNEL, DEFAULT_SESSION_ID
 from src.cyberagent.channels.telegram.outbound import (
     send_message as send_telegram_message,
@@ -58,8 +59,8 @@ class UserAgent(RoutedAgent):
             channel=channel,
             session_id=session_id,
         )
-        resolved = resolve_pending_question(
-            message.content, channel=channel, session_id=session_id
+        resolved = resolve_pending_question_for_route(
+            message.content, MessageRoute(channel=channel, session_id=session_id)
         )
         if resolved:
             message.content = (

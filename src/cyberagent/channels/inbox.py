@@ -6,6 +6,8 @@ import threading
 import time
 from dataclasses import asdict, dataclass, replace
 from typing import Literal, TypeVar
+
+from src.cyberagent.channels.routing import MessageRoute, is_reply_route_allowed
 from pathlib import Path
 
 DEFAULT_CHANNEL = "cli"
@@ -152,6 +154,30 @@ def resolve_pending_question(
             future.set_result(answer)
         _store_inbox_state()
         return _answered_question_from_entry(updated)
+
+
+def resolve_pending_question_for_route(
+    answer: str, reply_route: MessageRoute
+) -> AnsweredQuestion | None:
+    """
+    Resolve the oldest pending question only if the reply route matches.
+
+    Args:
+        answer: User-provided answer.
+        reply_route: Routing info for the reply attempt.
+
+    Returns:
+        AnsweredQuestion when routing is allowed; otherwise None.
+    """
+    pending = get_pending_question()
+    if pending is None:
+        return None
+    origin = MessageRoute(channel=pending.channel, session_id=pending.session_id)
+    if not is_reply_route_allowed(origin, reply_route):
+        return None
+    return resolve_pending_question(
+        answer, channel=reply_route.channel, session_id=reply_route.session_id
+    )
 
 
 def get_answered_questions() -> list[AnsweredQuestion]:

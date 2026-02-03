@@ -5,6 +5,7 @@ from pathlib import Path
 import pytest
 
 from src.cyberagent.channels import inbox
+from src.cyberagent.channels.routing import MessageRoute
 
 
 def test_inbox_add_entry_records_defaults(
@@ -76,6 +77,30 @@ def test_inbox_resolve_marks_question_answered(
     answered = inbox.list_inbox_entries(kind="system_question", status="answered")
     assert len(answered) == 1
     assert answered[0].answer == "done"
+
+
+def test_inbox_resolve_for_route_blocks_cross_channel(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(inbox, "INBOX_STATE_FILE", tmp_path / "inbox.json")
+    inbox.clear_pending_questions()
+
+    inbox.enqueue_pending_question(
+        "Telegram question",
+        asked_by="System4",
+        channel="telegram",
+        session_id="telegram:chat-1:user-2",
+    )
+
+    resolved = inbox.resolve_pending_question_for_route(
+        "cli answer",
+        MessageRoute(channel="cli", session_id="cli-main"),
+    )
+
+    assert resolved is None
+    pending = inbox.get_pending_question()
+    assert pending is not None
+    assert pending.content == "Telegram question"
 
 
 def test_inbox_defaults_channel_and_session(
