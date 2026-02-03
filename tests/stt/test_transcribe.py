@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 import requests
 
-from typing import TypedDict
+from typing import TypedDict, cast
 
 from src.cyberagent.stt import transcribe
 
@@ -84,3 +84,41 @@ def test_transcribe_file_uses_openai_primary(
 
     assert result.text == "hello from openai"
     assert result.provider == "openai"
+
+
+def test_transcribe_file_converts_unsupported_audio(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    audio_path = tmp_path / "audio.txt"
+    audio_path.write_text("not audio", encoding="utf-8")
+    recorded: dict[str, object] = {}
+
+    def fake_run(args: list[str], check: bool) -> None:
+        recorded["ffmpeg_args"] = args
+        output_path = Path(args[-1])
+        output_path.write_bytes(b"wav")
+
+    def fake_post(
+        url: str,
+        *,
+        headers: dict[str, str],
+        files: dict[str, object],
+        data: dict[str, str],
+        timeout: int,
+    ) -> _Response:
+        file_entry = cast(tuple[object, object], files["file"])
+        recorded["sent_file"] = str(file_entry[0])
+        return _Response("converted audio")
+
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+    monkeypatch.setattr(transcribe.subprocess, "run", fake_run)
+    monkeypatch.setattr(transcribe.requests, "post", fake_post)
+
+    result = transcribe.transcribe_file(audio_path)
+
+    assert result.text == "converted audio"
+    sent_file = cast(str, recorded.get("sent_file"))
+    ffmpeg_args = cast(list[str], recorded.get("ffmpeg_args"))
+    assert sent_file.endswith(".wav")
+    output_path = Path(ffmpeg_args[-1])
+    assert not output_path.exists()

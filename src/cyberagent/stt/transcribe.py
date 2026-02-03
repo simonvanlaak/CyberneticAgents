@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
+import subprocess
+import tempfile
 from typing import Any
 
 import requests
@@ -16,6 +18,7 @@ DEFAULT_MODELS = {
     "openai": "whisper-1",
     "groq": "whisper-large-v3-turbo",
 }
+SUPPORTED_AUDIO_SUFFIXES = {".wav", ".mp3", ".ogg", ".flac", ".m4a"}
 
 
 @dataclass(frozen=True)
@@ -35,15 +38,23 @@ def transcribe_file(file_path: Path) -> TranscriptionResult:
     Returns:
         The transcription result with provider and model metadata.
     """
+    prepared_path, cleanup_path = _prepare_audio(file_path)
     providers = ["openai", "groq"]
     last_error: Exception | None = None
-    for provider in providers:
-        try:
-            model = DEFAULT_MODELS[provider]
-            return _transcribe_provider(provider, model, file_path)
-        except Exception as exc:
-            last_error = exc
-            continue
+    try:
+        for provider in providers:
+            try:
+                model = DEFAULT_MODELS[provider]
+                return _transcribe_provider(provider, model, prepared_path)
+            except Exception as exc:
+                last_error = exc
+                continue
+    finally:
+        if cleanup_path is not None:
+            try:
+                cleanup_path.unlink()
+            except OSError:
+                pass
     if last_error:
         raise RuntimeError(str(last_error))
     raise RuntimeError("No transcription providers available.")
@@ -79,3 +90,21 @@ def _require_key(provider: str) -> str:
     if not api_key:
         raise RuntimeError(f"Missing required {env_var} environment variable.")
     return api_key
+
+
+def _prepare_audio(file_path: Path) -> tuple[Path, Path | None]:
+    suffix = file_path.suffix.lower()
+    if suffix in SUPPORTED_AUDIO_SUFFIXES:
+        return file_path, None
+    return _convert_to_wav(file_path)
+
+
+def _convert_to_wav(file_path: Path) -> tuple[Path, Path]:
+    temp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+    temp_file.close()
+    output_path = Path(temp_file.name)
+    subprocess.run(
+        ["ffmpeg", "-y", "-i", str(file_path), str(output_path)],
+        check=True,
+    )
+    return output_path, output_path

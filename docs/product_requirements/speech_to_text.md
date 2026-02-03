@@ -247,5 +247,5 @@ Standalone tool script only; no agent-skill API hook in Phase 1.
 - [x] Inbox stores Telegram transcript (no retained audio)
 - [ ] Post-processing for punctuation/capitalization beyond provider defaults
 - [ ] Timestamp injection for long transcripts
-- [ ] Auto-convert unsupported audio to WAV via `ffmpeg`
+- [x] Auto-convert unsupported audio to WAV via `ffmpeg`
 - [ ] Low-audio-quality warning
