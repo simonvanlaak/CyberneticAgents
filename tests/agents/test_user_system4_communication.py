@@ -352,6 +352,42 @@ async def test_user_agent_includes_question_context_in_reply():
 
 
 @pytest.mark.asyncio
+async def test_user_agent_does_not_resolve_cross_channel_question() -> None:
+    clear_pending_questions()
+    enqueue_pending_question(
+        "Telegram-only question?",
+        asked_by="System4",
+        channel="telegram",
+        session_id="telegram:chat-99:user-42",
+    )
+    user_agent = UserAgent("test_user")
+    user_agent.publish_message = AsyncMock()
+    setattr(user_agent, "_runtime", cast(AgentRuntime, object()))
+    ctx = MessageContext(
+        sender=AgentId(type="UserAgent", key="root"),
+        topic_id=TopicId(type="UserAgent", source="root"),
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="test-message",
+    )
+    message = UserMessage(content="CLI reply", source="User")
+    message.metadata = {"channel": "cli", "session_id": "cli-main"}
+
+    await user_agent.handle_user_message(
+        message=message,
+        ctx=ctx,
+    )  # type: ignore[call-arg]
+
+    pending = get_pending_question()
+    assert pending is not None
+    assert pending.content == "Telegram-only question?"
+    await_args = user_agent.publish_message.await_args
+    assert await_args is not None
+    published_message = await_args.args[0]
+    assert "Telegram-only question?" not in published_message.content
+
+
+@pytest.mark.asyncio
 async def test_user_agent_enqueues_pending_question_with_channel_metadata(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

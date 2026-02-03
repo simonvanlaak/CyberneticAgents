@@ -260,6 +260,37 @@ def test_handle_inbox_requires_team(
     assert "cyberagent onboarding" in captured.out
 
 
+def test_handle_inbox_warns_when_telegram_unavailable(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    entries = [
+        InboxEntry(
+            entry_id=1,
+            kind="user_prompt",
+            content="Ping",
+            created_at=0,
+            channel="telegram",
+            session_id="telegram:chat-1:user-2",
+        )
+    ]
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.setattr(cyberagent, "get_last_team_id", lambda: "team-1")
+    monkeypatch.setattr(cyberagent, "list_inbox_entries", lambda *_, **__: entries)
+
+    result = cyberagent._handle_inbox(
+        argparse.Namespace(
+            channel=None,
+            session_id=None,
+            telegram_chat_id=None,
+            telegram_user_id=None,
+        )
+    )
+
+    captured = capsys.readouterr()
+    assert result == 0
+    assert "Telegram delivery disabled" in captured.out
+
+
 @pytest.mark.asyncio
 async def test_handle_watch_prints_pending(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]

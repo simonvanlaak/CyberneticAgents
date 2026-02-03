@@ -16,6 +16,7 @@ The shared inbox aggregates user prompts, system questions, and system responses
 - `cyberagent inbox` prints user prompts, system questions, and system responses.
 - `--answered` includes answered system questions.
 - `cyberagent watch` streams new inbox entries as they arrive.
+- If Telegram entries exist but `TELEGRAM_BOT_TOKEN` is not set, the inbox prints a notice that Telegram delivery is disabled.
 
 ## Storage
 - Inbox entries persist to `logs/cli_inbox.json`.

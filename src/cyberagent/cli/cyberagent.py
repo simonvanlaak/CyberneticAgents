@@ -452,6 +452,10 @@ def _handle_inbox(args: argparse.Namespace) -> int:
         print("No messages in inbox.")
         print(f"Next: run {WATCH_COMMAND} to wait, or {SUGGEST_COMMAND}.")
         return 0
+    if any(entry.channel == "telegram" for entry in entries) and not os.environ.get(
+        "TELEGRAM_BOT_TOKEN"
+    ):
+        print("Telegram delivery disabled: set TELEGRAM_BOT_TOKEN to enable replies.")
     user_prompts = [entry for entry in entries if entry.kind == "user_prompt"]
     system_questions = [entry for entry in entries if entry.kind == "system_question"]
     system_responses = [entry for entry in entries if entry.kind == "system_response"]
