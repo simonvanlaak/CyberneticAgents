@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 from pathlib import Path
 import pytest
 
@@ -266,6 +267,20 @@ def test_has_onepassword_auth_accepts_session(
     monkeypatch.setenv("OP_SESSION_CYBERAGENT", "session-token")
 
     assert onboarding_cli._has_onepassword_auth() is True
+
+
+def test_has_onepassword_auth_loads_service_token_from_env_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("OP_SERVICE_ACCOUNT_TOKEN", raising=False)
+    monkeypatch.delenv("OP_SESSION_CYBERAGENT", raising=False)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        "OP_SERVICE_ACCOUNT_TOKEN=service-token\n", encoding="utf-8"
+    )
+
+    assert onboarding_cli._has_onepassword_auth() is True
+    assert os.environ.get("OP_SERVICE_ACCOUNT_TOKEN") == "service-token"
 
 
 def test_missing_brave_key_explains_vault_and_item(

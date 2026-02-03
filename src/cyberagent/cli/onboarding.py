@@ -449,9 +449,46 @@ def _check_docker_available() -> bool:
 
 
 def _has_onepassword_auth() -> bool:
+    if not os.getenv("OP_SERVICE_ACCOUNT_TOKEN"):
+        _load_service_account_token_from_env_file()
     return bool(os.getenv("OP_SERVICE_ACCOUNT_TOKEN")) or bool(
         _get_onepassword_session_env()
     )
+
+
+def _load_service_account_token_from_env_file() -> None:
+    env_path = Path(".env")
+    if not env_path.exists():
+        return
+    try:
+        content = env_path.read_text(encoding="utf-8")
+    except OSError:
+        return
+    for line in content.splitlines():
+        entry = line.strip()
+        if not entry or entry.startswith("#"):
+            continue
+        if "=" not in entry:
+            continue
+        key, value = entry.split("=", 1)
+        key = key.strip()
+        if key != "OP_SERVICE_ACCOUNT_TOKEN":
+            continue
+        token = _parse_env_value(value)
+        if token:
+            os.environ.setdefault("OP_SERVICE_ACCOUNT_TOKEN", token)
+        return
+
+
+def _parse_env_value(value: str) -> str | None:
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    if (cleaned.startswith('"') and cleaned.endswith('"')) or (
+        cleaned.startswith("'") and cleaned.endswith("'")
+    ):
+        cleaned = cleaned[1:-1].strip()
+    return cleaned or None
 
 
 def _get_onepassword_session_env() -> str | None:
@@ -465,7 +502,10 @@ def _check_onepassword_auth() -> bool:
     if _has_onepassword_auth():
         return True
     print("Missing 1Password authentication (service account or session).")
-    print("Export OP_SERVICE_ACCOUNT_TOKEN or OP_SESSION_* and re-run onboarding.")
+    print(
+        "Export OP_SERVICE_ACCOUNT_TOKEN (or set it in .env) or OP_SESSION_* and "
+        "re-run onboarding."
+    )
     return False
 
 
