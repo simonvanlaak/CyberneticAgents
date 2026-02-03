@@ -77,7 +77,7 @@ Deferred (out of scope for Phase 1).
   - Audio file reader
   - OpenAI Whisper API integration (Groq fallback)
   - Text output to CLI
- - **Status**: Not implemented yet (CLI command + file ingest missing).
+ - **Status**: Implemented (CLI command + file ingest live).
 
 ```python
 # src/stt/transcribe.py
@@ -235,8 +235,17 @@ Standalone tool script only; no agent-skill API hook in Phase 1.
 6. Test fallback by disabling OpenAI, verify Groq is used
 
 ## Notes For Resuming Later
-- Current STT exists only in the Telegram flow and bypasses the inbox. There is no shared STT module for CLI/audio files yet.
 - Telegram STT uses Groq/OpenAI endpoints directly via `requests` and returns plain text (no timestamps/segments), which differs from the richer output assumed in this PRD.
 - Long audio is rejected by duration in Telegram (`TELEGRAM_STT_MAX_DURATION`), which matches Phase 1 scope.
-- There is no CLI surface for STT today, even though the PRD still references it.
-- Surprising: Telegram STT config already supports provider fallback via env, but none of that is exposed in a CLI or config file.
+- Telegram STT config supports provider fallback via env, but none of that is exposed in a CLI or config file.
+
+## Implementation Checklist
+- [x] CLI file-based transcription (`cyberagent transcribe <file>`)
+- [x] English-only transcription enforced
+- [x] OpenAI primary with Groq fallback (CLI module)
+- [x] Telegram voice messages auto-transcribed
+- [x] Inbox stores Telegram transcript (no retained audio)
+- [ ] Post-processing for punctuation/capitalization beyond provider defaults
+- [ ] Timestamp injection for long transcripts
+- [ ] Auto-convert unsupported audio to WAV via `ffmpeg`
+- [ ] Low-audio-quality warning
