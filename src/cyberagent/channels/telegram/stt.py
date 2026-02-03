@@ -13,8 +13,8 @@ GROQ_ENDPOINT = "https://api.groq.com/openai/v1/audio/transcriptions"
 OPENAI_ENDPOINT = "https://api.openai.com/v1/audio/transcriptions"
 
 DEFAULT_MODELS = {
-    "groq": "whisper-large-v3-turbo",
     "openai": "whisper-1",
+    "groq": "whisper-large-v3-turbo",
 }
 
 
@@ -39,15 +39,13 @@ class TranscriptionResult:
 
 
 def load_config() -> TelegramSTTConfig:
-    provider = os.environ.get("TELEGRAM_STT_PROVIDER", "groq").lower()
+    provider = os.environ.get("TELEGRAM_STT_PROVIDER", "openai").lower()
     model = os.environ.get("TELEGRAM_STT_MODEL") or DEFAULT_MODELS.get(
         provider, "whisper-1"
     )
     fallback_provider = os.environ.get("TELEGRAM_STT_FALLBACK_PROVIDER")
     fallback_model = os.environ.get("TELEGRAM_STT_FALLBACK_MODEL")
-    language = os.environ.get("TELEGRAM_STT_LANGUAGE", "auto")
-    if language.lower() == "auto":
-        language = None
+    language = "en"
     max_duration_raw = os.environ.get("TELEGRAM_STT_MAX_DURATION", "300")
     try:
         max_duration_seconds = int(max_duration_raw)

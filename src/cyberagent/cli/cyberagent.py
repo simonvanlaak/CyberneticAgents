@@ -39,6 +39,7 @@ from src.cyberagent.cli import onboarding as onboarding_cli
 from src.cyberagent.cli.headless import run_headless_session
 from src.cyberagent.cli.status import main as status_main
 from src.cyberagent.cli.suggestion_queue import enqueue_suggestion
+from src.cyberagent.cli.transcribe import add_transcribe_parser, handle_transcribe
 from src.cyberagent.core.runtime import get_runtime, stop_runtime
 from src.cyberagent.core.state import get_last_team_id, mark_team_active
 from src.cyberagent.db.db_utils import get_db
@@ -60,7 +61,6 @@ LOGS_DIR = Path("logs")
 RUNTIME_PID_FILE = Path("logs/cyberagent.pid")
 CLI_LOG_STATE_FILE = Path("logs/cli_last_seen.json")
 SERVE_COMMAND = "serve"
-TEST_START_ENV = "CYBERAGENT_TEST_NO_RUNTIME"
 TEST_START_ENV = "CYBERAGENT_TEST_NO_RUNTIME"
 SUGGEST_COMMAND = 'cyberagent suggest "Describe the task"'
 START_COMMAND = "cyberagent start"
@@ -218,6 +218,8 @@ def build_parser() -> argparse.ArgumentParser:
     logs_parser.add_argument(
         "--limit", type=int, default=200, help="Max lines to show."
     )
+
+    add_transcribe_parser(subparsers)
 
     config_parser = subparsers.add_parser("config", help="Inspect VSM configuration.")
     config_subparsers = config_parser.add_subparsers(
@@ -983,6 +985,7 @@ _HANDLERS = {
     "watch": _handle_watch,
     "dev": _handle_dev,
     "logs": _handle_logs,
+    "transcribe": handle_transcribe,
     "config": _handle_config,
     "login": _handle_login,
     SERVE_COMMAND: _handle_serve,

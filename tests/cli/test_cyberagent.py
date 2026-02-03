@@ -14,6 +14,7 @@ import pytest
 from autogen_core import AgentId
 
 from src.cyberagent.cli import cyberagent
+from src.cyberagent.cli import transcribe as transcribe_cli
 from src.cyberagent.cli.env_loader import load_op_service_account_token
 from src.cyberagent.channels.inbox import InboxEntry
 
@@ -30,6 +31,7 @@ from src.cyberagent.channels.inbox import InboxEntry
         (["inbox"], "inbox"),
         (["watch"], "watch"),
         (["logs"], "logs"),
+        (["transcribe", "audio.wav"], "transcribe"),
         (["config", "view"], "config"),
         (["login"], "login"),
     ],
@@ -197,6 +199,28 @@ def test_handle_suggest_requires_team(
     output = capsys.readouterr().out
     assert exit_code == 1
     assert "cyberagent onboarding" in output
+
+
+def test_handle_transcribe_prints_text(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    audio_path = tmp_path / "audio.wav"
+    audio_path.write_bytes(b"fake")
+
+    class _Result:
+        text = "hello world"
+
+    def fake_transcribe(file_path: Path) -> _Result:
+        assert file_path == audio_path
+        return _Result()
+
+    monkeypatch.setattr(transcribe_cli, "transcribe_file", fake_transcribe)
+
+    exit_code = cyberagent.main(["transcribe", str(audio_path)])
+
+    output = capsys.readouterr().out.strip()
+    assert exit_code == 0
+    assert output == "hello world"
 
 
 def test_handle_inbox_prints_entries(
