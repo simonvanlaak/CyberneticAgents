@@ -58,8 +58,10 @@ def build_reset_session_id(chat_id: int, user_id: int, reset_token: str) -> str:
 def classify_text_message(text: str) -> Tuple[str, str]:
     normalized = text.strip()
     if normalized.startswith("/"):
-        command = normalized.split(maxsplit=1)[0].lower()
-        if command in {"/start", "/help", "/reset"}:
+        raw = normalized.split(maxsplit=1)[0].lower()
+        # Telegram group commands can include the target bot, e.g. /ping@mybot
+        command = raw.split("@", 1)[0]
+        if command in {"/start", "/help", "/reset", "/ping"}:
             return ("command", command)
     return ("text", text)
 

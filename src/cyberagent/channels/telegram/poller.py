@@ -272,8 +272,14 @@ class TelegramPoller:
         if value == "/help":
             await self._send_reply(
                 inbound.chat_id,
-                "Commands: /start, /help, /reset",
+                "Commands: /start, /help, /reset, /ping",
             )
+            return True
+        if value == "/ping":
+            # Support `/ping`, `/ping <payload>`, and `/ping@bot <payload>`.
+            payload = text.strip().split(maxsplit=1)
+            suffix = f" {payload[1]}" if len(payload) > 1 else ""
+            await self._send_reply(inbound.chat_id, f"pong{suffix}")
             return True
         if value == "/reset":
             reset_token = str(int(time.time()))

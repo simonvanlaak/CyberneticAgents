@@ -191,8 +191,13 @@ class TelegramWebhookServer:
             if value == "/help":
                 self._client.send_message(
                     inbound.chat_id,
-                    "Commands: /start, /help, /reset",
+                    "Commands: /start, /help, /reset, /ping",
                 )
+                return
+            if value == "/ping":
+                payload = inbound.text.strip().split(maxsplit=1)
+                suffix = f" {payload[1]}" if len(payload) > 1 else ""
+                self._client.send_message(inbound.chat_id, f"pong{suffix}")
                 return
             if value == "/reset":
                 reset_token = str(int(time.time()))
