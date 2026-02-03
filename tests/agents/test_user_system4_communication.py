@@ -246,6 +246,37 @@ async def test_user_agent_forwards_informational_message_to_telegram() -> None:
 
 
 @pytest.mark.asyncio
+async def test_user_agent_forwards_question_with_id_to_telegram() -> None:
+    clear_pending_questions()
+    user_agent = UserAgent("test_user")
+    user_agent._last_channel_context = ChannelContext(
+        channel="telegram",
+        session_id="telegram:chat-99:user-42",
+        telegram_chat_id=99,
+    )
+    user_agent._send_telegram_prompt = AsyncMock()
+    sender = AgentId(type=System4.__name__, key="root")
+    ctx = MessageContext(
+        sender=sender,
+        topic_id=TopicId(type="System4", source="root"),
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="test-message",
+    )
+    message = TextMessage(
+        content="Hello! How can I help you today?",
+        source="System4",
+        metadata={"ask_user": "true", "question_id": "1"},
+    )
+    await user_agent.handle_assistant_text_message(
+        message=message,
+        ctx=ctx,
+    )  # type: ignore[call-arg]
+
+    user_agent._send_telegram_prompt.assert_awaited_once_with(99, message.content)
+
+
+@pytest.mark.asyncio
 async def test_user_agent_non_question_message_does_not_enqueue_question():
     clear_pending_questions()
     user_agent = UserAgent("test_user")
