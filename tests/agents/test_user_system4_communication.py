@@ -8,7 +8,7 @@ from autogen_agentchat.messages import TextMessage
 from autogen_core import AgentId, AgentRuntime, MessageContext, TopicId
 from autogen_core._cancellation_token import CancellationToken
 
-from src.agents.user_agent import UserAgent
+from src.agents.user_agent import ChannelContext, UserAgent
 from src.agents.system4 import System4
 from src.agents.messages import UserMessage
 from src.cyberagent.channels.inbox import DEFAULT_CHANNEL, DEFAULT_SESSION_ID
@@ -210,6 +210,38 @@ async def test_user_agent_informational_message_does_not_enqueue_question():
         ctx=ctx,
     )  # type: ignore[call-arg]
 
+    assert get_pending_question() is None
+
+
+@pytest.mark.asyncio
+async def test_user_agent_forwards_informational_message_to_telegram() -> None:
+    clear_pending_questions()
+    user_agent = UserAgent("test_user")
+    user_agent._last_channel_context = ChannelContext(
+        channel="telegram",
+        session_id="telegram:chat-99:user-42",
+        telegram_chat_id=99,
+    )
+    user_agent._send_telegram_prompt = AsyncMock()
+    sender = AgentId(type=System4.__name__, key="root")
+    ctx = MessageContext(
+        sender=sender,
+        topic_id=TopicId(type="System4", source="root"),
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="test-message",
+    )
+    message = TextMessage(
+        content="Status update: research in progress.",
+        source="System4",
+        metadata={"inform_user": "true"},
+    )
+    await user_agent.handle_assistant_text_message(
+        message=message,
+        ctx=ctx,
+    )  # type: ignore[call-arg]
+
+    user_agent._send_telegram_prompt.assert_awaited_once_with(99, message.content)
     assert get_pending_question() is None
 
 

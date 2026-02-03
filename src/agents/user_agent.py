@@ -66,6 +66,11 @@ class UserAgent(RoutedAgent):
     ) -> None:
         logger.debug("[%s]: %s", ctx.sender.__str__(), message.content)
         if message.metadata:
+            inform_user_flag = str(message.metadata.get("inform_user", "")).lower() in {
+                "true",
+                "1",
+                "yes",
+            }
             ask_user_flag = str(message.metadata.get("ask_user", "")).lower() in {
                 "true",
                 "1",
@@ -98,6 +103,16 @@ class UserAgent(RoutedAgent):
                         self._last_channel_context.telegram_chat_id,
                         message.content,
                     )
+            elif (
+                inform_user_flag
+                and self._last_channel_context
+                and self._last_channel_context.channel == "telegram"
+                and self._last_channel_context.telegram_chat_id is not None
+            ):
+                await self._send_telegram_prompt(
+                    self._last_channel_context.telegram_chat_id,
+                    message.content,
+                )
         pending_question = get_pending_question()
         if pending_question:
             logger.debug("Pending question (System4): %s", pending_question.content)
