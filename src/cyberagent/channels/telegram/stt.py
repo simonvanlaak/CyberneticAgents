@@ -7,6 +7,7 @@ from pathlib import Path
 import requests
 
 from src.cyberagent.channels.telegram.client import TelegramClient
+from src.cyberagent.secrets import get_secret
 
 GROQ_ENDPOINT = "https://api.groq.com/openai/v1/audio/transcriptions"
 OPENAI_ENDPOINT = "https://api.openai.com/v1/audio/transcriptions"
@@ -147,7 +148,7 @@ def _transcribe_provider(
 
 def _require_key(provider: str) -> str:
     env_var = "GROQ_API_KEY" if provider == "groq" else "OPENAI_API_KEY"
-    api_key = os.environ.get(env_var)
+    api_key = get_secret(env_var)
     if not api_key:
         raise RuntimeError(f"Missing required {env_var} environment variable.")
     return api_key

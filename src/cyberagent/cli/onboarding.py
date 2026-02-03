@@ -602,7 +602,18 @@ def _warn_optional_api_keys() -> None:
         "LANGFUSE_SECRET_KEY",
         "LANGSMITH_API_KEY",
     ]
-    missing = [key for key in optional if not os.environ.get(key)]
+    missing: list[str] = []
+    for key in optional:
+        if os.environ.get(key):
+            continue
+        loaded = _load_secret_from_1password(
+            vault_name=VAULT_NAME,
+            item_name=key,
+            field_label="credential",
+        )
+        if loaded:
+            continue
+        missing.append(key)
     if missing:
         missing_str = ", ".join(missing)
         print(f"Optional API keys not set: {missing_str}.")

@@ -539,3 +539,30 @@ def test_check_cli_tools_image_available_missing(
     assert onboarding_cli._check_cli_tools_image_available() is False
     captured = capsys.readouterr().out
     assert "CLI tools image is not available" in captured
+
+
+def test_warn_optional_api_keys_reads_onepassword(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    optional_keys = [
+        "LANGFUSE_PUBLIC_KEY",
+        "LANGFUSE_SECRET_KEY",
+        "LANGSMITH_API_KEY",
+    ]
+    for key in optional_keys:
+        monkeypatch.delenv(key, raising=False)
+
+    def _load_secret(
+        *, vault_name: str, item_name: str, field_label: str
+    ) -> str | None:
+        if item_name in {"LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"}:
+            return "secret"
+        return None
+
+    monkeypatch.setattr(onboarding_cli, "_load_secret_from_1password", _load_secret)
+
+    onboarding_cli._warn_optional_api_keys()
+    captured = capsys.readouterr().out
+    assert "LANGSMITH_API_KEY" in captured
+    assert "LANGFUSE_PUBLIC_KEY" not in captured
+    assert "LANGFUSE_SECRET_KEY" not in captured

@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import os
 from dataclasses import dataclass
 
 from autogen_agentchat.messages import TextMessage
@@ -13,6 +12,7 @@ from src.cyberagent.channels.inbox import DEFAULT_CHANNEL, DEFAULT_SESSION_ID
 from src.cyberagent.channels.telegram.outbound import (
     send_message as send_telegram_message,
 )
+from src.cyberagent.secrets import get_secret
 from src.agents.system4 import System4
 
 logger = logging.getLogger(__name__)
@@ -129,7 +129,7 @@ class UserAgent(RoutedAgent):
         )
 
     async def _send_telegram_prompt(self, chat_id: int, text: str) -> None:
-        if not os.environ.get("TELEGRAM_BOT_TOKEN"):
+        if not get_secret("TELEGRAM_BOT_TOKEN"):
             return
         try:
             await asyncio.to_thread(send_telegram_message, chat_id, text)

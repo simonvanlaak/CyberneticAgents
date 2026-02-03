@@ -10,6 +10,7 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
+from src.cyberagent.secrets import get_secret
 from src.rbac.system_types import SystemTypes
 
 
@@ -79,8 +80,8 @@ def load_llm_config() -> LLMConfig:
     provider = os.environ.get("LLM_PROVIDER", "mistral").lower()
 
     # Load API keys
-    groq_api_key = os.environ.get("GROQ_API_KEY", "")
-    mistral_api_key = os.environ.get("MISTRAL_API_KEY", "")
+    groq_api_key = get_secret("GROQ_API_KEY") or ""
+    mistral_api_key = get_secret("MISTRAL_API_KEY") or ""
 
     # Validate that the required API key is available
     if provider == "groq" and not groq_api_key:

@@ -19,6 +19,7 @@ from src.cyberagent.tools.cli_executor.docker_env_executor import (
     EnvDockerCommandLineCodeExecutor,
 )
 from src.cyberagent.tools.cli_executor.factory import create_cli_executor
+from src.cyberagent.secrets import get_secret
 
 # Singleton runtime instance
 _runtime: SingleThreadedAgentRuntime | None = None
@@ -28,8 +29,8 @@ logger = logging.getLogger(__name__)
 
 def configure_tracing():
     """Configure OpenTelemetry tracing with Langfuse integration."""
-    public_key = os.environ.get("LANGFUSE_PUBLIC_KEY", "")
-    secret_key = os.environ.get("LANGFUSE_SECRET_KEY", "")
+    public_key = get_secret("LANGFUSE_PUBLIC_KEY") or ""
+    secret_key = get_secret("LANGFUSE_SECRET_KEY") or ""
 
     if not public_key or not secret_key:
         logger.info("Langfuse credentials not found, running without tracing")

@@ -32,6 +32,7 @@ from src.agents.messages import CapabilityGapMessage
 from src.cyberagent.services import policies as policy_service
 from src.cyberagent.services import systems as system_service
 from src.cyberagent.services import teams as team_service
+from src.cyberagent.secrets import get_secret
 from src.enums import SystemType
 from src.cyberagent.core.state import get_last_team_id, mark_team_active
 from src.cyberagent.tools.cli_executor import (
@@ -61,7 +62,7 @@ def get_model_client(
         # model="llama-3.1-8b-instant",
         model="openai/gpt-oss-20b",
         base_url="https://api.groq.com/openai/v1",
-        api_key=os.environ.get("GROQ_API_KEY", ""),
+        api_key=get_secret("GROQ_API_KEY") or "",
         model_info=ModelInfo(
             vision=False,
             function_calling=True,

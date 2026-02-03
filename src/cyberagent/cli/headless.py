@@ -28,6 +28,7 @@ from src.cyberagent.core.runtime import (
     start_cli_executor,
     stop_runtime,
 )
+from src.cyberagent.secrets import get_secret
 
 logger = logging.getLogger(__name__)
 
@@ -88,12 +89,12 @@ async def run_headless_session(initial_message: str | None = None) -> None:
     )
     telegram_task: asyncio.Task[None] | None = None
     webhook_server: TelegramWebhookServer | None = None
-    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    token = get_secret("TELEGRAM_BOT_TOKEN")
     webhook_url = os.environ.get("TELEGRAM_WEBHOOK_URL")
     if token and webhook_url:
         host = os.environ.get("TELEGRAM_WEBHOOK_HOST", "0.0.0.0")
         port = int(os.environ.get("TELEGRAM_WEBHOOK_PORT", "8080"))
-        secret = os.environ.get("TELEGRAM_WEBHOOK_SECRET")
+        secret = get_secret("TELEGRAM_WEBHOOK_SECRET")
         webhook_server = TelegramWebhookServer(
             token=token,
             runtime=runtime,

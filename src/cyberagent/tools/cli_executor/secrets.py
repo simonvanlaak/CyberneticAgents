@@ -86,7 +86,12 @@ def _merge_required_env(
 
 
 def _has_onepassword_auth() -> bool:
-    return bool(os.getenv("OP_SERVICE_ACCOUNT_TOKEN"))
+    if os.getenv("OP_SERVICE_ACCOUNT_TOKEN"):
+        return True
+    for key, value in os.environ.items():
+        if key.startswith("OP_SESSION_") and value:
+            return True
+    return False
 
 
 def _load_secret_from_1password(

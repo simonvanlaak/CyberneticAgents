@@ -19,6 +19,22 @@ def test_load_llm_config_groq_requires_key(monkeypatch: pytest.MonkeyPatch) -> N
         load_llm_config()
 
 
+def test_load_llm_config_groq_reads_onepassword(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "groq")
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.delenv("MISTRAL_API_KEY", raising=False)
+    monkeypatch.setattr(
+        "src.llm_config.get_secret", lambda *_args, **_kwargs: "vault-groq"
+    )
+
+    config = load_llm_config()
+
+    assert config.provider == "groq"
+    assert config.api_key == "vault-groq"
+
+
 def test_load_llm_config_mistral_reads_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LLM_PROVIDER", "mistral")
     monkeypatch.setenv("MISTRAL_API_KEY", "test-mistral-key")

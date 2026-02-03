@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import json
-import os
 import urllib.parse
 import urllib.request
 
+from src.cyberagent.secrets import get_secret
+
 
 def send_message(chat_id: int, text: str) -> None:
-    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    token = get_secret("TELEGRAM_BOT_TOKEN")
     if not token:
         return
     endpoint = f"https://api.telegram.org/bot{token}/sendMessage"
@@ -28,7 +29,7 @@ def send_message(chat_id: int, text: str) -> None:
 def send_message_with_inline_keyboard(
     chat_id: int, text: str, buttons: list[tuple[str, str]]
 ) -> None:
-    token = os.environ.get("TELEGRAM_BOT_TOKEN")
+    token = get_secret("TELEGRAM_BOT_TOKEN")
     if not token:
         return
     endpoint = f"https://api.telegram.org/bot{token}/sendMessage"
