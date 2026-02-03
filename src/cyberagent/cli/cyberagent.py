@@ -101,7 +101,14 @@ def build_parser() -> argparse.ArgumentParser:
     )
 
     subparsers.add_parser("stop", help="Gracefully stop the runtime.")
-    subparsers.add_parser("restart", help="Restart the runtime.")
+    restart_parser = subparsers.add_parser("restart", help="Restart the runtime.")
+    restart_parser.add_argument(
+        "--message",
+        "-m",
+        type=str,
+        default=None,
+        help="Send an initial message after startup.",
+    )
     subparsers.add_parser(
         "onboarding",
         help="Initialize the default team.",

@@ -86,6 +86,26 @@ def test_restart_command_calls_stop_then_start(
     assert calls == ["stop", "start"]
 
 
+def test_restart_command_accepts_message_flag(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, str | None] = {"message": None}
+
+    async def fake_stop(_: argparse.Namespace) -> int:
+        return 0
+
+    async def fake_start(args: argparse.Namespace) -> int:
+        captured["message"] = args.message
+        return 0
+
+    monkeypatch.setattr(cyberagent, "_handle_stop", fake_stop)
+    monkeypatch.setattr(cyberagent, "_handle_start", fake_start)
+
+    exit_code = cyberagent.main(["restart", "--message", "ready"])
+    assert exit_code == 0
+    assert captured["message"] == "ready"
+
+
 def test_status_command_delegates_to_status_main(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
