@@ -20,7 +20,7 @@
 ## Phase 3: Backends
 - [x] Implement AutoGen `Memory` protocol adapter.
 - [x] Implement ChromaDB-backed store adapter behind the registry.
-- [ ] Add pluggable backend configuration (env/config file).
+- [x] Add pluggable backend configuration (env/config file).
 
 ## Phase 4: Reflection + Promotion
 - [ ] Write reflection outputs to agent scope by default.
