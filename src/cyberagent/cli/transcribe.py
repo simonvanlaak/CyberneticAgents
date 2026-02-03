@@ -45,5 +45,10 @@ def handle_transcribe(args: argparse.Namespace) -> int:
     except Exception as exc:
         print(f"Transcription failed: {exc}", file=sys.stderr)
         return 2
+    if result.low_confidence:
+        print(
+            "Warning: audio quality appears low; transcript may be inaccurate.",
+            file=sys.stderr,
+        )
     print(result.text)
     return 0

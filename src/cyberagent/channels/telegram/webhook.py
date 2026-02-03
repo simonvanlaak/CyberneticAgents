@@ -272,6 +272,11 @@ class TelegramWebhookServer:
             return
         if self._stt_config.show_transcription:
             self._client.send_message(inbound.chat_id, f"Transcription: {result.text}")
+        if result.low_confidence:
+            self._client.send_message(
+                inbound.chat_id,
+                "Warning: audio quality appears low; transcript may be inaccurate.",
+            )
         inbox_text = format_timestamped_text(result.text, result.segments)
         add_inbox_entry(
             "user_prompt",

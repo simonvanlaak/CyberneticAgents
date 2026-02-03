@@ -206,6 +206,12 @@ class TelegramPoller:
                         voice.chat_id,
                         f"Transcription: {result.text}",
                     )
+                if result.low_confidence:
+                    await asyncio.to_thread(
+                        send_telegram_message,
+                        voice.chat_id,
+                        "Warning: audio quality appears low; transcript may be inaccurate.",
+                    )
                 inbox_text = format_timestamped_text(result.text, result.segments)
                 add_inbox_entry(
                     "user_prompt",

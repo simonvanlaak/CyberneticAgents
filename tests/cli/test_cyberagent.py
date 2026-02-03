@@ -209,6 +209,7 @@ def test_handle_transcribe_prints_text(
 
     class _Result:
         text = "hello world"
+        low_confidence = False
 
     def fake_transcribe(file_path: Path) -> _Result:
         assert file_path == audio_path
@@ -221,6 +222,29 @@ def test_handle_transcribe_prints_text(
     output = capsys.readouterr().out.strip()
     assert exit_code == 0
     assert output == "hello world"
+
+
+def test_handle_transcribe_warns_on_low_confidence(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    audio_path = tmp_path / "audio.wav"
+    audio_path.write_bytes(b"fake")
+
+    class _Result:
+        text = "noisy audio"
+        low_confidence = True
+
+    def fake_transcribe(file_path: Path) -> _Result:
+        assert file_path == audio_path
+        return _Result()
+
+    monkeypatch.setattr(transcribe_cli, "transcribe_file", fake_transcribe)
+
+    exit_code = cyberagent.main(["transcribe", str(audio_path)])
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    assert "low" in captured.err.lower()
 
 
 def test_handle_inbox_prints_entries(

@@ -17,13 +17,22 @@ class _Call(TypedDict):
 
 
 class _Response:
-    def __init__(self, text: str, status_code: int = 200) -> None:
+    def __init__(
+        self,
+        text: str,
+        status_code: int = 200,
+        payload: dict[str, object] | None = None,
+    ) -> None:
         self.text = text
         self.status_code = status_code
+        self._payload = payload
 
     def raise_for_status(self) -> None:
         if self.status_code >= 400:
             raise requests.HTTPError(f"status={self.status_code}")
+
+    def json(self) -> dict[str, object]:
+        return self._payload or {}
 
 
 def test_transcribe_file_uses_openai_then_groq_fallback(
@@ -44,7 +53,10 @@ def test_transcribe_file_uses_openai_then_groq_fallback(
         calls.append({"url": url, "data": data, "headers": headers})
         if url == transcribe.OPENAI_ENDPOINT:
             return _Response("fail", status_code=500)
-        return _Response("hello from groq")
+        return _Response(
+            "hello from groq",
+            payload={"text": "hello from groq", "segments": []},
+        )
 
     monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
     monkeypatch.setenv("GROQ_API_KEY", "groq-key")
@@ -75,7 +87,10 @@ def test_transcribe_file_uses_openai_primary(
         timeout: int,
     ) -> _Response:
         assert url == transcribe.OPENAI_ENDPOINT
-        return _Response("hello from openai")
+        return _Response(
+            "hello from openai",
+            payload={"text": "hello from openai", "segments": []},
+        )
 
     monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
     monkeypatch.setattr(transcribe.requests, "post", fake_post)
@@ -108,7 +123,10 @@ def test_transcribe_file_converts_unsupported_audio(
     ) -> _Response:
         file_entry = cast(tuple[object, object], files["file"])
         recorded["sent_file"] = str(file_entry[0])
-        return _Response("converted audio")
+        return _Response(
+            "converted audio",
+            payload={"text": "converted audio", "segments": []},
+        )
 
     monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
     monkeypatch.setattr(transcribe.subprocess, "run", fake_run)
@@ -122,3 +140,33 @@ def test_transcribe_file_converts_unsupported_audio(
     assert sent_file.endswith(".wav")
     output_path = Path(ffmpeg_args[-1])
     assert not output_path.exists()
+
+
+def test_transcribe_file_flags_low_confidence(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    audio_path = tmp_path / "audio.wav"
+    audio_path.write_bytes(b"fake")
+
+    def fake_post(
+        url: str,
+        *,
+        headers: dict[str, str],
+        files: dict[str, object],
+        data: dict[str, str],
+        timeout: int,
+    ) -> _Response:
+        return _Response(
+            "noisy audio",
+            payload={
+                "text": "noisy audio",
+                "segments": [{"start": 0.0, "text": "noisy", "no_speech_prob": 0.95}],
+            },
+        )
+
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+    monkeypatch.setattr(transcribe.requests, "post", fake_post)
+
+    result = transcribe.transcribe_file(audio_path)
+
+    assert result.low_confidence is True

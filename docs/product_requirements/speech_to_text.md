@@ -235,7 +235,7 @@ Standalone tool script only; no agent-skill API hook in Phase 1.
 6. Test fallback by disabling OpenAI, verify Groq is used
 
 ## Notes For Resuming Later
-- Telegram STT uses Groq/OpenAI endpoints directly via `requests` and returns plain text (no timestamps/segments), which differs from the richer output assumed in this PRD.
+- Telegram STT uses Groq/OpenAI endpoints directly via `requests` and now requests `verbose_json` for segments.
 - Long audio is rejected by duration in Telegram (`TELEGRAM_STT_MAX_DURATION`), which matches Phase 1 scope.
 - Telegram STT config supports provider fallback via env, but none of that is exposed in a CLI or config file.
 
@@ -248,4 +248,4 @@ Standalone tool script only; no agent-skill API hook in Phase 1.
 - [ ] Post-processing for punctuation/capitalization beyond provider defaults
 - [x] Timestamp injection for long transcripts
 - [x] Auto-convert unsupported audio to WAV via `ffmpeg`
-- [ ] Low-audio-quality warning
+- [x] Low-audio-quality warning

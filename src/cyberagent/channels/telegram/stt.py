@@ -36,6 +36,7 @@ class TranscriptionResult:
     model: str
     language: str | None
     segments: list[dict[str, object]]
+    low_confidence: bool = False
 
 
 def load_config() -> TelegramSTTConfig:
@@ -123,7 +124,7 @@ def _transcribe_provider(
     api_key = _require_key(provider)
     with file_path.open("rb") as handle:
         files = {"file": (file_path.name, handle)}
-        data: dict[str, object] = {"model": model, "response_format": "text"}
+        data: dict[str, object] = {"model": model, "response_format": "verbose_json"}
         if language:
             data["language"] = language
         response = requests.post(
@@ -134,13 +135,18 @@ def _transcribe_provider(
             timeout=60,
         )
         response.raise_for_status()
-        text = response.text
+        payload = _parse_payload(response)
+        text = (
+            str(payload.get("text", "")) if isinstance(payload, dict) else response.text
+        )
+        segments = _parse_segments(payload.get("segments")) if payload else []
     return TranscriptionResult(
         text=text,
         provider=provider,
         model=model,
         language=language,
-        segments=[],
+        segments=segments,
+        low_confidence=_is_low_confidence(segments),
     )
 
 
@@ -150,3 +156,28 @@ def _require_key(provider: str) -> str:
     if not api_key:
         raise RuntimeError(f"Missing required {env_var} environment variable.")
     return api_key
+
+
+def _parse_payload(response: requests.Response) -> dict[str, object]:
+    try:
+        payload = response.json()
+    except ValueError:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _parse_segments(raw: object) -> list[dict[str, object]]:
+    if isinstance(raw, list):
+        return [segment for segment in raw if isinstance(segment, dict)]
+    return []
+
+
+def _is_low_confidence(segments: list[dict[str, object]]) -> bool:
+    for segment in segments:
+        no_speech_prob = segment.get("no_speech_prob")
+        avg_logprob = segment.get("avg_logprob")
+        if isinstance(no_speech_prob, (int, float)) and no_speech_prob >= 0.6:
+            return True
+        if isinstance(avg_logprob, (int, float)) and avg_logprob <= -1.0:
+            return True
+    return False
