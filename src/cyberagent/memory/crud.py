@@ -231,6 +231,73 @@ class MemoryCrudService:
         owner_agent_id = actor.agent_id if resolved_scope == MemoryScope.AGENT else None
         return store.list(resolved_scope, namespace, page_limit, cursor, owner_agent_id)
 
+    def promote_entry(
+        self,
+        *,
+        actor: MemoryActorContext,
+        entry_id: str,
+        source_scope: MemoryScope | None,
+        target_scope: MemoryScope,
+        namespace: str,
+        target_team_id: int | None = None,
+    ) -> MemoryEntry:
+        source = source_scope or self._default_scope
+        source_team_id = self._resolve_target_team_id(actor, source, target_team_id)
+        self._require_permission(
+            actor=actor,
+            scope=source,
+            action=MemoryAction.READ,
+            target_team_id=source_team_id,
+        )
+        source_store = self._registry.resolve(source)
+        entry = source_store.get(entry_id, source, namespace)
+        if entry is None:
+            raise ValueError(f"memory entry not found: {entry_id}")
+        self._require_owner_match(source, actor.agent_id, entry.owner_agent_id)
+
+        target_team = self._resolve_target_team_id(actor, target_scope, target_team_id)
+        self._require_permission(
+            actor=actor,
+            scope=target_scope,
+            action=MemoryAction.WRITE,
+            target_team_id=target_team,
+        )
+        target_store = self._registry.resolve(target_scope)
+        existing = target_store.get(entry_id, target_scope, namespace)
+        if existing and existing.content != entry.content:
+            conflict_entry = MemoryEntry(
+                id=uuid4().hex,
+                scope=target_scope,
+                namespace=namespace,
+                owner_agent_id=entry.owner_agent_id,
+                content=entry.content,
+                tags=list(entry.tags) + [f"conflict_with:{existing.id}"],
+                priority=entry.priority,
+                created_at=_utc_now(),
+                updated_at=_utc_now(),
+                expires_at=entry.expires_at,
+                source=entry.source,
+                confidence=entry.confidence,
+                is_conflict=True,
+            )
+            return target_store.add(conflict_entry)
+
+        promoted = MemoryEntry(
+            id=entry.id,
+            scope=target_scope,
+            namespace=namespace,
+            owner_agent_id=entry.owner_agent_id,
+            content=entry.content,
+            tags=list(entry.tags),
+            priority=entry.priority,
+            created_at=_utc_now(),
+            updated_at=_utc_now(),
+            expires_at=entry.expires_at,
+            source=entry.source,
+            confidence=entry.confidence,
+        )
+        return target_store.add(promoted)
+
     def _normalize_limit(self, limit: int | None) -> int:
         page_limit = limit if limit is not None else self._default_page_size
         if page_limit < 1:

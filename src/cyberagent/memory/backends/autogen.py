@@ -115,6 +115,7 @@ def _entry_to_memory_content(entry: MemoryEntry) -> MemoryContent:
         "expires_at": entry.expires_at.isoformat() if entry.expires_at else None,
         "source": entry.source.value,
         "confidence": entry.confidence,
+        "is_conflict": entry.is_conflict,
     }
     return MemoryContent(
         content=entry.content,
@@ -144,6 +145,7 @@ def _entry_from_memory_content(content: MemoryContent) -> MemoryEntry:
         ),
         source=MemorySource(str(metadata["source"])),
         confidence=float(metadata["confidence"]),
+        is_conflict=bool(metadata.get("is_conflict", False)),
     )
 
 

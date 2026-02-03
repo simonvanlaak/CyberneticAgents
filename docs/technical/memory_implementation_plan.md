@@ -23,9 +23,9 @@
 - [x] Add pluggable backend configuration (env/config file).
 
 ## Phase 4: Reflection + Promotion
-- [ ] Write reflection outputs to agent scope by default.
-- [ ] Implement explicit promotion command/path to team/global scopes.
-- [ ] Implement conflict detection + versioned merge handling.
+- [x] Write reflection outputs to agent scope by default.
+- [x] Implement explicit promotion command/path to team/global scopes.
+- [x] Implement conflict detection + versioned merge handling.
 
 ## Phase 5: Observability + Safety
 - [ ] Log CRUD events (who/what/when/where + scope) with redaction rules.
