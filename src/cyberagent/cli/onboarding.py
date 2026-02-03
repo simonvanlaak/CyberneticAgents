@@ -29,6 +29,7 @@ from src.enums import SystemType
 
 LOGS_DIR = Path("logs")
 TECH_ONBOARDING_STATE_FILE = Path("logs/technical_onboarding.json")
+RUNTIME_PID_FILE = Path("logs/cyberagent.pid")
 VAULT_NAME = "CyberneticAgents"
 NETWORK_SKILL_NAMES = {"web-fetch", "web-search", "git-readonly-sync"}
 TOOL_SECRET_DOC_HINTS = {
@@ -190,8 +191,32 @@ def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
         session.close()
     _seed_default_team_envelope(team.id)
     _seed_default_procedures(team.id)
+    _start_runtime_after_onboarding(team.id)
     print(f"Next: run {suggest_command} to give the agents a task.")
     return 0
+
+
+def _start_runtime_after_onboarding(team_id: int) -> int | None:
+    if os.environ.get("CYBERAGENT_TEST_NO_RUNTIME") == "1":
+        return None
+    pid = _load_runtime_pid()
+    if pid is not None and _pid_is_running(pid):
+        print(f"Runtime already running (pid {pid}).")
+        return pid
+    cmd = [sys.executable, "-m", "src.cyberagent.cli.cyberagent", "serve"]
+    env = os.environ.copy()
+    env["CYBERAGENT_ACTIVE_TEAM_ID"] = str(team_id)
+    proc = subprocess.Popen(
+        cmd,
+        env=env,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.STDOUT,
+        close_fds=True,
+    )
+    RUNTIME_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
+    RUNTIME_PID_FILE.write_text(str(proc.pid), encoding="utf-8")
+    print(f"Runtime starting in background (pid {proc.pid}).")
+    return proc.pid
 
 
 def _seed_default_procedures(team_id: int) -> None:
@@ -231,6 +256,23 @@ def _seed_default_procedures(team_id: int) -> None:
 def _seed_default_team_envelope(team_id: int) -> None:
     for skill_name in DEFAULT_TEAM_ENVELOPE_SKILLS:
         teams_service.add_allowed_skill(team_id, skill_name, actor_id="onboarding")
+
+
+def _pid_is_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def _load_runtime_pid() -> int | None:
+    if not RUNTIME_PID_FILE.exists():
+        return None
+    try:
+        return int(RUNTIME_PID_FILE.read_text(encoding="utf-8").strip())
+    except (OSError, ValueError):
+        return None
 
 
 def run_technical_onboarding_checks() -> bool:

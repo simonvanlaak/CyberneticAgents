@@ -38,6 +38,13 @@ def test_handle_onboarding_creates_default_team(
     _clear_teams()
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
+    start_calls: list[int] = []
+
+    def _fake_start(team_id: int) -> int | None:
+        start_calls.append(team_id)
+        return 1234
+
+    monkeypatch.setattr(onboarding_cli, "_start_runtime_after_onboarding", _fake_start)
 
     exit_code = onboarding_cli.handle_onboarding(
         argparse.Namespace(), 'cyberagent suggest "Describe the task"'
@@ -48,11 +55,13 @@ def test_handle_onboarding_creates_default_team(
     assert exit_code == 0
     assert "Created default team" in captured
     assert "cyberagent suggest" in captured
+    assert len(start_calls) == 1
 
     session = next(get_db())
     try:
         team = session.query(Team).filter(Team.name == "root").first()
         assert team is not None
+        assert start_calls[0] == team.id
     finally:
         session.close()
 
@@ -70,6 +79,13 @@ def test_handle_onboarding_skips_when_team_exists(
 
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
+    start_calls: list[int] = []
+
+    def _fake_start(team_id: int) -> int | None:
+        start_calls.append(team_id)
+        return 1234
+
+    monkeypatch.setattr(onboarding_cli, "_start_runtime_after_onboarding", _fake_start)
     exit_code = onboarding_cli.handle_onboarding(
         argparse.Namespace(), 'cyberagent suggest "Describe the task"'
     )
@@ -79,10 +95,14 @@ def test_handle_onboarding_skips_when_team_exists(
     assert exit_code == 0
     assert "Team already exists" in captured
     assert "cyberagent suggest" in captured
+    assert len(start_calls) == 1
 
     session = next(get_db())
     try:
+        team = session.query(Team).first()
+        assert team is not None
         assert session.query(Team).count() == 1
+        assert start_calls[0] == team.id
     finally:
         session.close()
 
@@ -95,6 +115,13 @@ def test_handle_onboarding_requires_technical_checks(
     monkeypatch.setattr(
         onboarding_cli, "run_technical_onboarding_checks", lambda: False
     )
+    start_calls: list[int] = []
+
+    def _fake_start(team_id: int) -> int | None:
+        start_calls.append(team_id)
+        return 1234
+
+    monkeypatch.setattr(onboarding_cli, "_start_runtime_after_onboarding", _fake_start)
 
     exit_code = onboarding_cli.handle_onboarding(
         argparse.Namespace(), 'cyberagent suggest "Describe the task"'
@@ -103,6 +130,7 @@ def test_handle_onboarding_requires_technical_checks(
 
     assert exit_code == 1
     assert "technical onboarding" in captured.lower()
+    assert start_calls == []
 
 
 def test_handle_onboarding_seeds_default_sops(
