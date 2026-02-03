@@ -7,11 +7,16 @@ Describe how MemEngine integrates with the system memory architecture without du
 We will use MemEngine for core memory operations (storage, retrieval, summarization, reflection primitives) and wrap it with system-specific layers for scope, permissions, and auditability.
 
 ## Integration Overview
-1. Memory CRUD is exposed as an agent skill that gates all memory operations.
+1. Memory CRUD is exposed as the `memory_crud` agent skill that gates all memory operations.
 2. A scope registry routes requests to the correct memory store based on `agent`, `team`, or `global` scope.
 3. MemEngine operates behind the registry as the core memory framework.
 4. Permission checks happen before any MemEngine operation.
 5. All memory CRUD actions are logged for audit and observability.
+6. Memory stores are pluggable backends behind the registry.
+
+## AutoGen Memory Features
+1. `Memory` protocol (custom stores implement `add`, `query`, and `update_context`).
+2. `autogen_ext.memory.chromadb.ChromaDBVectorMemory` (ChromaDB-backed vector memory).
 
 ## Scope Routing
 1. Agent scope: private store per agent.
@@ -23,6 +28,10 @@ We will use MemEngine for core memory operations (storage, retrieval, summarizat
 2. Reflection jobs distill summaries and rules into long-term memory.
 3. Compaction summaries are generated when context limits are approached.
 4. Prompt-time pruning reduces tool output noise without rewriting stored history.
+5. Reflections write to agent scope by default and are promoted to team/global only via explicit promotion.
+
+## Scope Defaults
+1. Default write target scope is `agent` unless explicitly specified.
 
 ## Conflict Handling
 Use versioned merge. Conflicts are stored as separate entries with a conflict flag and require review to reconcile.
@@ -55,3 +64,9 @@ Use versioned merge. Conflicts are stored as separate entries with a conflict fl
 ## Retention and Pruning Defaults
 1. Use compaction-style summaries for durable retention when context limits are approached.
 2. Use transient pruning at prompt time to reduce tool output noise without rewriting stored history.
+
+## Best-Practice Defaults (External Guidance)
+1. `memory_crud` list endpoints use cursor-based pagination; return `next_cursor` (or next link) and `has_more`, set a reasonable default page size, and enforce a maximum page size to protect performance.
+2. Treat cursors as opaque values and do not decode, modify, or construct them manually.
+3. Audit logs should include who/what/when/where for each event, capture authorization failures, and avoid logging secrets, tokens, or sensitive personal data; restrict and monitor access to logs.
+4. If using ChromaDB in phase 1, configure persistence explicitly: local usage via `PersistentClient(path=...)` (defaults to `.chroma` if no path is provided) and server usage via `chroma run --path ...` (default persist dir is `./chroma`, server defaults to `localhost:8000`).

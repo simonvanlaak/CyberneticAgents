@@ -16,7 +16,7 @@ This PRD covers memory for single-agent and multi-agent workflows in the core ru
 
 ## Non-Goals
 1. A fully generalized enterprise knowledge graph for all teams and all time.
-2. Replacing existing Autogen memory features. We will integrate and extend, not duplicate.
+2. Replacing existing AutoGen memory features. We will integrate and extend, not duplicate.
 3. Cross-workspace federation in phase 1.
 
 ## Best Practices (2025-early 2026)
@@ -124,17 +124,17 @@ Store memory in interpretable formats that developers can inspect, edit, and del
 3. Keep memory formats human-auditable.
 
 ## Open Questions
-1. Which Autogen memory features should be wrapped vs. reimplemented?
-2. How to balance per-agent memory versus shared memory for team and global scopes?
-3. What are the default pruning and retention policies?
-4. What is the minimal cross-agent memory schema that enables coordination without leaking irrelevant data?
-5. What permissions model should govern memory CRUD skill access by layer and scope?
-6. Should memory CRUD allow bulk operations, and if so, what limits apply?
-7. How should memory CRUD handle conflicts between reflection outputs and manual edits?
+None.
 
 ## Decisions
 1. Conflict handling: use versioned merge. Keep both entries, mark conflict, and require review to reconcile.
 2. Use MemEngine as the memory framework for core memory operations, integrated with our scopes, RBAC, and CRUD skill.
+3. Default retention and pruning: use compaction-style summaries for durable retention when context limits are approached; use transient pruning at prompt time to reduce tool output noise without rewriting stored history.
+4. Permissions model: Sys3-Sys5 can write to team scope; Sys1-Sys2 can read team scope but cannot edit it; no system can edit another team's knowledge; only Sys4 (any team) can read and write global scope.
+5. Minimal cross-agent schema: use the shared memory schema fields defined in this PRD for team and global scopes.
+6. Bulk operations: allowed with a hard limit of 10 items per request.
+7. AutoGen memory features: wrap the AutoGen `Memory` protocol and `autogen_ext.memory.chromadb.ChromaDBVectorMemory` behind scope routing, RBAC, audit logging, and the `memory_crud` skill.
+8. Scope defaults: reflections write to agent scope by default and are promoted to team/global only via explicit promotion; default write target scope is `agent` unless specified.
 
 ## Technical Notes
 See `docs/technical/memory_architecture.md`.
