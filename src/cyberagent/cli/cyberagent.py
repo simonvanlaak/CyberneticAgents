@@ -34,6 +34,7 @@ from src.agents.messages import UserMessage
 from src.cli_session import list_inbox_entries
 from src.cyberagent.channels.telegram.parser import build_session_id
 from src.cyberagent.cli import dev as dev_cli
+from src.cyberagent.cli.env_loader import load_op_service_account_token
 from src.cyberagent.cli import onboarding as onboarding_cli
 from src.cyberagent.cli.headless import run_headless_session
 from src.cyberagent.cli.status import main as status_main
@@ -273,6 +274,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    load_op_service_account_token()
     parser = build_parser()
     args_list = list(argv) if argv is not None else list(sys.argv[1:])
     if not args_list:

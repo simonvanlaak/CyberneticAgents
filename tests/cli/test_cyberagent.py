@@ -14,6 +14,7 @@ import pytest
 from autogen_core import AgentId
 
 from src.cyberagent.cli import cyberagent
+from src.cyberagent.cli.env_loader import load_op_service_account_token
 from src.cyberagent.channels.inbox import InboxEntry
 
 
@@ -823,6 +824,20 @@ async def test_send_suggestion_timeout_does_not_cancel_runtime_send(
     assert runtime.task is not None
     await runtime.task
     assert runtime.cancelled is False
+
+
+def test_loads_op_service_account_token_from_env_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("OP_SERVICE_ACCOUNT_TOKEN", raising=False)
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".env").write_text(
+        "OP_SERVICE_ACCOUNT_TOKEN=service-token\n", encoding="utf-8"
+    )
+
+    load_op_service_account_token()
+
+    assert os.environ.get("OP_SERVICE_ACCOUNT_TOKEN") == "service-token"
 
 
 @pytest.mark.asyncio
