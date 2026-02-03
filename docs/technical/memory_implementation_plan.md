@@ -18,8 +18,8 @@
 - [x] Implement cursor-based pagination for list operations.
 
 ## Phase 3: Backends
-- [ ] Implement AutoGen `Memory` protocol adapter.
-- [ ] Implement ChromaDB-backed store adapter behind the registry.
+- [x] Implement AutoGen `Memory` protocol adapter.
+- [x] Implement ChromaDB-backed store adapter behind the registry.
 - [ ] Add pluggable backend configuration (env/config file).
 
 ## Phase 4: Reflection + Promotion
