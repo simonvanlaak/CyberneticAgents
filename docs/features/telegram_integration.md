@@ -30,6 +30,12 @@ Optional:
 - `TELEGRAM_BLOCKED_CHAT_IDS` (comma-separated)
 - `TELEGRAM_BLOCKED_USER_IDS` (comma-separated)
 
+## Local Verification
+If you are using polling (no `TELEGRAM_WEBHOOK_URL`), inbound traffic should appear in logs:
+```bash
+cyberagent logs --level INFO | rg -n "telegram" -i
+```
+
 ## Inline Keyboard Example
 To present inline buttons, send a message with an inline keyboard payload. Callback data will be forwarded into the runtime as a user message.
 

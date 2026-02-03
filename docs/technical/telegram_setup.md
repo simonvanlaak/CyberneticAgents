@@ -38,3 +38,9 @@ cyberagent onboarding
 ## Local Development Notes
 - Polling mode is simplest for local testing.
 - For webhook mode, use a public tunnel and set `TELEGRAM_WEBHOOK_URL` accordingly.
+
+## Quick Verification
+Use this log filter to confirm inbound Telegram traffic is being received:
+```bash
+cyberagent logs --level INFO | rg -n "telegram" -i
+```
