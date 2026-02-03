@@ -64,7 +64,7 @@ def test_transcribe_file_uses_openai_then_groq_fallback(
 
     result = transcribe.transcribe_file(audio_path)
 
-    assert result.text == "hello from groq"
+    assert result.text == "Hello from groq."
     assert result.provider == "groq"
     assert calls[0]["url"] == transcribe.OPENAI_ENDPOINT
     assert calls[1]["url"] == transcribe.GROQ_ENDPOINT
@@ -97,7 +97,7 @@ def test_transcribe_file_uses_openai_primary(
 
     result = transcribe.transcribe_file(audio_path)
 
-    assert result.text == "hello from openai"
+    assert result.text == "Hello from openai."
     assert result.provider == "openai"
 
 
@@ -134,7 +134,7 @@ def test_transcribe_file_converts_unsupported_audio(
 
     result = transcribe.transcribe_file(audio_path)
 
-    assert result.text == "converted audio"
+    assert result.text == "Converted audio."
     sent_file = cast(str, recorded.get("sent_file"))
     ffmpeg_args = cast(list[str], recorded.get("ffmpeg_args"))
     assert sent_file.endswith(".wav")
@@ -170,3 +170,30 @@ def test_transcribe_file_flags_low_confidence(
     result = transcribe.transcribe_file(audio_path)
 
     assert result.low_confidence is True
+
+
+def test_transcribe_file_keeps_single_word_without_period(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    audio_path = tmp_path / "audio.wav"
+    audio_path.write_bytes(b"fake")
+
+    def fake_post(
+        url: str,
+        *,
+        headers: dict[str, str],
+        files: dict[str, object],
+        data: dict[str, str],
+        timeout: int,
+    ) -> _Response:
+        return _Response(
+            "deploy",
+            payload={"text": "deploy", "segments": []},
+        )
+
+    monkeypatch.setenv("OPENAI_API_KEY", "openai-key")
+    monkeypatch.setattr(transcribe.requests, "post", fake_post)
+
+    result = transcribe.transcribe_file(audio_path)
+
+    assert result.text == "Deploy"

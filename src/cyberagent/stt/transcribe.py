@@ -3,13 +3,15 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
-from pathlib import Path
 import subprocess
 import tempfile
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import requests
+
+from src.cyberagent.stt.postprocess import normalize_transcript
 
 GROQ_ENDPOINT = "https://api.groq.com/openai/v1/audio/transcriptions"
 OPENAI_ENDPOINT = "https://api.openai.com/v1/audio/transcriptions"
@@ -86,6 +88,7 @@ def _transcribe_provider(
         text = (
             str(payload.get("text", "")) if isinstance(payload, dict) else response.text
         )
+        text = normalize_transcript(text)
         segments = []
         if isinstance(payload, dict):
             segments = _parse_segments(payload.get("segments"))

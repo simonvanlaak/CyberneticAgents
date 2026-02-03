@@ -66,7 +66,7 @@ Deferred (out of scope for Phase 1).
 
 
 #### 4. Post-Processing
-- **Punctuation & Capitalization**: Auto-insert based on context
+- **Punctuation & Capitalization**: Lightweight normalization (capitalize first letter, add sentence-ending punctuation when appropriate)
 - **Timestamp Injection**: Add timestamps for long transcripts
 
 ## Implementation
@@ -245,7 +245,7 @@ Standalone tool script only; no agent-skill API hook in Phase 1.
 - [x] OpenAI primary with Groq fallback (CLI module)
 - [x] Telegram voice messages auto-transcribed
 - [x] Inbox stores Telegram transcript (no retained audio)
-- [ ] Post-processing for punctuation/capitalization beyond provider defaults
+- [x] Post-processing for punctuation/capitalization beyond provider defaults
 - [x] Timestamp injection for long transcripts
 - [x] Auto-convert unsupported audio to WAV via `ffmpeg`
 - [x] Low-audio-quality warning

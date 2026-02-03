@@ -37,6 +37,27 @@ def format_timestamped_text(
     return "\n".join(lines) if lines else text
 
 
+def normalize_transcript(text: str) -> str:
+    """
+    Apply lightweight punctuation/capitalization cleanup.
+
+    Args:
+        text: Raw transcript text.
+
+    Returns:
+        Normalized transcript.
+    """
+    normalized = " ".join(text.split())
+    if not normalized:
+        return normalized
+    first_char = normalized[0]
+    if first_char.isalpha():
+        normalized = first_char.upper() + normalized[1:]
+    if " " in normalized and normalized[-1] not in {".", "?", "!"}:
+        normalized += "."
+    return normalized
+
+
 def _format_timestamp(seconds: float) -> str:
     total_seconds = max(0, int(seconds))
     hours, remainder = divmod(total_seconds, 3600)

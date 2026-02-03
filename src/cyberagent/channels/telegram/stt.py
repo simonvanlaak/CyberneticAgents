@@ -8,6 +8,7 @@ import requests
 
 from src.cyberagent.channels.telegram.client import TelegramClient
 from src.cyberagent.secrets import get_secret
+from src.cyberagent.stt.postprocess import normalize_transcript
 
 GROQ_ENDPOINT = "https://api.groq.com/openai/v1/audio/transcriptions"
 OPENAI_ENDPOINT = "https://api.openai.com/v1/audio/transcriptions"
@@ -139,6 +140,7 @@ def _transcribe_provider(
         text = (
             str(payload.get("text", "")) if isinstance(payload, dict) else response.text
         )
+        text = normalize_transcript(text)
         segments = _parse_segments(payload.get("segments")) if payload else []
     return TranscriptionResult(
         text=text,
