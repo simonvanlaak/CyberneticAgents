@@ -53,12 +53,22 @@ class UserAgent(RoutedAgent):
             if self._last_channel_context
             else DEFAULT_SESSION_ID
         )
-        add_inbox_entry(
-            "user_prompt",
-            message.content,
-            channel=channel,
-            session_id=session_id,
-        )
+        metadata = message.metadata if hasattr(message, "metadata") else None
+        already_recorded = False
+        if isinstance(metadata, dict):
+            already_recorded = str(metadata.get("inbox_recorded", "")).lower() in {
+                "true",
+                "1",
+                "yes",
+            }
+        if not already_recorded:
+            add_inbox_entry(
+                "user_prompt",
+                message.content,
+                channel=channel,
+                session_id=session_id,
+                metadata=metadata if isinstance(metadata, dict) else None,
+            )
         resolved = resolve_pending_question_for_route(
             message.content, MessageRoute(channel=channel, session_id=session_id)
         )

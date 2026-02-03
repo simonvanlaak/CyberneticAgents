@@ -14,13 +14,10 @@ from src.agents.messages import UserMessage
 from src.cyberagent.channels.inbox import (
     DEFAULT_CHANNEL,
     DEFAULT_SESSION_ID,
+    clear_pending_questions,
     list_inbox_entries,
 )
-from src.cli_session import (
-    clear_pending_questions,
-    enqueue_pending_question,
-    get_pending_question,
-)
+from src.cli_session import enqueue_pending_question, get_pending_question
 
 
 class TestUserAgent:
@@ -349,6 +346,32 @@ async def test_user_agent_includes_question_context_in_reply():
     entries = list_inbox_entries(kind="user_prompt")
     assert len(entries) == 1
     assert entries[0].content == "Build a CLI-first app."
+
+
+@pytest.mark.asyncio
+async def test_user_agent_skips_inbox_entry_when_already_recorded() -> None:
+    clear_pending_questions()
+    user_agent = UserAgent("test_user")
+    user_agent.publish_message = AsyncMock()
+    setattr(user_agent, "_runtime", cast(AgentRuntime, object()))
+    ctx = MessageContext(
+        sender=AgentId(type="UserAgent", key="root"),
+        topic_id=TopicId(type="UserAgent", source="root"),
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="test-message",
+    )
+    message = UserMessage(content="Voice transcript", source="User")
+    message.metadata = {
+        "channel": "telegram",
+        "session_id": "telegram:chat-1:user-2",
+        "inbox_recorded": "true",
+    }
+
+    await user_agent.handle_user_message(message=message, ctx=ctx)  # type: ignore[call-arg]
+
+    entries = list_inbox_entries(kind="user_prompt")
+    assert entries == []
 
 
 @pytest.mark.asyncio

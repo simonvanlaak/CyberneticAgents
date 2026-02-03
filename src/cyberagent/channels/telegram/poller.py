@@ -9,6 +9,7 @@ from typing import Protocol
 from autogen_core import AgentId, CancellationToken
 
 from src.agents.messages import UserMessage
+from src.cyberagent.channels.inbox import add_inbox_entry
 from src.cyberagent.channels.telegram.client import TelegramClient
 from src.cyberagent.channels.telegram import session_store
 from src.cyberagent.channels.telegram import stt as telegram_stt
@@ -204,6 +205,19 @@ class TelegramPoller:
                         voice.chat_id,
                         f"Transcription: {result.text}",
                     )
+                add_inbox_entry(
+                    "user_prompt",
+                    result.text,
+                    channel="telegram",
+                    session_id=session_id,
+                    metadata={
+                        "telegram_chat_id": str(voice.chat_id),
+                        "telegram_message_id": str(voice.message_id),
+                        "telegram_file_id": voice.file_id,
+                        "stt_provider": result.provider,
+                        "stt_model": result.model,
+                    },
+                )
                 message = UserMessage(content=result.text, source="User")
                 message.metadata = {
                     "channel": "telegram",
@@ -211,6 +225,7 @@ class TelegramPoller:
                     "telegram_chat_id": str(voice.chat_id),
                     "telegram_message_id": str(voice.message_id),
                     "telegram_file_id": voice.file_id,
+                    "inbox_recorded": "true",
                 }
                 await self._runtime.send_message(
                     message=message,
