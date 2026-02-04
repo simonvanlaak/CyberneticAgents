@@ -63,7 +63,9 @@ site/
 data/*.db
 data/*.db-shm
 data/*.db-wal
+data/*.md
 *.db-journal
+data/
 
 # Keep data directory structure tracked in git
 !data/.gitkeep
