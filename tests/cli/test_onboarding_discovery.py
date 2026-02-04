@@ -28,6 +28,8 @@ def _stub_messages(monkeypatch: pytest.MonkeyPatch) -> None:
             return "We couldn't access your PKM vault yet."
         if key == "pkm_sync_failed":
             return "We couldn't sync your PKM vault."
+        if key == "pkm_sync_starting":
+            return "Syncing your PKM vault..."
         if key == "onepassword_cli_not_ready":
             return "1Password CLI authentication failed."
         if key == "continue_without_pkm_prompt":
@@ -305,3 +307,28 @@ def test_sync_repo_reports_stderr_when_error_missing(
 
     captured = capsys.readouterr().out
     assert "boom" in captured
+
+
+def test_sync_repo_passes_timeout_to_cli_tool(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_run_cli_tool(
+        _cli_tool: object, _tool_name: str, **kwargs: object
+    ) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"success": True}
+
+    monkeypatch.setattr(onboarding_discovery, "_run_cli_tool", _fake_run_cli_tool)
+
+    onboarding_discovery._sync_obsidian_repo(
+        cli_tool=cast(CliTool, object()),
+        repo_url="https://github.com/example/repo",
+        branch="main",
+        token_env="GITHUB_READONLY_TOKEN",
+        token_username="x-access-token",
+    )
+
+    assert "timeout_seconds" in captured
+    assert captured["timeout_seconds"] == onboarding_discovery.GIT_SYNC_TIMEOUT_SECONDS

@@ -14,6 +14,7 @@ from src.cyberagent.cli.suggestion_queue import enqueue_suggestion
 from src.cyberagent.cli.onboarding_constants import (
     DEFAULT_GIT_TOKEN_ENV,
     DEFAULT_TOKEN_USERNAME,
+    GIT_SYNC_TIMEOUT_SECONDS,
     ONBOARDING_SUMMARY_DIR,
 )
 from src.cyberagent.cli.onboarding_secrets import (
@@ -63,6 +64,7 @@ def run_discovery_onboarding(args: object) -> Path | None:
 
     markdown_summary = get_message("onboarding_discovery", "pkm_sync_skipped")
     if repo_sync_allowed:
+        print(get_message("onboarding_discovery", "pkm_sync_starting"))
         branch = _resolve_default_branch(repo_url, token_env, token_username)
         repo_path, success = _sync_obsidian_repo(
             cli_tool=cli_tool,
@@ -208,6 +210,7 @@ def _sync_obsidian_repo(
         dest=str(dest),
         branch=branch,
         depth=1,
+        timeout_seconds=GIT_SYNC_TIMEOUT_SECONDS,
         **{
             "token-env": token_env,
             "token-username": token_username,
@@ -329,7 +332,12 @@ def _write_onboarding_summary(summary_text: str) -> Path | None:
     return path
 
 
-def _run_cli_tool(cli_tool: Any, tool_name: str, **kwargs: object) -> dict[str, object]:
+def _run_cli_tool(
+    cli_tool: Any,
+    tool_name: str,
+    timeout_seconds: int | None = None,
+    **kwargs: object,
+) -> dict[str, object]:
     async def _execute() -> dict[str, object]:
         executor = getattr(cli_tool, "executor", None)
         started = False
@@ -344,7 +352,9 @@ def _run_cli_tool(cli_tool: Any, tool_name: str, **kwargs: object) -> dict[str, 
                 except Exception as exc:
                     return {"success": False, "error": str(exc)}
         try:
-            return await cli_tool.execute(tool_name, **kwargs)
+            return await cli_tool.execute(
+                tool_name, timeout_seconds=timeout_seconds, **kwargs
+            )
         finally:
             if started and executor is not None:
                 stop = getattr(executor, "stop", None)

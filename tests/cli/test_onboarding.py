@@ -71,6 +71,7 @@ def test_handle_onboarding_creates_default_team(
 
     assert exit_code == 0
     assert "Created default team" in captured
+    assert "Starting PKM sync and profile discovery" in captured
     assert "cyberagent suggest" in captured
 
     expected_name = (
@@ -112,6 +113,7 @@ def test_handle_onboarding_skips_when_team_exists(
 
     assert exit_code == 0
     assert "Team already exists" in captured
+    assert "Starting PKM sync and profile discovery" in captured
     assert "cyberagent suggest" in captured
 
     session = next(get_db())

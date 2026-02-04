@@ -116,6 +116,7 @@ def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
     _seed_default_team_envelope(team.id, team_defaults)
     _ensure_team_systems(team.id, team_defaults)
     _seed_default_procedures(team.id, procedures)
+    print(get_message("onboarding", "discovery_starting"))
     summary_path = _run_discovery_onboarding(args, team.id)
     if summary_path is None:
         print(get_message("onboarding", "discovery_failed"))
