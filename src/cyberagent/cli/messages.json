@@ -16,6 +16,8 @@
         "onboarding_prompt_profile_links": "Any profile links to reference? (optional, comma-separated): ",
         "onboarding_prompt_name": "Your name",
         "onboarding_missing_value": "Please enter a value to continue.",
+        "telegram_onboarding_welcome": "Hi {user_name}, welcome to CyberneticAgents. We'll start a short onboarding interview now.",
+        "onboarding_first_question": "First question: What is the most important outcome you want CyberneticAgents to help you achieve?",
         "runtime_already_running": "Runtime already running (pid {pid}).",
         "runtime_starting": "Runtime starting in background (pid {pid}).",
         "db_write_failed": "Failed to write {context} data to the database ({location}).",
@@ -179,9 +181,11 @@
         "transcription_failed": "Transcription failed: {error}",
         "low_confidence": "Warning: audio quality appears low; transcript may be inaccurate."
     },
-    "headless": {
-        "no_teams_found": "No teams found. Run 'cyberagent onboarding' to create your first team."
-    },
+  "headless": {
+    "no_teams_found": "No teams found. Run 'cyberagent onboarding' to create your first team.",
+    "db_write_failed": "We couldn't save data. Background processing is paused.",
+    "db_write_hint_disk_io": "Your disk reported an I/O error. Check disk space and permissions, then restart."
+  },
     "status": {
         "no_data": "No data found.",
         "next_start": "Next: run {start_command} to boot the runtime.",

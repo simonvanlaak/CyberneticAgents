@@ -4,6 +4,7 @@ import asyncio
 import logging
 import os
 import time
+import urllib.error
 from typing import Protocol
 
 from autogen_core import AgentId, CancellationToken
@@ -89,6 +90,16 @@ class TelegramPoller:
                 updates = await asyncio.to_thread(
                     self._client.get_updates, self._offset, self._timeout
                 )
+            except urllib.error.HTTPError as exc:
+                if exc.code == 409:
+                    logger.error(
+                        "Telegram polling stopped because a webhook is active. "
+                        "Disable the webhook or set TELEGRAM_WEBHOOK_URL to use webhook mode."
+                    )
+                    return
+                logger.exception("Telegram polling failed.")
+                await asyncio.sleep(self._poll_interval)
+                continue
             except Exception:  # pragma: no cover - network safety net
                 logger.exception("Telegram polling failed.")
                 await asyncio.sleep(self._poll_interval)

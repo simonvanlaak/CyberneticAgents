@@ -6,7 +6,6 @@ import os
 from typing import Protocol
 
 from autogen_core import AgentId, CancellationToken
-
 from src.agents.messages import InitiativeAssignMessage, UserMessage
 from src.agents.user_agent import UserAgent
 from src.cli_session import forward_user_messages, read_stdin_loop
@@ -49,6 +48,29 @@ class SuggestionRuntime(Protocol):
         message_id: str | None = None,
     ) -> object:
         """Send a message to the runtime."""
+
+
+def _is_disk_io_error(exc: BaseException) -> bool:
+    message = str(exc).lower()
+    if "disk i/o error" in message:
+        return True
+    seen: set[int] = set()
+    current: BaseException | None = exc.__cause__ or exc.__context__
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if "disk i/o error" in str(current).lower():
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
+def _handle_disk_io_error(
+    exc: BaseException, stop_event: asyncio.Event, context: str
+) -> None:
+    logger.exception("Database write failed during %s.", context)
+    print(get_message("headless", "db_write_failed"))
+    print(get_message("headless", "db_write_hint_disk_io"))
+    stop_event.set()
 
 
 async def run_headless_session(initial_message: str | None = None) -> None:
@@ -149,7 +171,10 @@ async def _process_suggestion_queue(
                     sender=AgentId(type="UserAgent", key="root"),
                 )
                 ack_suggestion(suggestion.path)
-            except Exception:  # pragma: no cover - safety net
+            except Exception as exc:  # pragma: no cover - safety net
+                if _is_disk_io_error(exc):
+                    _handle_disk_io_error(exc, stop_event, "suggestion delivery")
+                    break
                 logger.exception("Failed to deliver suggestion %s", suggestion.path)
                 break
         await asyncio.sleep(SUGGEST_QUEUE_POLL_SECONDS)
@@ -190,7 +215,10 @@ async def _process_agent_message_queue(
                     sender=sender,
                 )
                 ack_agent_message(message.path)
-            except Exception:  # pragma: no cover - safety net
+            except Exception as exc:  # pragma: no cover - safety net
+                if _is_disk_io_error(exc):
+                    _handle_disk_io_error(exc, stop_event, "agent message delivery")
+                    break
                 logger.exception("Failed to deliver agent message %s", message.path)
                 break
         await asyncio.sleep(SUGGEST_QUEUE_POLL_SECONDS)
