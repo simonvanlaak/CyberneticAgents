@@ -9,14 +9,19 @@ New deployments of the CyberneticAgents VSM currently require a **manual boot‑
 This manual onboarding is error‑prone and slows down experiments. We need an **automated onboarding flow** that discovers an initial purpose, sets up the basic VSM configuration, and then **continually refines** that purpose as the system gathers data.
 
 ## High‑Level Solution
-Create an **Onboarding Service** that runs once at first start and then stays active in the background to **re‑evaluate the system’s purpose** on a regular schedule.
+Create an onboarding **SOP** that runs once at first start (after technical onboarding)
+and then stays active in the background to **re‑evaluate the system’s purpose** on a
+regular schedule.
 
 ## Dependencies
 Depends on docs/features/standard_operating_procedures.md
 Depends on docs/product_requirements/cron_triggers.md
 
 ### 1. First‑Run Discovery
-System 4 gets triggered with a default prompt, that starts the discovery process on the user. This is similar to https://docs.openclaw.ai/reference/templates/BOOTSTRAP. However the key difference is to understand the users needs pro actively. The purpose is to achieve viability and for that the system 4 needs to understand user needs.
+System 4 gets triggered with a default prompt that starts the discovery process on the user.
+This is similar to https://docs.openclaw.ai/reference/templates/BOOTSTRAP. However the key
+difference is to understand the users needs proactively. The purpose is to achieve viability
+and for that System 4 needs to understand user needs.
 Additionally this bootstrap run should be easiy on the user. Many LLM Tools have a long onboarding interaction that is tedious when wanting to try them out.
 The best way arround is for the user to provide already documented knowledge on them serves. 
 1. the user provides their name and System 4 does a quick web search on the user, trying to learn from public information.
@@ -50,9 +55,25 @@ Added research results in docs/research_synthesys/AI-Powered User Discovery: A F
 - Optional: profile links for web research (minimum 1 link required if web research is enabled).
 
 ## Onboarding Outputs (Phase 1)
+- Onboarding SOP is loaded as the default root purpose and root initiative when the root team
+  is created.
 - Create/update System5 purpose.
 - Create initial System4 strategy.
 - No System3 projects/tasks created yet.
+- Store onboarding summary under `data/onboarding/<timestamp>/summary.md`.
 
 ## Interview Flow
 After ingesting the Obsidian repo and profile links, run a full discovery interview.
+The interview should run through the shared inbox + `UserAgent` to support multi-channel flows.
+
+## Profile Links Processing
+- Fetch and summarize profile links immediately during onboarding.
+
+## Summary Size
+- No hard limit on onboarding summary size.
+
+## SOP Integration
+- Onboarding is defined as a Standard Operating Procedure (SOP).
+- The SOP is executed by System3 after successful secrets/config validation.
+- The root team is created with its root purpose and root initiative assigned from the
+  onboarding SOP.
