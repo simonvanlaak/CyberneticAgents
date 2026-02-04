@@ -15,6 +15,7 @@ See docs/product_requirements/triggers.md
 - Cron triggers are emitted into the runtime as standard trigger messages.
 - Each cron trigger specifies the target system, schedule, and optional context prompt.
 - Channel metadata should be included when the trigger is user-facing or creates inbox entries.
+- Onboarding continuous purpose adjustment runs daily by default.
 
 ## Trigger Config
 - system that receives the trigger (usually system 1)
@@ -22,6 +23,7 @@ See docs/product_requirements/triggers.md
 - prompt/context to include with the trigger
 - system that owns the trigger and can manage it (usually system 3)
 - delivery mode (local scheduler or external cron source)
+- default schedule overrides for onboarding and viability triggers
 
 ## Heartbeat Trigger
 There should be a default cronjob that acts as a heartbeat.
@@ -34,3 +36,4 @@ There should be a default cronjob that acts as a heartbeat.
 ## Planned Triggers
 - Team health check (System3)
 - Viability scan (System4)
+- Onboarding purpose review (System4, daily)

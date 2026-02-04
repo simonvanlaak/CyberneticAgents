@@ -36,6 +36,8 @@ Define the minimum scope to make CyberneticAgents production‑ready for a singl
 - Avoid logging secrets.
 - Provide `.env.example` covering required variables.
 - Onboarding validates required secrets and offers to store them.
+- GitHub access for onboarding uses PAT via 1Password in phase 1; evaluate GitHub App
+  installation flow for production hardening (short-lived tokens and repo-scoped access).
 
 ### Data Safety
 - Inbox persistence must be backward compatible.
