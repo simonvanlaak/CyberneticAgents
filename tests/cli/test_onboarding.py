@@ -212,6 +212,11 @@ def test_send_onboarding_intro_messages_sends_two_messages(
     )
     monkeypatch.setattr(onboarding_interview, "get_secret", lambda *_args: "token")
     monkeypatch.setattr(onboarding_interview, "send_telegram_message", _fake_send)
+    monkeypatch.setattr(
+        onboarding_interview,
+        "get_message",
+        lambda *_args, **_kwargs: "Send message to bot.",
+    )
 
     used, session_found = onboarding_interview.send_onboarding_intro_messages(
         welcome_message="Welcome!",
@@ -223,12 +228,49 @@ def test_send_onboarding_intro_messages_sends_two_messages(
     assert sent == [(20, "Welcome!"), (20, "First question?")]
 
 
+def test_start_onboarding_interview_prints_telegram_session_hint(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(onboarding_interview, "get_secret", lambda *_args: "token")
+    monkeypatch.setattr(
+        onboarding_interview,
+        "send_onboarding_intro_messages",
+        lambda **_kwargs: (True, True),
+    )
+    monkeypatch.setattr(
+        onboarding_interview,
+        "get_message",
+        lambda *_args, **_kwargs: "Send message to bot.",
+    )
+    monkeypatch.setattr(onboarding_interview, "enqueue_suggestion", lambda *_: None)
+    monkeypatch.setattr(
+        onboarding_interview,
+        "build_onboarding_interview_prompt",
+        lambda **_kwargs: "prompt",
+    )
+
+    onboarding_interview.start_onboarding_interview(
+        user_name="Simon",
+        repo_url="https://example.com/repo",
+        profile_links=[],
+    )
+
+    captured = capsys.readouterr().out
+    assert "Send message to bot." in captured
+
+
 def test_send_onboarding_intro_messages_no_session_returns_false(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(onboarding_interview, "session_store", session_store)
     monkeypatch.setattr(onboarding_interview, "get_secret", lambda *_args: "token")
     monkeypatch.setattr(onboarding_interview.session_store, "list_sessions", lambda: [])
+    monkeypatch.setattr(
+        onboarding_interview,
+        "get_message",
+        lambda *_args, **_kwargs: "Send message to bot.",
+    )
 
     used, session_found = onboarding_interview.send_onboarding_intro_messages(
         welcome_message="Welcome!",

@@ -39,8 +39,8 @@ def start_onboarding_interview(
     if not sent:
         print(welcome_message)
         print(first_question)
-        if get_secret("TELEGRAM_BOT_TOKEN") and not session_found:
-            print(get_message("onboarding", "telegram_session_missing"))
+    if get_secret("TELEGRAM_BOT_TOKEN"):
+        print(get_message("onboarding", "telegram_session_required"))
     prompt = build_onboarding_interview_prompt(
         user_name=user_name,
         repo_url=repo_url,

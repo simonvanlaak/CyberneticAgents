@@ -19,6 +19,7 @@
         "telegram_onboarding_welcome": "Hi {user_name}, welcome to CyberneticAgents. We'll start a short onboarding interview now.",
         "onboarding_first_question": "First question: What is the most important outcome you want CyberneticAgents to help you achieve?",
         "telegram_session_missing": "Telegram is configured, but no active chat session was found. Send a message to the bot to start a session, then re-run onboarding to deliver the interview over Telegram.",
+        "telegram_session_required": "To enable Telegram messages, send any message to the bot to start a session.",
         "runtime_already_running": "Runtime already running (pid {pid}).",
         "runtime_starting": "Runtime starting in background (pid {pid}).",
         "db_write_failed": "Failed to write {context} data to the database ({location}).",
