@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from typing import cast
 import pytest
 
 from src.cyberagent.cli import onboarding_discovery
+from src.cyberagent.tools.cli_executor.cli_tool import CliTool
 
 
 def _default_args() -> object:
@@ -168,3 +170,50 @@ def test_run_cli_tool_starts_and_stops_executor() -> None:
     assert result["success"] is True
     assert cli_tool.executor.started is True
     assert cli_tool.executor.stopped is True
+
+
+def test_sync_repo_uses_kebab_case_token_flags(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_run_cli_tool(
+        _cli_tool: object, _tool_name: str, **kwargs: object
+    ) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"success": True}
+
+    monkeypatch.setattr(onboarding_discovery, "_run_cli_tool", _fake_run_cli_tool)
+
+    onboarding_discovery._sync_obsidian_repo(
+        cli_tool=cast(CliTool, object()),
+        repo_url="https://github.com/example/repo",
+        branch="main",
+        token_env="GITHUB_READONLY_TOKEN",
+        token_username="x-access-token",
+    )
+
+    assert "token-env" in captured
+    assert "token-username" in captured
+    assert "token_env" not in captured
+    assert "token_username" not in captured
+
+
+def test_sync_repo_reports_stderr_when_error_missing(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def _fake_run_cli_tool(*_args: object, **_kwargs: object) -> dict[str, object]:
+        return {"success": False, "stderr": "boom"}
+
+    monkeypatch.setattr(onboarding_discovery, "_run_cli_tool", _fake_run_cli_tool)
+
+    onboarding_discovery._sync_obsidian_repo(
+        cli_tool=cast(CliTool, object()),
+        repo_url="https://github.com/example/repo",
+        branch="main",
+        token_env="TOKEN",
+        token_username="x-access-token",
+    )
+
+    captured = capsys.readouterr().out
+    assert "boom" in captured

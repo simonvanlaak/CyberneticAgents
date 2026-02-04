@@ -172,8 +172,10 @@ def _sync_obsidian_repo(
         dest=str(dest),
         branch=branch,
         depth=1,
-        token_env=token_env,
-        token_username=token_username,
+        **{
+            "token-env": token_env,
+            "token-username": token_username,
+        },
     )
     if not result.get("success"):
         error = (
