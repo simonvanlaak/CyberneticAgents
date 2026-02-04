@@ -4,9 +4,11 @@ Common database components shared across all modules
 
 import os
 from datetime import datetime
+from pathlib import Path
 from urllib.parse import urlparse
 
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 
@@ -24,6 +26,7 @@ Base = declarative_base()
 
 def init_db():
     """Initialize the database and create all tables"""
+    _ensure_db_writable()
     # Import models to ensure they're registered with Base
     from src.cyberagent.db.models.initiative import Initiative
     from src.cyberagent.db.models.policy import Policy
@@ -52,7 +55,16 @@ def init_db():
     )
 
     # Create all tables
-    Base.metadata.create_all(bind=engine)
+    try:
+        Base.metadata.create_all(bind=engine)
+    except OperationalError as exc:
+        if "disk i/o error" in str(exc).lower():
+            db_path = get_database_path()
+            raise RuntimeError(
+                f"SQLite disk I/O error while initializing database at {db_path}. "
+                "Check permissions and available disk space."
+            ) from exc
+        raise
     _ensure_team_last_active_column()
 
 
@@ -100,6 +112,27 @@ def get_database_path() -> str:
             return normalized.lstrip("/")
         return normalized
     return "data/CyberneticAgents.db"
+
+
+def _ensure_db_writable() -> None:
+    db_path = get_database_path()
+    if db_path == ":memory:":
+        return
+    db_file = Path(db_path)
+    db_dir = db_file.parent
+    try:
+        db_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        raise PermissionError(f"Database directory not writable: {db_dir}") from exc
+    if not os.access(db_dir, os.W_OK):
+        raise PermissionError(f"Database directory not writable: {db_dir}")
+    if db_file.exists():
+        if db_file.is_dir():
+            raise ValueError(
+                f"Expected file path for database, found directory: {db_file}"
+            )
+        if not os.access(db_file, os.W_OK):
+            raise PermissionError(f"Database file is not writable: {db_file}")
 
 
 # Note: init_db() is NOT called automatically during import to avoid circular dependencies
