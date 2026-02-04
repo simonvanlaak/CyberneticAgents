@@ -91,9 +91,10 @@ def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
     _seed_default_procedures(team.id, procedures)
     summary_path = _run_discovery_onboarding(args, team.id)
     if summary_path is None:
+        print("Discovery onboarding couldn't complete yet.")
         print(
-            "Discovery onboarding failed. Check repo access and token settings, "
-            "then re-run onboarding."
+            "Please confirm your repo access and make sure the GitHub token is "
+            "available, then re-run onboarding."
         )
         return 1
     store_onboarding_memory(team.id, summary_path)

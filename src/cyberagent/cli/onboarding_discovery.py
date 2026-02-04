@@ -31,7 +31,11 @@ def run_discovery_onboarding(args: object) -> Path | None:
     ).strip()
 
     if not _ensure_onboarding_token(token_env):
-        print("Missing required GitHub token for onboarding repo sync.")
+        print("We need a GitHub read-only token to sync your private vault.")
+        print(
+            "Store it in the 1Password vault 'CyberneticAgents' as an item named "
+            f"'{token_env}' with a field called 'credential', then re-run onboarding."
+        )
         return None
 
     cli_tool = _create_cli_tool()

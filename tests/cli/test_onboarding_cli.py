@@ -190,7 +190,7 @@ def test_handle_onboarding_stops_when_discovery_fails(
     captured = capsys.readouterr().out
 
     assert exit_code == 1
-    assert "Discovery onboarding failed" in captured
+    assert "Discovery onboarding couldn't complete yet" in captured
     assert start_calls == []
 
 
