@@ -85,7 +85,8 @@ class TestSystem3SequentialProcessing:
 
         mock_response = Response(
             chat_message=TextMessage(
-                content=json.dumps(task_response.dict()), source="System3/controller1"
+                content=json.dumps(task_response.model_dump()),
+                source="System3/controller1",
             ),
             inner_messages=[],
         )

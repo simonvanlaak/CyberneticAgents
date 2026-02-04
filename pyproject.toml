@@ -104,6 +104,9 @@ norecursedirs = [
   "data",
   "logs",
 ]
+markers = [
+  "docker: tests that require Docker to run",
+]
 
 [tool.setuptools.packages.find]
 where = ["."]
