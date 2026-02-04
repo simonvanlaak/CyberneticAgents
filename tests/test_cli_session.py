@@ -1,4 +1,6 @@
 import asyncio
+import time
+from typing import cast
 
 import pytest
 from autogen_core import AgentId
@@ -71,6 +73,56 @@ async def test_forward_user_messages_exit_command_stops() -> None:
 def test_pending_question_fifo_and_answer_archive() -> None:
     clear_pending_questions()
     assert get_pending_question() is None
+
+
+def test_read_stdin_handles_pending_and_eof(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    import src.cli_session as cli_session
+
+    queue: asyncio.Queue[str] = asyncio.Queue()
+    stop_event = asyncio.Event()
+
+    class DummyLoop:
+        def call_soon_threadsafe(self, fn, *args) -> None:  # type: ignore[no-untyped-def]
+            fn(*args)
+
+    inputs = iter(["hello", "", "world"])
+
+    def fake_input(_: str) -> str:
+        try:
+            return next(inputs)
+        except StopIteration as exc:
+            raise EOFError from exc
+
+    pending = iter(
+        [
+            cli_session.PendingQuestion(
+                content="Any updates?",
+                asked_by="System4",
+                question_id=1,
+                created_at=time.time(),
+            ),
+            None,
+            None,
+        ]
+    )
+
+    monkeypatch.setattr(
+        cli_session, "get_pending_question", lambda **_: next(pending, None)
+    )
+    monkeypatch.setattr("builtins.input", fake_input)
+
+    cli_session._read_stdin(
+        cast(asyncio.AbstractEventLoop, DummyLoop()), queue, stop_event
+    )
+
+    captured = capsys.readouterr()
+    assert "Pending question (System4)" in captured.out
+    assert stop_event.is_set()
+    assert queue.get_nowait() == "hello"
+    assert queue.get_nowait() == "world"
 
     enqueue_pending_question("Where should I focus next?", asked_by="System4")
     enqueue_pending_question("Any other constraints?", asked_by="System4")

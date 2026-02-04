@@ -42,6 +42,18 @@ def test_handle_help_unknown_topic(
     assert "Unknown help topic" in captured.out
 
 
+def test_handle_help_without_subparsers(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    def build_parser() -> argparse.ArgumentParser:
+        return argparse.ArgumentParser(prog="cyberagent")
+
+    exit_code = cyberagent_helpers.handle_help(build_parser, "status")
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "Unknown help topic" in captured.out
+
+
 def test_handle_login_uses_keyring(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -88,3 +100,46 @@ def test_handle_login_falls_back_to_file(
     token_path = tmp_path / ".cyberagent_token"
     assert token_path.read_text(encoding="utf-8") == "fallback-token"
     assert str(token_path) in captured.out
+
+
+def test_handle_login_reads_token_from_prompt(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+    monkeypatch.setattr(cyberagent_helpers.getpass, "getpass", lambda _: "prompted")
+
+    exit_code = cyberagent_helpers.handle_login(
+        None,
+        keyring_available=False,
+        keyring_module=None,
+        keyring_service="cyberagent",
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    token_path = tmp_path / ".cyberagent_token"
+    assert token_path.read_text(encoding="utf-8") == "prompted"
+    assert "Keyring unavailable" in captured.out
+
+
+def test_handle_login_falls_back_when_keyring_missing(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    monkeypatch.setattr(Path, "home", lambda: tmp_path)
+
+    exit_code = cyberagent_helpers.handle_login(
+        "fallback",
+        keyring_available=True,
+        keyring_module=None,
+        keyring_service="cyberagent",
+    )
+
+    captured = capsys.readouterr()
+    assert exit_code == 0
+    token_path = tmp_path / ".cyberagent_token"
+    assert token_path.read_text(encoding="utf-8") == "fallback"
+    assert "Keyring unavailable" in captured.out
