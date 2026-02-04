@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
+import logging
 from datetime import datetime
 import os
 from pathlib import Path
 import subprocess
+from typing import Any
 from urllib.parse import urlparse, urlunparse
 
 from src.cyberagent.cli.suggestion_queue import enqueue_suggestion
@@ -17,8 +20,12 @@ from src.cyberagent.cli.onboarding_secrets import (
     VAULT_NAME,
     load_secret_from_1password,
 )
+from src.cyberagent.cli.message_catalog import get_message
+
 from src.cyberagent.tools.cli_executor.cli_tool import CliTool
 from src.cyberagent.tools.cli_executor.factory import create_cli_executor
+
+logger = logging.getLogger(__name__)
 
 
 def run_discovery_onboarding(args: object) -> Path | None:
@@ -32,23 +39,27 @@ def run_discovery_onboarding(args: object) -> Path | None:
 
     repo_sync_allowed = True
     if not _ensure_onboarding_token(token_env):
-        print("We need a GitHub read-only token to sync your private vault.")
+        print(get_message("onboarding_discovery", "need_github_token"))
         print(
-            "Store it in the 1Password vault 'CyberneticAgents' as an item named "
-            f"'{token_env}' with a field called 'credential'."
+            get_message(
+                "onboarding_discovery",
+                "store_github_token",
+                vault_name=VAULT_NAME,
+                token_env=token_env,
+            )
         )
-        if not _prompt_continue_without_pkm("We couldn't access your PKM vault yet."):
+        if not _prompt_continue_without_pkm(
+            get_message("onboarding_discovery", "pkm_access_unavailable")
+        ):
             return None
         repo_sync_allowed = False
 
     cli_tool = _create_cli_tool()
     if cli_tool is None:
-        print("CLI tool executor unavailable; cannot sync onboarding repo.")
+        print(get_message("onboarding_discovery", "cli_tool_unavailable"))
         return None
 
-    markdown_summary = (
-        "PKM sync skipped. The onboarding interview will take longer without it."
-    )
+    markdown_summary = get_message("onboarding_discovery", "pkm_sync_skipped")
     if repo_sync_allowed:
         branch = _resolve_default_branch(repo_url, token_env, token_username)
         repo_path, success = _sync_obsidian_repo(
@@ -60,7 +71,9 @@ def run_discovery_onboarding(args: object) -> Path | None:
         )
         if success:
             markdown_summary = _summarize_markdown_repo(repo_path)
-        elif not _prompt_continue_without_pkm("We couldn't sync your PKM vault."):
+        elif not _prompt_continue_without_pkm(
+            get_message("onboarding_discovery", "pkm_sync_failed")
+        ):
             return None
     profile_summary = _fetch_profile_links(cli_tool, profile_links)
     summary_text = _render_onboarding_summary(
@@ -164,7 +177,7 @@ def _sync_obsidian_repo(
     )
     if not result.get("success"):
         error = result.get("error") or result.get("raw_output", "")
-        print(f"Failed to sync onboarding repo: {error}")
+        print(get_message("onboarding_discovery", "failed_sync_repo", error=error))
         return dest, False
     return dest, True
 
@@ -233,8 +246,12 @@ def _render_onboarding_summary(
 
 def _prompt_continue_without_pkm(reason: str) -> bool:
     print(reason)
-    print("The onboarding interview will take longer without your PKM.")
-    response = input("Continue without PKM sync? [y/N]: ").strip().lower()
+    print(get_message("onboarding_discovery", "onboarding_interview_longer"))
+    response = (
+        input(get_message("onboarding_discovery", "continue_without_pkm_prompt"))
+        .strip()
+        .lower()
+    )
     return response in {"y", "yes"}
 
 
@@ -266,8 +283,32 @@ def _write_onboarding_summary(summary_text: str) -> Path | None:
     return path
 
 
-def _run_cli_tool(cli_tool: CliTool, tool_name: str, **kwargs) -> dict[str, object]:
+def _run_cli_tool(cli_tool: Any, tool_name: str, **kwargs: object) -> dict[str, object]:
     async def _execute() -> dict[str, object]:
-        return await cli_tool.execute(tool_name, **kwargs)
+        executor = getattr(cli_tool, "executor", None)
+        started = False
+        if executor is not None:
+            start = getattr(executor, "start", None)
+            if callable(start) and not getattr(executor, "_running", False):
+                result = start()
+                if inspect.isawaitable(result):
+                    await result
+                started = True
+        try:
+            return await cli_tool.execute(tool_name, **kwargs)
+        finally:
+            if started and executor is not None:
+                stop = getattr(executor, "stop", None)
+                if callable(stop):
+                    try:
+                        result = stop()
+                        if inspect.isawaitable(result):
+                            await result
+                    except RuntimeError as exc:
+                        logger.warning(
+                            "Failed to stop CLI tool executor after %s: %s",
+                            tool_name,
+                            exc,
+                        )
 
     return asyncio.run(_execute())
