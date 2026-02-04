@@ -61,6 +61,12 @@ TOOL_SECRET_DOC_HINTS = {
     "BRAVE_API_KEY": "src/tools/skills/web-search/SKILL.md",
 }
 TELEGRAM_DOC_HINT = "docs/technical/telegram_setup.md"
+FEATURE_READY_MESSAGES = {
+    "BRAVE_API_KEY": "Web search is now available.",
+    "GROQ_API_KEY": "AI model access is ready.",
+    "MISTRAL_API_KEY": "AI model access is ready.",
+    "TELEGRAM_BOT_TOKEN": "Telegram messaging is now available.",
+}
 
 
 def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
@@ -478,9 +484,13 @@ def run_technical_onboarding_checks() -> bool:
         print("Technical onboarding already verified.")
         return True
 
+    if not _check_db_writable():
+        return False
+    if not _check_logs_writable():
+        return False
+    print("Activating features...")
+
     checks = [
-        _check_db_writable,
-        _check_logs_writable,
         _check_llm_credentials,
         check_docker_socket_access,
         check_docker_available,
@@ -577,6 +587,26 @@ def _check_logs_writable() -> bool:
     return _check_path_writable("Logs directory", LOGS_DIR)
 
 
+def _format_skill_names(skills: list[str]) -> str:
+    readable = []
+    for skill in skills:
+        label = skill.replace("-", " ").replace("_", " ").strip()
+        if label:
+            readable.append(label.title())
+    return ", ".join(sorted(set(readable)))
+
+
+def _print_feature_ready(env_name: str, skills: list[str] | None = None) -> None:
+    message = FEATURE_READY_MESSAGES.get(env_name)
+    if not message and skills:
+        skill_names = _format_skill_names(skills)
+        if skill_names:
+            message = f"{skill_names} is now available."
+    if not message:
+        return
+    print(f"✓ {message}")
+
+
 def _check_llm_credentials() -> bool:
     if not os.environ.get("GROQ_API_KEY"):
         loaded = _load_secret_from_1password(
@@ -585,7 +615,7 @@ def _check_llm_credentials() -> bool:
             field_label="credential",
         )
         if loaded:
-            print(f"Found GROQ_API_KEY in 1Password vault {VAULT_NAME}.")
+            _print_feature_ready("GROQ_API_KEY")
             return True
         print("Missing GROQ_API_KEY.")
         print(
@@ -593,11 +623,13 @@ def _check_llm_credentials() -> bool:
             f"named '{VAULT_NAME}' and add an item named GROQ_API_KEY."
         )
         print("Field name should be 'credential'.")
-        return _prompt_store_secret_in_1password(
+        if not _prompt_store_secret_in_1password(
             env_name="GROQ_API_KEY",
             description="Groq API key",
             doc_hint=None,
-        )
+        ):
+            return False
+    _print_feature_ready("GROQ_API_KEY")
     if os.environ.get("LLM_PROVIDER", "groq").lower() == "mistral":
         if not os.environ.get("MISTRAL_API_KEY"):
             loaded = _load_secret_from_1password(
@@ -606,7 +638,7 @@ def _check_llm_credentials() -> bool:
                 field_label="credential",
             )
             if loaded:
-                print(f"Found MISTRAL_API_KEY in 1Password vault {VAULT_NAME}.")
+                _print_feature_ready("MISTRAL_API_KEY")
                 return True
             print("Missing MISTRAL_API_KEY.")
             print(
@@ -614,11 +646,13 @@ def _check_llm_credentials() -> bool:
                 f"named '{VAULT_NAME}' and add an item named MISTRAL_API_KEY."
             )
             print("Field name should be 'credential'.")
-            return _prompt_store_secret_in_1password(
+            if not _prompt_store_secret_in_1password(
                 env_name="MISTRAL_API_KEY",
                 description="Mistral API key",
                 doc_hint=None,
-            )
+            ):
+                return False
+        _print_feature_ready("MISTRAL_API_KEY")
     return True
 
 
@@ -667,7 +701,9 @@ def _check_required_tool_secrets() -> bool:
             required_by_env.setdefault(env, []).append(skill.name)
 
     for env_name in required_env:
+        skills_for_env = required_by_env.get(env_name, [])
         if os.environ.get(env_name):
+            _print_feature_ready(env_name, skills_for_env)
             continue
         loaded = _load_secret_from_1password(
             vault_name=VAULT_NAME,
@@ -675,7 +711,7 @@ def _check_required_tool_secrets() -> bool:
             field_label="credential",
         )
         if loaded:
-            print(f"Found {env_name} in 1Password vault {VAULT_NAME}.")
+            _print_feature_ready(env_name, skills_for_env)
             continue
         skills_list = ", ".join(sorted(required_by_env.get(env_name, [])))
         print(f"Missing {env_name} for required tools: {skills_list}.")
@@ -759,6 +795,16 @@ def _offer_optional_telegram_setup() -> None:
     if not sys.stdin.isatty():
         return
     if os.environ.get("TELEGRAM_BOT_TOKEN"):
+        _print_feature_ready("TELEGRAM_BOT_TOKEN")
+        _offer_optional_telegram_webhook_setup()
+        return
+    loaded = _load_secret_from_1password(
+        vault_name=VAULT_NAME,
+        item_name="TELEGRAM_BOT_TOKEN",
+        field_label="credential",
+    )
+    if loaded:
+        _print_feature_ready("TELEGRAM_BOT_TOKEN")
         _offer_optional_telegram_webhook_setup()
         return
     print(

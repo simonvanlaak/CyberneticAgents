@@ -494,6 +494,7 @@ def test_technical_onboarding_requires_groq_key(
 
     assert onboarding_cli.run_technical_onboarding_checks() is False
     captured = capsys.readouterr().out
+    assert "Activating features..." in captured
     assert "GROQ_API_KEY" in captured
 
 
@@ -651,6 +652,38 @@ def test_optional_telegram_setup_prompts_when_missing(
     assert "TELEGRAM_WEBHOOK_SECRET" in titles
 
 
+def test_optional_telegram_setup_skips_prompt_when_found_in_1password(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+    monkeypatch.setattr(onboarding_cli.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(
+        onboarding_cli, "_load_secret_from_1password", lambda *_args, **_kwargs: "token"
+    )
+
+    webhook_called: list[bool] = []
+
+    def _mark_webhook_called() -> None:
+        webhook_called.append(True)
+
+    def _fail_store(*_args: object, **_kwargs: object) -> bool:
+        raise AssertionError(
+            "Should not prompt to store token when found in 1Password."
+        )
+
+    monkeypatch.setattr(
+        onboarding_cli, "_offer_optional_telegram_webhook_setup", _mark_webhook_called
+    )
+    monkeypatch.setattr(
+        onboarding_cli, "_prompt_store_secret_in_1password", _fail_store
+    )
+
+    onboarding_cli._offer_optional_telegram_setup()
+    captured = capsys.readouterr().out
+    assert "✓ Telegram messaging is now available." in captured
+    assert webhook_called
+
+
 def test_check_docker_socket_access_denied(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -729,7 +762,7 @@ def test_loads_brave_key_from_onepassword(
     monkeypatch.setattr(onboarding_cli, "_load_secret_from_1password", _load_secret)
     assert onboarding_cli._check_required_tool_secrets() is True
     captured = capsys.readouterr().out
-    assert "Found BRAVE_API_KEY" in captured
+    assert "✓ Web search is now available." in captured
 
 
 def test_check_network_access_fails_when_required(
