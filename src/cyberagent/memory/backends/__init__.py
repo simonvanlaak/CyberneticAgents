@@ -1,10 +1,13 @@
 """Memory backend adapters."""
 
-from typing import Any
+from typing import Any, TYPE_CHECKING
 
 from src.cyberagent.memory.backends.autogen import AutoGenMemoryStore
 
 __all__ = ["AutoGenMemoryStore", "ChromaDBMemoryFactory"]
+
+if TYPE_CHECKING:
+    from src.cyberagent.memory.backends.chromadb import ChromaDBMemoryFactory
 
 
 def __getattr__(name: str) -> Any:
