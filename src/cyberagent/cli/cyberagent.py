@@ -552,7 +552,7 @@ def _handle_logs(args: argparse.Namespace) -> int:
     target = log_files[-1]
     lines = target.read_text(encoding="utf-8", errors="ignore").splitlines()
     levels = log_filters.resolve_log_levels(args.level, args.errors)
-    if levels is None:
+    if levels is None and args.level:
         print("Invalid log level. Use: DEBUG, INFO, WARNING, ERROR, CRITICAL.")
         return 2
     filtered = log_filters.filter_logs(lines, args.filter, args.limit, levels)

@@ -51,12 +51,16 @@ def _default_onboarding_args() -> argparse.Namespace:
 
 
 def test_handle_onboarding_creates_default_team(
-    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _clear_teams()
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
-    monkeypatch.setattr(onboarding_cli, "_run_discovery_onboarding", lambda *_: None)
+    summary_path = tmp_path / "summary.md"
+    summary_path.write_text("summary", encoding="utf-8")
+    monkeypatch.setattr(
+        onboarding_cli, "_run_discovery_onboarding", lambda *_: summary_path
+    )
     monkeypatch.setattr(
         onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: None
     )
@@ -89,7 +93,7 @@ def test_handle_onboarding_creates_default_team(
 
 
 def test_handle_onboarding_skips_when_team_exists(
-    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _clear_teams()
     session = next(get_db())
@@ -101,7 +105,11 @@ def test_handle_onboarding_skips_when_team_exists(
 
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
-    monkeypatch.setattr(onboarding_cli, "_run_discovery_onboarding", lambda *_: None)
+    summary_path = tmp_path / "summary.md"
+    summary_path.write_text("summary", encoding="utf-8")
+    monkeypatch.setattr(
+        onboarding_cli, "_run_discovery_onboarding", lambda *_: summary_path
+    )
     monkeypatch.setattr(
         onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: None
     )
@@ -156,6 +164,33 @@ def test_handle_onboarding_requires_technical_checks(
 
     assert exit_code == 1
     assert "technical onboarding" in captured.lower()
+    assert start_calls == []
+
+
+def test_handle_onboarding_stops_when_discovery_fails(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _clear_teams()
+    monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
+    monkeypatch.setattr(onboarding_cli, "_run_discovery_onboarding", lambda *_: None)
+    monkeypatch.setattr(
+        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: None
+    )
+    start_calls: list[int] = []
+
+    def _fake_start(team_id: int) -> int | None:
+        start_calls.append(team_id)
+        return 1234
+
+    monkeypatch.setattr(onboarding_cli, "_start_runtime_after_onboarding", _fake_start)
+
+    exit_code = onboarding_cli.handle_onboarding(
+        _default_onboarding_args(), 'cyberagent suggest "Describe the task"'
+    )
+    captured = capsys.readouterr().out
+
+    assert exit_code == 1
+    assert "Discovery onboarding failed" in captured
     assert start_calls == []
 
 
@@ -231,12 +266,16 @@ def test_store_onboarding_memory_writes_global_entry(
 
 
 def test_handle_onboarding_seeds_default_sops(
-    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _clear_teams()
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
-    monkeypatch.setattr(onboarding_cli, "_run_discovery_onboarding", lambda *_: None)
+    summary_path = tmp_path / "summary.md"
+    summary_path.write_text("summary", encoding="utf-8")
+    monkeypatch.setattr(
+        onboarding_cli, "_run_discovery_onboarding", lambda *_: summary_path
+    )
     monkeypatch.setattr(
         onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: None
     )
@@ -333,7 +372,11 @@ def test_handle_onboarding_triggers_onboarding_sop(
     monkeypatch.setattr(
         onboarding_cli, "_start_runtime_after_onboarding", lambda *_: None
     )
-    monkeypatch.setattr(onboarding_cli, "_run_discovery_onboarding", lambda *_: None)
+    summary_path = tmp_path / "summary.md"
+    summary_path.write_text("summary", encoding="utf-8")
+    monkeypatch.setattr(
+        onboarding_cli, "_run_discovery_onboarding", lambda *_: summary_path
+    )
     monkeypatch.setattr(
         agent_message_queue, "AGENT_MESSAGE_QUEUE_DIR", tmp_path / "agent_queue"
     )
@@ -378,7 +421,7 @@ def test_handle_onboarding_triggers_onboarding_sop(
 
     queued = agent_message_queue.read_queued_agent_messages()
     assert len(queued) == 1
-    assert queued[0].recipient == "System3:root"
+    assert queued[0].recipient == "System3/root"
 
 
 def test_build_onboarding_prompt_includes_summary_path() -> None:

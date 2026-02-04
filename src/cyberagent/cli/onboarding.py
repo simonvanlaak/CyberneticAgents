@@ -90,6 +90,12 @@ def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
     _ensure_team_systems(team.id, team_defaults)
     _seed_default_procedures(team.id, procedures)
     summary_path = _run_discovery_onboarding(args, team.id)
+    if summary_path is None:
+        print(
+            "Discovery onboarding failed. Check repo access and token settings, "
+            "then re-run onboarding."
+        )
+        return 1
     store_onboarding_memory(team.id, summary_path)
     if auto_execute:
         _trigger_onboarding_initiative(
@@ -409,8 +415,8 @@ def _trigger_onboarding_initiative(
         executed_by_system_id=system3.id,
     )
     enqueue_agent_message(
-        recipient="System3:root",
-        sender="System4:root",
+        recipient="System3/root",
+        sender="System4/root",
         message_type="initiative_assign",
         payload={
             "initiative_id": run.initiative_id,

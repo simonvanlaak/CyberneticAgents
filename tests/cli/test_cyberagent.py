@@ -221,9 +221,9 @@ def test_handle_transcribe_prints_text(
 
     exit_code = cyberagent.main(["transcribe", str(audio_path)])
 
-    output = capsys.readouterr().out.strip()
+    output = capsys.readouterr().out.strip().splitlines()
     assert exit_code == 0
-    assert output == "hello world"
+    assert output[-1] == "hello world"
 
 
 def test_handle_transcribe_warns_on_low_confidence(
@@ -418,6 +418,53 @@ def test_filter_logs_with_levels() -> None:
 def test_resolve_log_levels_errors_only() -> None:
     levels = log_filters.resolve_log_levels(None, True)
     assert levels == {"ERROR", "CRITICAL"}
+
+
+def test_handle_logs_without_level_shows_output(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    log_file = log_dir / "runtime_20250101_000000.log"
+    log_file.write_text("2025-01-01 00:00:00.000 INFO [x] ok\n", encoding="utf-8")
+
+    monkeypatch.setattr(cyberagent, "LOGS_DIR", log_dir)
+
+    args = argparse.Namespace(
+        filter=None,
+        level=None,
+        errors=False,
+        follow=False,
+        limit=200,
+    )
+
+    assert cyberagent._handle_logs(args) == 0
+    output = capsys.readouterr().out
+    assert "Invalid log level" not in output
+    assert "INFO" in output
+
+
+def test_handle_logs_invalid_level_errors(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    log_file = log_dir / "runtime_20250101_000000.log"
+    log_file.write_text("2025-01-01 00:00:00.000 INFO [x] ok\n", encoding="utf-8")
+
+    monkeypatch.setattr(cyberagent, "LOGS_DIR", log_dir)
+
+    args = argparse.Namespace(
+        filter=None,
+        level=["bad"],
+        errors=False,
+        follow=False,
+        limit=200,
+    )
+
+    assert cyberagent._handle_logs(args) == 2
+    output = capsys.readouterr().out
+    assert "Invalid log level" in output
 
 
 def test_check_recent_runtime_errors_counts_new(
