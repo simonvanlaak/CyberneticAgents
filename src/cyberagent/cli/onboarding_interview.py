@@ -32,13 +32,15 @@ def start_onboarding_interview(
     welcome_message = get_message(
         "onboarding", "telegram_onboarding_welcome", user_name=user_name
     )
-    sent = send_onboarding_intro_messages(
+    sent, session_found = send_onboarding_intro_messages(
         welcome_message=welcome_message,
         first_question=first_question,
     )
     if not sent:
         print(welcome_message)
         print(first_question)
+        if get_secret("TELEGRAM_BOT_TOKEN") and not session_found:
+            print(get_message("onboarding", "telegram_session_missing"))
     prompt = build_onboarding_interview_prompt(
         user_name=user_name,
         repo_url=repo_url,
@@ -57,16 +59,16 @@ def select_latest_telegram_session() -> session_store.TelegramSession | None:
 
 def send_onboarding_intro_messages(
     *, welcome_message: str, first_question: str
-) -> bool:
+) -> tuple[bool, bool]:
     if not get_secret("TELEGRAM_BOT_TOKEN"):
-        return False
+        return False, False
     session = select_latest_telegram_session()
     if session is None:
-        return False
+        return False, False
     try:
         send_telegram_message(session.telegram_chat_id, welcome_message)
         send_telegram_message(session.telegram_chat_id, first_question)
     except Exception as exc:
         logger.warning("Failed to send onboarding Telegram messages: %s", exc)
-        return False
-    return True
+        return False, True
+    return True, True

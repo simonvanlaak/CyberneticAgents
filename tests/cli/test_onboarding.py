@@ -210,10 +210,27 @@ def test_send_onboarding_intro_messages_sends_two_messages(
     monkeypatch.setattr(onboarding_interview, "get_secret", lambda *_args: "token")
     monkeypatch.setattr(onboarding_interview, "send_telegram_message", _fake_send)
 
-    used = onboarding_interview.send_onboarding_intro_messages(
+    used, session_found = onboarding_interview.send_onboarding_intro_messages(
         welcome_message="Welcome!",
         first_question="First question?",
     )
 
     assert used is True
+    assert session_found is True
     assert sent == [(20, "Welcome!"), (20, "First question?")]
+
+
+def test_send_onboarding_intro_messages_no_session_returns_false(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(onboarding_interview, "session_store", session_store)
+    monkeypatch.setattr(onboarding_interview, "get_secret", lambda *_args: "token")
+    monkeypatch.setattr(onboarding_interview.session_store, "list_sessions", lambda: [])
+
+    used, session_found = onboarding_interview.send_onboarding_intro_messages(
+        welcome_message="Welcome!",
+        first_question="First question?",
+    )
+
+    assert used is False
+    assert session_found is False

@@ -14,7 +14,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from src.cyberagent.cli.agent_message_queue import enqueue_agent_message
 from src.cyberagent.db.db_utils import get_db
-from src.cyberagent.db.init_db import get_database_path, init_db
+from src.cyberagent.db.init_db import DATABASE_URL, get_database_path, init_db
 from src.cyberagent.db.models.procedure import Procedure
 from src.cyberagent.db.models.procedure_run import ProcedureRun
 from src.cyberagent.db.models.strategy import Strategy
@@ -197,6 +197,7 @@ def _start_runtime_after_onboarding(team_id: int) -> int | None:
     cmd = [sys.executable, "-m", "src.cyberagent.cli.cyberagent", "serve"]
     env = os.environ.copy()
     env["CYBERAGENT_ACTIVE_TEAM_ID"] = str(team_id)
+    env["CYBERAGENT_DB_URL"] = _resolve_runtime_db_url()
     proc = subprocess.Popen(
         cmd,
         env=env,
@@ -208,6 +209,16 @@ def _start_runtime_after_onboarding(team_id: int) -> int | None:
     RUNTIME_PID_FILE.write_text(str(proc.pid), encoding="utf-8")
     print(get_message("onboarding", "runtime_starting", pid=proc.pid))
     return proc.pid
+
+
+def _resolve_runtime_db_url() -> str:
+    url = DATABASE_URL
+    if not url.startswith("sqlite:///"):
+        return url
+    db_path = Path(get_database_path())
+    if not db_path.is_absolute():
+        db_path = (Path.cwd() / db_path).resolve()
+    return f"sqlite:///{db_path}"
 
 
 def _get_default_team_name(team_defaults: dict[str, object]) -> str:
