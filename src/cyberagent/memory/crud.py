@@ -11,6 +11,7 @@ from uuid import uuid4
 from src.cyberagent.memory.models import (
     MemoryAuditEvent,
     MemoryEntry,
+    MemoryLayer,
     MemoryListResult,
     MemoryPriority,
     MemoryScope,
@@ -44,6 +45,7 @@ class MemoryCreateRequest:
     source: MemorySource
     confidence: float
     expires_at: datetime | None
+    layer: MemoryLayer | None = None
     owner_agent_id: str | None = None
     entry_id: str | None = None
     target_team_id: int | None = None
@@ -67,6 +69,8 @@ class MemoryUpdateRequest:
     priority: MemoryPriority | None = None
     confidence: float | None = None
     expires_at: datetime | None = None
+    layer: MemoryLayer | None = None
+    if_match: str | None = None
     target_team_id: int | None = None
 
 
@@ -75,7 +79,17 @@ class MemoryDeleteRequest:
     entry_id: str
     scope: MemoryScope | None
     namespace: str | None
+    if_match: str | None = None
     target_team_id: int | None = None
+
+
+class MemoryConflictError(RuntimeError):
+    """Raised when optimistic concurrency checks fail."""
+
+    def __init__(self, entry_id: str, conflict_entry: MemoryEntry) -> None:
+        super().__init__(f"memory entry etag mismatch: {entry_id}")
+        self.entry_id = entry_id
+        self.conflict_entry = conflict_entry
 
 
 class MemoryCrudService:
@@ -120,6 +134,7 @@ class MemoryCrudService:
             owner_agent_id = request.owner_agent_id or actor.agent_id
             self._require_owner_match(scope, actor.agent_id, owner_agent_id)
             now = _utc_now()
+            layer = request.layer or MemoryLayer.SESSION
             entry = MemoryEntry(
                 id=request.entry_id or uuid4().hex,
                 scope=scope,
@@ -133,6 +148,7 @@ class MemoryCrudService:
                 expires_at=request.expires_at,
                 source=request.source,
                 confidence=request.confidence,
+                layer=layer,
             )
             store = self._registry.resolve(scope)
             created_entry = store.add(entry)
@@ -214,6 +230,43 @@ class MemoryCrudService:
             if entry is None:
                 raise ValueError(f"memory entry not found: {request.entry_id}")
             self._require_owner_match(scope, actor.agent_id, entry.owner_agent_id)
+            if request.if_match and request.if_match != entry.etag:
+                conflict_entry = self._build_conflict_entry(
+                    existing=entry,
+                    scope=scope,
+                    namespace=namespace,
+                    content=(
+                        request.content
+                        if request.content is not None
+                        else entry.content
+                    ),
+                    tags=(
+                        list(request.tags)
+                        if request.tags is not None
+                        else list(entry.tags)
+                    ),
+                    priority=request.priority or entry.priority,
+                    confidence=(
+                        request.confidence
+                        if request.confidence is not None
+                        else entry.confidence
+                    ),
+                    expires_at=request.expires_at,
+                    layer=request.layer or entry.layer,
+                    extra_tags=["conflict_update"],
+                )
+                created_conflict = store.add(conflict_entry)
+                self._record_write(count=1)
+                self._record_audit(
+                    actor=actor,
+                    scope=scope,
+                    namespace=namespace,
+                    resource_id=created_conflict.id,
+                    action="memory_update_conflict",
+                    success=False,
+                    details={"conflict_of": entry.id},
+                )
+                raise MemoryConflictError(entry.id, created_conflict)
             entry.content = request.content or entry.content
             if request.tags is not None:
                 entry.tags = list(request.tags)
@@ -222,6 +275,10 @@ class MemoryCrudService:
             if request.confidence is not None:
                 entry.confidence = request.confidence
             entry.expires_at = request.expires_at
+            if request.layer is not None:
+                entry.layer = request.layer
+            entry.version += 1
+            entry.etag = uuid4().hex
             entry.updated_at = _utc_now()
             updated.append(store.update(entry))
             self._record_write(count=1)
@@ -257,6 +314,31 @@ class MemoryCrudService:
             entry = store.get(request.entry_id, scope, namespace)
             if entry is not None:
                 self._require_owner_match(scope, actor.agent_id, entry.owner_agent_id)
+                if request.if_match and request.if_match != entry.etag:
+                    conflict_entry = self._build_conflict_entry(
+                        existing=entry,
+                        scope=scope,
+                        namespace=namespace,
+                        content=entry.content,
+                        tags=list(entry.tags),
+                        priority=entry.priority,
+                        confidence=entry.confidence,
+                        expires_at=entry.expires_at,
+                        layer=entry.layer,
+                        extra_tags=["conflict_delete"],
+                    )
+                    created_conflict = store.add(conflict_entry)
+                    self._record_write(count=1)
+                    self._record_audit(
+                        actor=actor,
+                        scope=scope,
+                        namespace=namespace,
+                        resource_id=created_conflict.id,
+                        action="memory_delete_conflict",
+                        success=False,
+                        details={"conflict_of": entry.id},
+                    )
+                    raise MemoryConflictError(entry.id, created_conflict)
             success = store.delete(request.entry_id, scope, namespace)
             results.append(success)
             self._record_write(count=1)
@@ -512,3 +594,39 @@ class MemoryCrudService:
         if not namespace or not namespace.strip():
             raise ValueError("namespace is required for team/global scope")
         return namespace
+
+    @staticmethod
+    def _build_conflict_entry(
+        *,
+        existing: MemoryEntry,
+        scope: MemoryScope,
+        namespace: str,
+        content: str,
+        tags: list[str],
+        priority: MemoryPriority,
+        confidence: float,
+        expires_at: datetime | None,
+        layer: MemoryLayer,
+        extra_tags: list[str] | None = None,
+    ) -> MemoryEntry:
+        now = _utc_now()
+        merged_tags = list(tags)
+        if extra_tags:
+            merged_tags.extend(extra_tags)
+        return MemoryEntry(
+            id=uuid4().hex,
+            scope=scope,
+            namespace=namespace,
+            owner_agent_id=existing.owner_agent_id,
+            content=content,
+            tags=merged_tags,
+            priority=priority,
+            created_at=now,
+            updated_at=now,
+            expires_at=expires_at,
+            source=existing.source,
+            confidence=confidence,
+            layer=layer,
+            conflict=True,
+            conflict_of=existing.id,
+        )

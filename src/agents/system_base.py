@@ -39,6 +39,7 @@ from src.cyberagent.tools.cli_executor import (
     get_agent_skill_prompt_entries,
     get_agent_skill_tools,
 )
+from src.cyberagent.tools.memory_crud import MemoryCrudTool
 
 if TYPE_CHECKING:
     from src.cyberagent.db.models.system import System
@@ -114,6 +115,10 @@ class SystemBase(RoutedAgent):
         self.available_tools: list[BaseTool[Any, Any]] = list(
             get_agent_skill_tools(self.agent_id.__str__())
         )
+        try:
+            self.available_tools.append(MemoryCrudTool(self.agent_id))
+        except Exception as exc:
+            logger.warning("Failed to initialize memory_crud tool: %s", exc)
         self.tools = self.available_tools
         # Create a valid Python identifier for the AssistantAgent
         # Replace slashes with underscores for the agent name

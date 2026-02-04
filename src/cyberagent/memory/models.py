@@ -80,6 +80,15 @@ class MemoryEntry:
             self.updated_at = self.created_at
         if self.tags is None:
             self.tags = []
+        if self.conflict and not self.conflict_of:
+            raise ValueError("conflict_of is required when conflict is True")
+        if self.conflict_of and not self.conflict:
+            self.conflict = True
+
+    @property
+    def is_conflict(self) -> bool:
+        """Backward-compatible alias for conflict flag."""
+        return self.conflict
 
 
 @dataclass(slots=True)
