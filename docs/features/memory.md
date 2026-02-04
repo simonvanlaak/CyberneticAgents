@@ -22,7 +22,8 @@ The memory system provides scoped CRUD for agent, team, and global memory with o
 Conflicts are stored as separate entries with `conflict=True` and `conflict_of` set to the original ID.
 
 ## Runtime Behavior
-- `SystemBase` registers `MemoryCrudTool` for all agents at startup.
+- `SystemBase` registers `MemoryCrudTool` only when the system has the `memory_crud` skill grant.
+- `MemoryCrudTool` also enforces skill permissions at runtime (deny-by-default).
 - `MemoryCrudTool` uses `MemoryCrudService` for permission checks, scope defaults, pagination, and concurrency.
 - Default scope is `agent`.
 - Agent scope defaults `namespace` to the actor’s agent ID.
@@ -61,6 +62,7 @@ These hooks are optional and only active when passed in.
 - `FORBIDDEN` for RBAC/VSM denials
 - `NOT_FOUND` for missing entries
 - `CONFLICT` for `if_match` mismatches
+- `NOT_IMPLEMENTED` when the configured backend does not support an operation
 
 ## How to Test
 - `python3 -m pytest tests/memory/ -v`
