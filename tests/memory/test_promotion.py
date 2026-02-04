@@ -5,6 +5,7 @@ import pytest
 from src.cyberagent.memory.crud import MemoryActorContext, MemoryCrudService
 from src.cyberagent.memory.models import (
     MemoryEntry,
+    MemoryLayer,
     MemoryListResult,
     MemoryPriority,
     MemoryQuery,
@@ -72,6 +73,7 @@ def _entry(content: str) -> MemoryEntry:
         updated_at=now,
         source=MemorySource.MANUAL,
         confidence=0.9,
+        layer=MemoryLayer.SESSION,
     )
 
 
@@ -109,6 +111,7 @@ def test_promote_creates_conflict_entry() -> None:
             updated_at=datetime.datetime.now(datetime.timezone.utc),
             source=MemorySource.MANUAL,
             confidence=0.9,
+            layer=MemoryLayer.SESSION,
         )
     )
     promoted = service.promote_entry(
@@ -118,5 +121,6 @@ def test_promote_creates_conflict_entry() -> None:
         target_scope=MemoryScope.TEAM,
         namespace="root",
     )
-    assert promoted.is_conflict is True
+    assert promoted.conflict is True
+    assert promoted.conflict_of == "mem-1"
     assert promoted.id != "mem-1"

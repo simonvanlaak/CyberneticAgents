@@ -5,6 +5,7 @@ import pytest
 from src.cyberagent.memory.models import (
     MemoryAuditEvent,
     MemoryEntry,
+    MemoryLayer,
     MemoryListResult,
     MemoryPriority,
     MemoryScope,
@@ -64,6 +65,11 @@ def test_memory_entry_defaults_tags_and_updated_at() -> None:
     )
     assert entry.tags == []
     assert entry.updated_at == now
+    assert entry.layer == MemoryLayer.SESSION
+    assert entry.version == 1
+    assert entry.etag
+    assert entry.conflict is False
+    assert entry.conflict_of is None
 
 
 def test_memory_list_result_requires_cursor_when_has_more() -> None:

@@ -6,11 +6,13 @@ import asyncio
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+from uuid import uuid4
 
 from autogen_core.memory import Memory, MemoryContent, MemoryMimeType
 
 from src.cyberagent.memory.models import (
     MemoryEntry,
+    MemoryLayer,
     MemoryListResult,
     MemoryPriority,
     MemoryQuery,
@@ -94,6 +96,8 @@ def _matches_query(content: MemoryContent, query: MemoryQuery) -> bool:
     entry = _entry_from_memory_content(content)
     if entry.scope != query.scope or entry.namespace != query.namespace:
         return False
+    if query.layer and entry.layer != query.layer:
+        return False
     if query.owner_agent_id and entry.owner_agent_id != query.owner_agent_id:
         return False
     if query.tags:
@@ -115,7 +119,11 @@ def _entry_to_memory_content(entry: MemoryEntry) -> MemoryContent:
         "expires_at": entry.expires_at.isoformat() if entry.expires_at else None,
         "source": entry.source.value,
         "confidence": entry.confidence,
-        "is_conflict": entry.is_conflict,
+        "layer": entry.layer.value,
+        "version": entry.version,
+        "etag": entry.etag,
+        "conflict": entry.conflict,
+        "conflict_of": entry.conflict_of,
     }
     return MemoryContent(
         content=entry.content,
@@ -128,6 +136,8 @@ def _entry_from_memory_content(content: MemoryContent) -> MemoryEntry:
     if content.metadata is None:
         raise ValueError("MemoryContent metadata is required for adapter conversion.")
     metadata = content.metadata
+    conflict = bool(metadata.get("conflict", metadata.get("is_conflict", False)))
+    conflict_of = metadata.get("conflict_of")
     return MemoryEntry(
         id=str(metadata["id"]),
         scope=MemoryScope(str(metadata["scope"])),
@@ -145,7 +155,11 @@ def _entry_from_memory_content(content: MemoryContent) -> MemoryEntry:
         ),
         source=MemorySource(str(metadata["source"])),
         confidence=float(metadata["confidence"]),
-        is_conflict=bool(metadata.get("is_conflict", False)),
+        layer=MemoryLayer(str(metadata.get("layer", MemoryLayer.SESSION.value))),
+        version=int(metadata.get("version", 1)),
+        etag=str(metadata.get("etag") or uuid4().hex),
+        conflict=conflict,
+        conflict_of=str(conflict_of) if conflict_of else None,
     )
 
 
