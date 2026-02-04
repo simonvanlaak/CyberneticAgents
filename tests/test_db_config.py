@@ -59,9 +59,11 @@ def test_init_db_recovers_from_sqlite_disk_io_error(
     db_path = tmp_path / "bad.db"
     db_path.write_text("corrupt", encoding="utf-8")
     previous = init_db.DATABASE_URL
+    original_configure = init_db.configure_database
     try:
         init_db.configure_database(f"sqlite:///{db_path.resolve()}")
         call_state = {"count": 0}
+        configured: list[str] = []
 
         def _fake_create_all(*_args: object, **_kwargs: object) -> None:
             call_state["count"] += 1
@@ -71,6 +73,11 @@ def test_init_db_recovers_from_sqlite_disk_io_error(
                 )
 
         monkeypatch.setattr(init_db.Base.metadata, "create_all", _fake_create_all)
+        monkeypatch.setattr(
+            init_db,
+            "configure_database",
+            lambda url: configured.append(url),
+        )
         monkeypatch.setattr(init_db, "_ensure_team_last_active_column", lambda: None)
 
         init_db.init_db()
@@ -78,5 +85,6 @@ def test_init_db_recovers_from_sqlite_disk_io_error(
         backups = list(tmp_path.glob("bad.corrupt.*.db"))
         assert backups
         assert call_state["count"] == 2
+        assert configured
     finally:
-        init_db.configure_database(previous)
+        original_configure(previous)

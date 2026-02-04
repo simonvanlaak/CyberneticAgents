@@ -948,3 +948,18 @@ def test_warn_optional_api_keys_reads_onepassword(
     assert "LANGSMITH_API_KEY" in captured
     assert "LANGFUSE_PUBLIC_KEY" not in captured
     assert "LANGFUSE_SECRET_KEY" not in captured
+
+
+def test_check_onboarding_repo_token_warns_when_missing(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.delenv("GITHUB_READONLY_TOKEN", raising=False)
+    monkeypatch.setattr(
+        onboarding_cli,
+        "load_secret_from_1password_with_error",
+        lambda **_kwargs: (None, None),
+    )
+
+    assert onboarding_cli._check_onboarding_repo_token() is True
+    captured = capsys.readouterr().out
+    assert "GITHUB_READONLY_TOKEN" in captured

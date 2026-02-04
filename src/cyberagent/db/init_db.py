@@ -62,6 +62,8 @@ def init_db():
         if "disk i/o error" in str(exc).lower():
             db_path = get_database_path()
             backup_path = _attempt_recover_sqlite(db_path)
+            if backup_path is not None:
+                configure_database(DATABASE_URL)
             try:
                 Base.metadata.create_all(bind=engine)
             except OperationalError as retry_exc:

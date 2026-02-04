@@ -77,7 +77,7 @@ class CliTool:
         if callable(getattr(type(self.executor), "set_exec_env", None)):
             try:
                 extra_required_env = list(required_env or [])
-                token_env = kwargs.get("token_env")
+                token_env = kwargs.get("token_env") or kwargs.get("token-env")
                 if token_env:
                     extra_required_env.append(str(token_env))
                 tool_secrets = secrets.get_tool_secrets(

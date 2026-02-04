@@ -43,11 +43,13 @@ from src.cyberagent.cli.onboarding_defaults import (
 )
 from src.cyberagent.cli.onboarding_discovery import run_discovery_onboarding
 from src.cyberagent.cli.message_catalog import get_message
+from src.cyberagent.cli.onboarding_constants import DEFAULT_GIT_TOKEN_ENV
 from src.cyberagent.cli.onboarding_secrets import (
     VAULT_NAME,
     get_onepassword_session_env,
     has_onepassword_auth,
     load_secret_from_1password,
+    load_secret_from_1password_with_error,
 )
 from src.cyberagent.cli.onboarding_vault import (
     prompt_store_secret_in_1password,
@@ -519,6 +521,7 @@ def run_technical_onboarding_checks() -> bool:
         check_docker_available,
         check_cli_tools_image_available,
         _check_onepassword_auth,
+        _check_onboarding_repo_token,
         _check_required_tool_secrets,
         _check_skill_root_access,
         _check_network_access,
@@ -775,6 +778,39 @@ def _check_required_tool_secrets() -> bool:
             vault_name=VAULT_NAME,
         ):
             return False
+    return True
+
+
+def _check_onboarding_repo_token() -> bool:
+    token_env = DEFAULT_GIT_TOKEN_ENV
+    if os.environ.get(token_env):
+        return True
+    loaded, error = load_secret_from_1password_with_error(
+        vault_name=VAULT_NAME,
+        item_name=token_env,
+        field_label="credential",
+    )
+    if loaded:
+        os.environ[token_env] = loaded
+        return True
+    if error:
+        print(
+            get_message(
+                "onboarding",
+                "github_token_missing_with_error",
+                token_env=token_env,
+                error=error,
+            )
+        )
+        return True
+    print(
+        get_message(
+            "onboarding",
+            "github_token_missing",
+            token_env=token_env,
+            vault_name=VAULT_NAME,
+        )
+    )
     return True
 
 

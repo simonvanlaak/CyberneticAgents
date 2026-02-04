@@ -402,6 +402,34 @@ async def test_cli_tool_execute_requires_token_env(
     assert "GIT_TOKEN" in result["error"]
 
 
+@pytest.mark.asyncio
+async def test_cli_tool_execute_requires_token_env_kebab_case(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OP_SERVICE_ACCOUNT_TOKEN", "token")
+    monkeypatch.delenv("GIT_TOKEN", raising=False)
+    executor = _FakeExecutor(json.dumps({"ok": True}))
+    tool = CliTool(executor)
+
+    kwargs: dict[str, str] = {
+        "token-env": "GIT_TOKEN",
+        "repo": "https://example.com/repo.git",
+        "dest": "repo",
+    }
+    result = await tool.execute(
+        "git_readonly_sync",
+        agent_id=None,
+        subcommand=None,
+        timeout_seconds=None,
+        skill_name=None,
+        required_env=None,
+        **kwargs,
+    )
+
+    assert result["success"] is False
+    assert "GIT_TOKEN" in result["error"]
+
+
 def test_env_executor_injects_env() -> None:
     executor = _make_env_executor()
     executor.set_exec_env({"KEY": "VALUE"})
