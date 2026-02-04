@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
-from typing import cast
+from typing import Any, cast
 import pytest
 
 from src.cyberagent.cli import onboarding_discovery
@@ -30,6 +31,8 @@ def _stub_messages(monkeypatch: pytest.MonkeyPatch) -> None:
             return "We couldn't sync your PKM vault."
         if key == "pkm_sync_starting":
             return "Syncing your PKM vault..."
+        if key == "pkm_sync_still_running":
+            return "Still syncing your PKM vault..."
         if key == "onepassword_cli_not_ready":
             return "1Password CLI authentication failed."
         if key == "continue_without_pkm_prompt":
@@ -332,3 +335,31 @@ def test_sync_repo_passes_timeout_to_cli_tool(
 
     assert "timeout_seconds" in captured
     assert captured["timeout_seconds"] == onboarding_discovery.GIT_SYNC_TIMEOUT_SECONDS
+
+
+def test_run_cli_tool_returns_timeout_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class DummyTool:
+        executor = None
+
+        async def execute(self, *_args: object, **_kwargs: object) -> dict[str, object]:
+            return {"success": True}
+
+    async def _fake_wait_for(*_args: object, **_kwargs: object) -> dict[str, object]:
+        coro = cast(Any, _args[0])
+        close = getattr(coro, "close", None)
+        if callable(close):
+            close()
+        raise asyncio.TimeoutError
+
+    monkeypatch.setattr(onboarding_discovery.asyncio, "wait_for", _fake_wait_for)
+
+    result = onboarding_discovery._run_cli_tool(
+        DummyTool(),
+        "git-readonly-sync",
+        timeout_seconds=1,
+    )
+
+    assert result["success"] is False
+    assert result["error"] == "Timeout"

@@ -7,6 +7,7 @@ from datetime import datetime
 import os
 from pathlib import Path
 import subprocess
+import threading
 from typing import Any
 from urllib.parse import urlparse, urlunparse
 
@@ -203,6 +204,7 @@ def _sync_obsidian_repo(
     repo_name = _repo_name_from_url(repo_url)
     dest = Path("data") / "obsidian" / repo_name
     dest.parent.mkdir(parents=True, exist_ok=True)
+    stop_event = _start_sync_notifier()
     result = _run_cli_tool(
         cli_tool,
         "git-readonly-sync",
@@ -216,6 +218,7 @@ def _sync_obsidian_repo(
             "token-username": token_username,
         },
     )
+    stop_event.set()
     if not result.get("success"):
         error = (
             result.get("error")
@@ -226,6 +229,17 @@ def _sync_obsidian_repo(
         print(get_message("onboarding_discovery", "failed_sync_repo", error=error))
         return dest, False
     return dest, True
+
+
+def _start_sync_notifier() -> threading.Event:
+    stop_event = threading.Event()
+
+    def _notify() -> None:
+        while not stop_event.wait(60):
+            print(get_message("onboarding_discovery", "pkm_sync_still_running"))
+
+    threading.Thread(target=_notify, daemon=True).start()
+    return stop_event
 
 
 def _summarize_markdown_repo(repo_path: Path) -> str:
@@ -352,9 +366,15 @@ def _run_cli_tool(
                 except Exception as exc:
                     return {"success": False, "error": str(exc)}
         try:
-            return await cli_tool.execute(
-                tool_name, timeout_seconds=timeout_seconds, **kwargs
-            )
+            try:
+                execute_task = cli_tool.execute(
+                    tool_name, timeout_seconds=timeout_seconds, **kwargs
+                )
+                if timeout_seconds is not None:
+                    return await asyncio.wait_for(execute_task, timeout=timeout_seconds)
+                return await execute_task
+            except asyncio.TimeoutError:
+                return {"success": False, "error": "Timeout"}
         finally:
             if started and executor is not None:
                 stop = getattr(executor, "stop", None)
