@@ -689,8 +689,7 @@ async def _handle_reset(args: argparse.Namespace) -> int:
             print(get_message("cyberagent", "reset_canceled"))
             return 0
 
-    if _runtime_pid_is_running():
-        await _handle_stop(args)
+    await _handle_stop(args)
 
     _reset_data_dir(Path("data"))
     _remove_dir(Path("logs"))
