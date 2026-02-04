@@ -45,6 +45,17 @@ class _FakeExecutor:
         return SimpleNamespace(exit_code=0, output=self.output)
 
 
+class _FakeStartableExecutor(_FakeExecutor):
+    def __init__(self, output: str) -> None:
+        super().__init__(output)
+        self.started = False
+        self._running = False
+
+    async def start(self) -> None:
+        self.started = True
+        self._running = True
+
+
 class _FakeContainer:
     def __init__(self, exit_code: int, output: str) -> None:
         self._exit_code = exit_code
@@ -437,6 +448,17 @@ async def test_env_executor_executes_command(monkeypatch: pytest.MonkeyPatch) ->
     assert output == "ok"
     container = cast(_FakeContainer, executor._container)
     assert container.last_env == {"KEY": "VALUE"}
+
+
+@pytest.mark.asyncio
+async def test_cli_tool_starts_executor_when_available() -> None:
+    executor = _FakeStartableExecutor(json.dumps({"ok": True}))
+    tool = CliTool(executor)
+
+    result = await tool.execute("web_fetch")
+
+    assert executor.started is True
+    assert result["success"] is True
 
 
 def _make_skill_definition(name: str) -> SkillDefinition:

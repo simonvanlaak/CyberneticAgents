@@ -1,5 +1,6 @@
 """CLI tool wrapper for AutoGen agents."""
 
+import inspect
 import json
 import logging
 import shlex
@@ -103,6 +104,7 @@ class CliTool:
             _set_executor_timeout(self.executor, timeout_seconds)
 
         try:
+            await _ensure_executor_started(self.executor)
             # Execute in Docker container
             result = await self.executor.execute_code_blocks(
                 code_blocks=[CodeBlock(language="bash", code=command)],
@@ -196,6 +198,17 @@ class CliTool:
 def _get_executor_timeout(executor: Any) -> Optional[int]:
     timeout = getattr(executor, "_timeout", None)
     return timeout if isinstance(timeout, int) else None
+
+
+async def _ensure_executor_started(executor: Any) -> None:
+    start = getattr(executor, "start", None)
+    if not callable(start):
+        return
+    if getattr(executor, "_running", False):
+        return
+    result = start()
+    if inspect.isawaitable(result):
+        await result
 
 
 def _set_executor_timeout(executor: Any, timeout_seconds: int) -> None:
