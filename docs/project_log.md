@@ -170,3 +170,7 @@ Manually tested telegram feature.
 ### 2026-02-04
 Implemented memory. Created config dir with default team & procedures defined. Created onboarding procedure. Continued working on onboarding experience, including technical check, feature activation check and providing basic user infos to prepare onboarding interview. Implemented reset command, to test onboarding more easily.
 Test command: cyberagent onboarding --name Simon --repo https://github.com/simonvanlaak/maya-obsidian-vault --profile-link simonvanlaak.de
+Wrote down plan to have agents to research in the background in web and on the provided personal knowledge management (PKM) -> which is a private github repo with .md files for now from my obsidian vault.
+The user interview is happening while the CyberneticAgents are getting setup and research is happening. The interview is being enriched by the research results in the background, by writing research results into global memory. 
+Cleaned up onboarding more, and integrated telegram messaging in onborading experience. Issue now is that telegram voice not could not be
+transcribed.
