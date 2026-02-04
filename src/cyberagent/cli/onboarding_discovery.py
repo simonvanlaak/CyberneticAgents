@@ -176,7 +176,12 @@ def _sync_obsidian_repo(
         token_username=token_username,
     )
     if not result.get("success"):
-        error = result.get("error") or result.get("raw_output", "")
+        error = (
+            result.get("error")
+            or result.get("stderr")
+            or result.get("raw_output")
+            or "Unknown error"
+        )
         print(get_message("onboarding_discovery", "failed_sync_repo", error=error))
         return dest, False
     return dest, True

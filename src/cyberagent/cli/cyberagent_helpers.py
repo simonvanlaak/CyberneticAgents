@@ -5,6 +5,8 @@ import getpass
 from pathlib import Path
 from typing import Any, Callable
 
+from src.cyberagent.cli.message_catalog import get_message
+
 
 def handle_help(
     build_parser: Callable[[], argparse.ArgumentParser], topic: str | None
@@ -15,7 +17,7 @@ def handle_help(
         return 0
     subparser = _lookup_subparser(parser, topic)
     if subparser is None:
-        print(f"Unknown help topic: {topic}")
+        print(get_message("cyberagent_helpers", "unknown_help_topic", topic=topic))
         return 1
     subparser.print_help()
     return 0
@@ -29,15 +31,19 @@ def handle_login(
     keyring_service: str,
 ) -> int:
     if not token:
-        token = getpass.getpass("Authentication token: ")
+        token = getpass.getpass(get_message("cyberagent_helpers", "token_prompt"))
     if keyring_available and keyring_module is not None:
         keyring_module.set_password(keyring_service, "cli", token)
-        print("Token stored securely in the OS keyring.")
+        print(get_message("cyberagent_helpers", "token_stored_keyring"))
     else:
         fallback = Path.home() / ".cyberagent_token"
         fallback.write_text(token, encoding="utf-8")
         print(
-            f"Keyring unavailable; token saved to {fallback} (read/write permissions only)."
+            get_message(
+                "cyberagent_helpers",
+                "keyring_unavailable",
+                path=fallback,
+            )
         )
     return 0
 

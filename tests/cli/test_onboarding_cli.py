@@ -7,6 +7,7 @@ import pytest
 
 from src.cyberagent.cli import onboarding as onboarding_cli
 from src.cyberagent.cli import onboarding_docker
+from src.cyberagent.cli import onboarding_vault
 from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.models.procedure import Procedure
 from src.cyberagent.db.models.procedure_run import ProcedureRun
@@ -483,14 +484,14 @@ def test_technical_onboarding_requires_groq_key(
     monkeypatch.setattr(onboarding_cli, "_check_skill_root_access", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_check_network_access", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_check_required_tool_secrets", lambda: True)
-    monkeypatch.setattr(onboarding_cli, "_has_onepassword_auth", lambda: True)
+    monkeypatch.setattr(onboarding_vault, "has_onepassword_auth", lambda: True)
     monkeypatch.setattr(
         onboarding_cli, "_load_technical_onboarding_state", lambda: None
     )
     monkeypatch.setattr(
         onboarding_cli, "_save_technical_onboarding_state", lambda *_: None
     )
-    monkeypatch.setattr(onboarding_cli, "_prompt_yes_no", lambda *_: False)
+    monkeypatch.setattr(onboarding_vault, "prompt_yes_no", lambda *_: False)
 
     assert onboarding_cli.run_technical_onboarding_checks() is False
     captured = capsys.readouterr().out
@@ -563,13 +564,13 @@ def test_missing_brave_key_explains_vault_and_item(
 ) -> None:
     monkeypatch.delenv("BRAVE_API_KEY", raising=False)
     monkeypatch.setattr(onboarding_cli, "_has_onepassword_auth", lambda: True)
-    monkeypatch.setattr(onboarding_cli.shutil, "which", lambda *_: "/usr/bin/op")
+    monkeypatch.setattr(onboarding_vault.shutil, "which", lambda *_: "/usr/bin/op")
 
     def _load_secret(**_kwargs: object) -> None:
         return None
 
     monkeypatch.setattr(onboarding_cli, "_load_secret_from_1password", _load_secret)
-    monkeypatch.setattr(onboarding_cli, "_prompt_yes_no", lambda *_: False)
+    monkeypatch.setattr(onboarding_vault, "prompt_yes_no", lambda *_: False)
 
     assert onboarding_cli._check_required_tool_secrets() is False
     captured = capsys.readouterr().out
@@ -602,17 +603,20 @@ def test_prompt_store_secret_creates_vault_and_item(
             return DummyResult(returncode=0)
         return DummyResult(returncode=0)
 
-    monkeypatch.setattr(onboarding_cli.shutil, "which", lambda *_: "/usr/bin/op")
-    monkeypatch.setattr(onboarding_cli, "_has_onepassword_auth", lambda: True)
-    monkeypatch.setattr(onboarding_cli, "_prompt_yes_no", lambda *_: True)
-    monkeypatch.setattr(onboarding_cli.getpass, "getpass", lambda *_: "secret")
-    monkeypatch.setattr(onboarding_cli.subprocess, "run", fake_run)
+    monkeypatch.setattr(onboarding_vault.shutil, "which", lambda *_: "/usr/bin/op")
+    monkeypatch.setattr(onboarding_vault, "has_onepassword_auth", lambda: True)
+    monkeypatch.setattr(onboarding_vault, "prompt_yes_no", lambda *_: True)
+    monkeypatch.setattr(onboarding_cli, "prompt_yes_no", lambda *_: True)
+    monkeypatch.setattr(onboarding_cli, "prompt_yes_no", lambda *_: True)
+    monkeypatch.setattr(onboarding_vault.getpass, "getpass", lambda *_: "secret")
+    monkeypatch.setattr(onboarding_vault.subprocess, "run", fake_run)
 
     assert (
-        onboarding_cli._prompt_store_secret_in_1password(
+        onboarding_cli.prompt_store_secret_in_1password(
             env_name="BRAVE_API_KEY",
             description="Brave Search API key",
             doc_hint=None,
+            vault_name="CyberneticAgents",
         )
         is True
     )
@@ -627,13 +631,14 @@ def test_optional_telegram_setup_prompts_when_missing(
 ) -> None:
     monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
     monkeypatch.setattr(onboarding_cli.sys.stdin, "isatty", lambda: True)
-    monkeypatch.setattr(onboarding_cli.shutil, "which", lambda *_: "/usr/bin/op")
-    monkeypatch.setattr(onboarding_cli, "_has_onepassword_auth", lambda: True)
+    monkeypatch.setattr(onboarding_vault.shutil, "which", lambda *_: "/usr/bin/op")
+    monkeypatch.setattr(onboarding_vault, "has_onepassword_auth", lambda: True)
     monkeypatch.setattr(
-        onboarding_cli, "_check_onepassword_write_access", lambda *_: True
+        onboarding_vault, "check_onepassword_write_access", lambda *_: True
     )
-    monkeypatch.setattr(onboarding_cli, "_prompt_yes_no", lambda *_: True)
-    monkeypatch.setattr(onboarding_cli.getpass, "getpass", lambda *_: "secret")
+    monkeypatch.setattr(onboarding_vault, "prompt_yes_no", lambda *_: True)
+    monkeypatch.setattr(onboarding_cli, "prompt_yes_no", lambda *_: True)
+    monkeypatch.setattr(onboarding_vault.getpass, "getpass", lambda *_: "secret")
 
     stored: list[dict[str, str]] = []
 
@@ -641,8 +646,8 @@ def test_optional_telegram_setup_prompts_when_missing(
         stored.append({"vault": vault, "title": title, "secret": secret})
         return True
 
-    monkeypatch.setattr(onboarding_cli, "_create_onepassword_item", fake_create)
-    monkeypatch.setattr(onboarding_cli, "_ensure_onepassword_vault", lambda *_: True)
+    monkeypatch.setattr(onboarding_vault, "create_onepassword_item", fake_create)
+    monkeypatch.setattr(onboarding_vault, "ensure_onepassword_vault", lambda *_: True)
 
     onboarding_cli._offer_optional_telegram_setup()
     captured = capsys.readouterr().out
@@ -674,9 +679,7 @@ def test_optional_telegram_setup_skips_prompt_when_found_in_1password(
     monkeypatch.setattr(
         onboarding_cli, "_offer_optional_telegram_webhook_setup", _mark_webhook_called
     )
-    monkeypatch.setattr(
-        onboarding_cli, "_prompt_store_secret_in_1password", _fail_store
-    )
+    monkeypatch.setattr(onboarding_cli, "prompt_store_secret_in_1password", _fail_store)
 
     onboarding_cli._offer_optional_telegram_setup()
     captured = capsys.readouterr().out
@@ -727,21 +730,22 @@ def test_prompt_store_secret_requires_write_access(
             return DummyResult(returncode=0)
         return DummyResult(returncode=0)
 
-    monkeypatch.setattr(onboarding_cli.shutil, "which", lambda *_: "/usr/bin/op")
-    monkeypatch.setattr(onboarding_cli, "_has_onepassword_auth", lambda: True)
+    monkeypatch.setattr(onboarding_vault.shutil, "which", lambda *_: "/usr/bin/op")
+    monkeypatch.setattr(onboarding_vault, "has_onepassword_auth", lambda: True)
 
     def _fail_prompt(*_args: object, **_kwargs: object) -> bool:
         raise AssertionError("Prompt should not be called without write access.")
 
-    monkeypatch.setattr(onboarding_cli, "_prompt_yes_no", _fail_prompt)
-    monkeypatch.setattr(onboarding_cli.getpass, "getpass", lambda *_: "secret")
-    monkeypatch.setattr(onboarding_cli.subprocess, "run", fake_run)
+    monkeypatch.setattr(onboarding_vault, "prompt_yes_no", _fail_prompt)
+    monkeypatch.setattr(onboarding_vault.getpass, "getpass", lambda *_: "secret")
+    monkeypatch.setattr(onboarding_vault.subprocess, "run", fake_run)
 
     assert (
-        onboarding_cli._prompt_store_secret_in_1password(
+        onboarding_cli.prompt_store_secret_in_1password(
             env_name="BRAVE_API_KEY",
             description="Brave Search API key",
             doc_hint=None,
+            vault_name="CyberneticAgents",
         )
         is False
     )

@@ -7,6 +7,7 @@ import sys
 from pathlib import Path
 
 from src.cyberagent.stt.transcribe import transcribe_file
+from src.cyberagent.cli.message_catalog import get_message
 
 
 def add_transcribe_parser(
@@ -38,17 +39,20 @@ def handle_transcribe(args: argparse.Namespace) -> int:
     """
     file_path = Path(args.file)
     if not file_path.exists():
-        print(f"Audio file not found: {file_path}", file=sys.stderr)
+        print(
+            get_message("transcribe", "file_not_found", path=file_path),
+            file=sys.stderr,
+        )
         return 2
     try:
         result = transcribe_file(file_path)
     except Exception as exc:
-        print(f"Transcription failed: {exc}", file=sys.stderr)
-        return 2
-    if result.low_confidence:
         print(
-            "Warning: audio quality appears low; transcript may be inaccurate.",
+            get_message("transcribe", "transcription_failed", error=exc),
             file=sys.stderr,
         )
+        return 2
+    if result.low_confidence:
+        print(get_message("transcribe", "low_confidence"), file=sys.stderr)
     print(result.text)
     return 0

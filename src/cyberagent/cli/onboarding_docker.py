@@ -7,6 +7,7 @@ import subprocess
 
 from src.cyberagent.tools.cli_executor.skill_loader import load_skill_definitions
 from src.cyberagent.tools.cli_executor.skill_runtime import DEFAULT_SKILLS_ROOT
+from src.cyberagent.cli.message_catalog import get_message
 
 
 def skills_require_docker() -> bool:
@@ -26,8 +27,14 @@ def check_docker_socket_access() -> bool:
         return True
     if os.access(socket_path, os.R_OK | os.W_OK):
         return True
-    print(f"Docker socket is not accessible: {socket_path}")
-    print("Fix Docker socket permissions and re-run onboarding.")
+    print(
+        get_message(
+            "onboarding_docker",
+            "socket_inaccessible",
+            socket_path=socket_path,
+        )
+    )
+    print(get_message("onboarding_docker", "fix_socket_permissions"))
     return False
 
 
@@ -35,12 +42,9 @@ def check_docker_available() -> bool:
     docker_path = shutil.which("docker")
     if not docker_path:
         if not skills_require_docker():
-            print(
-                "Docker not found, but no Docker-based skills are configured. "
-                "Continuing without tool execution."
-            )
+            print(get_message("onboarding_docker", "docker_not_found_no_skills"))
             return True
-        print("Docker is required for tool execution but was not found in PATH.")
+        print(get_message("onboarding_docker", "docker_required_missing"))
         return False
     try:
         result = subprocess.run(
@@ -51,25 +55,18 @@ def check_docker_available() -> bool:
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired):
-        print("Docker is installed but not reachable. Is the daemon running?")
+        print(get_message("onboarding_docker", "docker_unreachable"))
         return False
     if result.returncode != 0:
         stderr = (result.stderr or "").lower()
         if "permission denied" in stderr:
-            print("Docker is running but the current user cannot access the daemon.")
-            print(
-                "Fix: add your user to the docker group or run the CLI as the user "
-                "that owns the Docker Desktop socket."
-            )
+            print(get_message("onboarding_docker", "docker_permission_denied"))
+            print(get_message("onboarding_docker", "docker_permission_fix"))
             return False
         if not skills_require_docker():
-            print(
-                "Docker is installed but not reachable. "
-                "Continuing without tool execution because no Docker-based "
-                "skills are configured."
-            )
+            print(get_message("onboarding_docker", "docker_unreachable_no_skills"))
             return True
-        print("Docker is installed but not reachable. Is the daemon running?")
+        print(get_message("onboarding_docker", "docker_unreachable"))
         return False
     return True
 
@@ -93,23 +90,17 @@ def check_cli_tools_image_available() -> bool:
             check=False,
         )
     except (OSError, subprocess.TimeoutExpired):
-        print("Unable to verify the CLI tools image. Is Docker running?")
+        print(get_message("onboarding_docker", "cli_tools_image_unverified"))
         return False
     if result.returncode == 0:
         return True
     stderr = (result.stderr or "").lower()
     if "permission denied" in stderr:
-        print("Unable to access the Docker daemon (permission denied).")
-        print(
-            "Fix: add your user to the docker group or run the CLI as the user "
-            "that owns the Docker Desktop socket."
-        )
+        print(get_message("onboarding_docker", "docker_daemon_permission_denied"))
+        print(get_message("onboarding_docker", "docker_permission_fix"))
         return False
-    print(
-        "CLI tools image is not available. Build or pull the image, then re-run "
-        "onboarding."
-    )
-    print(f"Expected image: {image}")
+    print(get_message("onboarding_docker", "cli_tools_image_missing"))
+    print(get_message("onboarding_docker", "expected_image", image=image))
     return False
 
 

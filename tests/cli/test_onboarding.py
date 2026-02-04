@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
 import pytest
 
@@ -50,13 +51,19 @@ def _default_onboarding_args() -> argparse.Namespace:
 
 
 def test_handle_onboarding_creates_default_team(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
 ) -> None:
     _clear_teams()
     _patch_run_checks(monkeypatch, True)
-    monkeypatch.setattr(ONBOARDING, "_run_discovery_onboarding", lambda *_: None)
+    summary_path = tmp_path / "summary.md"
+    summary_path.write_text("summary", encoding="utf-8")
     monkeypatch.setattr(
-        ONBOARDING, "_trigger_onboarding_initiative", lambda *_, **__: None
+        ONBOARDING, "_run_discovery_onboarding", lambda *_: summary_path
+    )
+    monkeypatch.setattr(
+        ONBOARDING, "_trigger_onboarding_initiative", lambda *_, **__: True
     )
 
     exit_code = _handle_onboarding(_default_onboarding_args())
@@ -78,7 +85,9 @@ def test_handle_onboarding_creates_default_team(
 
 
 def test_handle_onboarding_skips_when_team_exists(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
 ) -> None:
     _clear_teams()
     session = next(get_db())
@@ -89,9 +98,13 @@ def test_handle_onboarding_skips_when_team_exists(
         session.close()
 
     _patch_run_checks(monkeypatch, True)
-    monkeypatch.setattr(ONBOARDING, "_run_discovery_onboarding", lambda *_: None)
+    summary_path = tmp_path / "summary.md"
+    summary_path.write_text("summary", encoding="utf-8")
     monkeypatch.setattr(
-        ONBOARDING, "_trigger_onboarding_initiative", lambda *_, **__: None
+        ONBOARDING, "_run_discovery_onboarding", lambda *_: summary_path
+    )
+    monkeypatch.setattr(
+        ONBOARDING, "_trigger_onboarding_initiative", lambda *_, **__: True
     )
 
     exit_code = _handle_onboarding(_default_onboarding_args())

@@ -18,6 +18,7 @@ from src.cyberagent.memory.models import (
     MemoryScope,
     MemorySource,
 )
+from src.cyberagent.cli.message_catalog import get_message
 from src.enums import SystemType
 
 
@@ -57,7 +58,7 @@ def store_onboarding_memory(team_id: int, summary_path: Path | None) -> None:
     try:
         service.create_entries(actor=actor, requests=[request])
     except (PermissionError, ValueError):
-        print("Warning: unable to store onboarding summary in global memory.")
+        print(get_message("onboarding_memory", "unable_store_summary"))
 
 
 def _build_memory_service() -> MemoryCrudService:

@@ -36,8 +36,10 @@ from src.cyberagent.cli import dev as dev_cli
 from src.cyberagent.cli.env_loader import load_op_service_account_token
 from src.cyberagent.cli import log_filters
 from src.cyberagent.cli import onboarding as onboarding_cli
+from src.cyberagent.cli.cli_log_state import check_recent_runtime_errors
 from src.cyberagent.cli.cyberagent_helpers import handle_help, handle_login
 from src.cyberagent.cli.headless import run_headless_session
+from src.cyberagent.cli.message_catalog import get_message
 from src.cyberagent.cli.status import main as status_main
 from src.cyberagent.cli.suggestion_queue import enqueue_suggestion
 from src.cyberagent.cli.transcribe import add_transcribe_parser, handle_transcribe
@@ -296,7 +298,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         return _handle_help(args)
     handler = _HANDLERS.get(args.command)
     if handler is None:
-        print(f"Unknown command: {args.command}", file=sys.stderr)
+        print(
+            get_message("cyberagent", "unknown_command", command=args.command),
+            file=sys.stderr,
+        )
         return 1
     if asyncio.iscoroutinefunction(handler):
         return asyncio.run(handler(args))
@@ -305,8 +310,10 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 async def _handle_start(args: argparse.Namespace) -> int:
     if os.environ.get(TEST_START_ENV) == "1":
-        print("Runtime start stubbed (test mode).")
-        print(f"Next: run {SUGGEST_COMMAND} to give the agents a task.")
+        print(get_message("cyberagent", "runtime_start_stubbed"))
+        print(
+            get_message("cyberagent", "next_suggest", suggest_command=SUGGEST_COMMAND)
+        )
         return 0
     init_db()
     team_id = _require_existing_team()
@@ -326,15 +333,21 @@ async def _handle_start(args: argparse.Namespace) -> int:
     )
     RUNTIME_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
     RUNTIME_PID_FILE.write_text(str(proc.pid), encoding="utf-8")
-    print(f"Runtime starting in background (pid {proc.pid}).")
-    print(f"Next: run {SUGGEST_COMMAND} to give the agents a task.")
+    print(get_message("cyberagent", "runtime_starting", pid=proc.pid))
+    print(get_message("cyberagent", "next_suggest", suggest_command=SUGGEST_COMMAND))
     return 0
 
 
 def _require_existing_team() -> int | None:
     team_id = get_last_team_id()
     if team_id is None:
-        print(f"No teams found. Run '{ONBOARDING_COMMAND}' to create your first team.")
+        print(
+            get_message(
+                "cyberagent",
+                "no_teams_found",
+                onboarding_command=ONBOARDING_COMMAND,
+            )
+        )
         return None
     return team_id
 
@@ -389,7 +402,7 @@ def _start_runtime_background() -> int | None:
 
 async def _handle_stop(_: argparse.Namespace) -> int:
     await stop_runtime()
-    print("Runtime stopped.")
+    print(get_message("cyberagent", "runtime_stopped"))
     return 0
 
 
@@ -417,33 +430,34 @@ def _handle_suggest(args: argparse.Namespace) -> int:
     try:
         parsed = _parse_suggestion_args(args)
     except ValueError as exc:
-        print(f"Invalid payload: {exc}", file=sys.stderr)
         print(
-            "Format tips:",
+            get_message("cyberagent", "invalid_payload", error=exc),
             file=sys.stderr,
         )
+        print(get_message("cyberagent", "format_tips"), file=sys.stderr)
         print(
-            f"- Inline text or JSON: {SUGGEST_COMMAND}",
+            get_message(
+                "cyberagent", "format_tip_inline", suggest_command=SUGGEST_COMMAND
+            ),
             file=sys.stderr,
         )
-        print(
-            "- File payload: cyberagent suggest --file payload.json",
-            file=sys.stderr,
-        )
-        print(
-            "- YAML payload: cyberagent suggest --file payload.yaml --format yaml",
-            file=sys.stderr,
-        )
+        print(get_message("cyberagent", "format_tip_file"), file=sys.stderr)
+        print(get_message("cyberagent", "format_tip_yaml"), file=sys.stderr)
         return 2
     if _require_existing_team() is None:
         return 1
     runtime_pid = _ensure_background_runtime()
     enqueue_suggestion(parsed.payload_text)
     if runtime_pid is not None:
-        print(f"Runtime active in background (pid {runtime_pid}).")
-    print("Suggestion queued for System4.")
+        print(get_message("cyberagent", "runtime_active_background", pid=runtime_pid))
+    print(get_message("cyberagent", "suggestion_queued"))
     print(
-        f"Next: run {INBOX_HINT_COMMAND} or {WATCH_HINT_COMMAND} to check for incoming messages."
+        get_message(
+            "cyberagent",
+            "next_inbox_or_watch",
+            inbox_command=INBOX_HINT_COMMAND,
+            watch_command=WATCH_HINT_COMMAND,
+        )
     )
     return 0
 
@@ -461,42 +475,68 @@ def _handle_inbox(args: argparse.Namespace) -> int:
             if not (entry.kind == "system_question" and entry.status == "answered")
         ]
     if not entries:
-        print("No messages in inbox.")
-        print(f"Next: run {WATCH_COMMAND} to wait, or {SUGGEST_COMMAND}.")
+        print(get_message("cyberagent", "no_messages"))
+        print(
+            get_message(
+                "cyberagent",
+                "next_watch_or_suggest",
+                watch_command=WATCH_COMMAND,
+                suggest_command=SUGGEST_COMMAND,
+            )
+        )
         return 0
     if any(entry.channel == "telegram" for entry in entries) and not os.environ.get(
         "TELEGRAM_BOT_TOKEN"
     ):
-        print("Telegram delivery disabled: set TELEGRAM_BOT_TOKEN to enable replies.")
+        print(get_message("cyberagent", "telegram_delivery_disabled"))
     user_prompts = [entry for entry in entries if entry.kind == "user_prompt"]
     system_questions = [entry for entry in entries if entry.kind == "system_question"]
     system_responses = [entry for entry in entries if entry.kind == "system_response"]
     if user_prompts:
-        print("User prompts:")
+        print(get_message("cyberagent", "user_prompts_header"))
         for entry in user_prompts:
             print(
-                f"- [{entry.entry_id}] {entry.content} "
-                f"(channel={entry.channel}, session={entry.session_id})"
+                get_message(
+                    "cyberagent",
+                    "user_prompt_entry",
+                    entry_id=entry.entry_id,
+                    content=entry.content,
+                    channel=entry.channel,
+                    session_id=entry.session_id,
+                )
             )
     if system_questions:
-        print("System questions:")
+        print(get_message("cyberagent", "system_questions_header"))
         for entry in system_questions:
             status = entry.status or "pending"
             answer_suffix = (
                 f" -> {entry.answer}" if status == "answered" and entry.answer else ""
             )
             print(
-                f"- [{entry.entry_id}] {entry.content}{answer_suffix} "
-                f"(asked by {entry.asked_by or 'System4'}, "
-                f"status={status}, channel={entry.channel}, "
-                f"session={entry.session_id})"
+                get_message(
+                    "cyberagent",
+                    "system_question_entry",
+                    entry_id=entry.entry_id,
+                    content=entry.content,
+                    answer_suffix=answer_suffix,
+                    asked_by=entry.asked_by or "System4",
+                    status=status,
+                    channel=entry.channel,
+                    session_id=entry.session_id,
+                )
             )
     if system_responses:
-        print("System responses:")
+        print(get_message("cyberagent", "system_responses_header"))
         for entry in system_responses:
             print(
-                f"- [{entry.entry_id}] {entry.content} "
-                f"(channel={entry.channel}, session={entry.session_id})"
+                get_message(
+                    "cyberagent",
+                    "system_response_entry",
+                    entry_id=entry.entry_id,
+                    content=entry.content,
+                    channel=entry.channel,
+                    session_id=entry.session_id,
+                )
             )
     return 0
 
@@ -505,7 +545,7 @@ async def _handle_watch(args: argparse.Namespace) -> int:
     if _require_existing_team() is None:
         return 1
     seen: set[int] = set()
-    print("Watching inbox (Ctrl-C to stop)...")
+    print(get_message("cyberagent", "watching_inbox"))
     channel, session_id = _resolve_inbox_filters(args)
     try:
         while True:
@@ -519,13 +559,19 @@ async def _handle_watch(args: argparse.Namespace) -> int:
                 if entry.entry_id in seen:
                     continue
                 print(
-                    f"[{entry.entry_id}] {entry.content} "
-                    f"(kind={entry.kind}, channel={entry.channel})"
+                    get_message(
+                        "cyberagent",
+                        "watch_entry",
+                        entry_id=entry.entry_id,
+                        content=entry.content,
+                        kind=entry.kind,
+                        channel=entry.channel,
+                    )
                 )
                 seen.add(entry.entry_id)
             await asyncio.sleep(max(0.1, args.interval))
     except KeyboardInterrupt:
-        print("Stopped watching inbox.")
+        print(get_message("cyberagent", "stopped_watching"))
     return 0
 
 
@@ -541,19 +587,28 @@ def _resolve_inbox_filters(args: argparse.Namespace) -> tuple[str | None, str | 
 
 def _handle_logs(args: argparse.Namespace) -> int:
     if not LOGS_DIR.exists():
-        print("No logs directory found.")
-        print(f"Next: run {START_COMMAND} to boot the runtime.")
+        print(get_message("cyberagent", "no_logs_dir"))
+        print(
+            get_message("cyberagent", "next_start_runtime", start_command=START_COMMAND)
+        )
         return 0
     log_files = sorted(LOGS_DIR.glob("*.log"), key=os.path.getmtime)
     if not log_files:
-        print("No log files to inspect.")
-        print(f"Next: run {START_COMMAND} or check status with {STATUS_COMMAND}.")
+        print(get_message("cyberagent", "no_log_files"))
+        print(
+            get_message(
+                "cyberagent",
+                "next_start_or_status",
+                start_command=START_COMMAND,
+                status_command=STATUS_COMMAND,
+            )
+        )
         return 0
     target = log_files[-1]
     lines = target.read_text(encoding="utf-8", errors="ignore").splitlines()
     levels = log_filters.resolve_log_levels(args.level, args.errors)
     if levels is None and args.level:
-        print("Invalid log level. Use: DEBUG, INFO, WARNING, ERROR, CRITICAL.")
+        print(get_message("cyberagent", "invalid_log_level"))
         return 2
     filtered = log_filters.filter_logs(lines, args.filter, args.limit, levels)
     for line in filtered:
@@ -570,29 +625,49 @@ def _handle_logs(args: argparse.Namespace) -> int:
                     else:
                         time.sleep(0.3)
         except KeyboardInterrupt:
-            print("Stopped following logs.")
+            print(get_message("cyberagent", "stopped_following_logs"))
     return 0
 
 
 def _handle_config(args: argparse.Namespace) -> int:
     if args.config_command != "view":
-        print("Unknown config command.", file=sys.stderr)
+        print(get_message("cyberagent", "unknown_config_command"), file=sys.stderr)
         return 1
     init_db()
     session = next(get_db())
     try:
         teams = session.query(Team).order_by(Team.name).all()
         if not teams:
-            print("No teams configured.")
-            print(f"Next: run {START_COMMAND} to initialize the runtime.")
+            print(get_message("cyberagent", "no_teams_configured"))
+            print(
+                get_message(
+                    "cyberagent",
+                    "next_start_runtime_config",
+                    start_command=START_COMMAND,
+                )
+            )
             return 0
         for team in teams:
-            print(f"Team: {team.name} (id={team.id})")
+            print(
+                get_message(
+                    "cyberagent",
+                    "team_line",
+                    team_name=team.name,
+                    team_id=team.id,
+                )
+            )
             if not team.systems:
-                print("  No systems registered.")
+                print(get_message("cyberagent", "no_systems_registered"))
                 continue
             for system in team.systems:
-                print(f"  - {system.type.name} ({system.agent_id_str})")
+                print(
+                    get_message(
+                        "cyberagent",
+                        "system_line",
+                        system_type=system.type.name,
+                        system_agent_id=system.agent_id_str,
+                    )
+                )
     finally:
         session.close()
     return 0
@@ -609,11 +684,9 @@ def _handle_login(args: argparse.Namespace) -> int:
 
 async def _handle_reset(args: argparse.Namespace) -> int:
     if not args.yes:
-        response = input(
-            "This will delete all data under ./data and ./logs. Continue? [y/N] "
-        ).strip()
+        response = input(get_message("cyberagent", "reset_prompt")).strip()
         if response.lower() not in {"y", "yes"}:
-            print("Reset canceled.")
+            print(get_message("cyberagent", "reset_canceled"))
             return 0
 
     if _runtime_pid_is_running():
@@ -621,7 +694,7 @@ async def _handle_reset(args: argparse.Namespace) -> int:
 
     _remove_dir(Path("data"))
     _remove_dir(Path("logs"))
-    print("Reset complete. Run 'cyberagent onboarding' to start again.")
+    print(get_message("cyberagent", "reset_complete"))
     return 0
 
 
@@ -752,9 +825,12 @@ async def _handle_serve(args: argparse.Namespace) -> int:
     if team_id:
         try:
             mark_team_active(int(team_id))
-            print(f"Starting headless runtime for team {team_id}.")
+            print(get_message("cyberagent", "headless_starting", team_id=team_id))
         except ValueError:
-            print(f"Invalid team id '{team_id}' configured.", file=sys.stderr)
+            print(
+                get_message("cyberagent", "invalid_team_id", team_id=team_id),
+                file=sys.stderr,
+            )
     await run_headless_session(initial_message=args.message)
     return 0
 
@@ -764,72 +840,11 @@ def _handle_help(args: argparse.Namespace) -> int:
 
 
 def _check_recent_runtime_errors(command: str | None) -> None:
-    if not LOGS_DIR.exists():
-        return
-    log_files = sorted(LOGS_DIR.glob("*.log"), key=os.path.getmtime)
-    if not log_files:
-        return
-    latest_log = log_files[-1]
-    state = _load_cli_log_state()
-    offset = 0
-    latest_path = str(latest_log.resolve())
-    if state and state.get("log_path") == latest_path:
-        offset = _safe_int(state.get("byte_offset"), 0)
-
-    warnings = 0
-    errors = 0
-    try:
-        with latest_log.open("rb") as handle:
-            handle.seek(offset)
-            new_bytes = handle.read()
-            new_offset = handle.tell()
-        if new_bytes:
-            text = new_bytes.decode("utf-8", errors="ignore")
-            for line in text.splitlines():
-                level = log_filters.extract_log_level(line)
-                if level == "WARNING":
-                    warnings += 1
-                elif level == "ERROR":
-                    errors += 1
-        _store_cli_log_state(latest_path, new_offset)
-    except OSError:
-        return
-
-    if warnings or errors:
-        print(
-            "New runtime logs since last command: "
-            f"{errors} errors, {warnings} warnings. "
-            "Run 'cyberagent logs' to view."
-        )
-
-
-def _load_cli_log_state() -> dict[str, object] | None:
-    if not CLI_LOG_STATE_FILE.exists():
-        return None
-    try:
-        return json.loads(CLI_LOG_STATE_FILE.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None
-
-
-def _store_cli_log_state(log_path: str, byte_offset: int) -> None:
-    try:
-        LOGS_DIR.mkdir(parents=True, exist_ok=True)
-        payload = {
-            "log_path": log_path,
-            "byte_offset": byte_offset,
-            "last_checked_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-        }
-        CLI_LOG_STATE_FILE.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    except OSError:
-        return
-
-
-def _safe_int(value: object, default: int) -> int:
-    try:
-        return int(value)  # type: ignore[arg-type]
-    except (TypeError, ValueError):
-        return default
+    check_recent_runtime_errors(
+        command=command,
+        logs_dir=LOGS_DIR,
+        state_file=CLI_LOG_STATE_FILE,
+    )
 
 
 def _parse_suggestion_args(args: argparse.Namespace) -> ParsedSuggestion:
@@ -847,11 +862,11 @@ def _parse_suggestion_args(args: argparse.Namespace) -> ParsedSuggestion:
         if not sys.stdin.isatty():
             raw = sys.stdin.read()
     if not raw or not raw.strip():
-        raise ValueError("payload is required")
+        raise ValueError(get_message("cyberagent", "payload_required"))
     parsed: Any
     if args.format == "yaml":
         if not YAML_AVAILABLE or yaml is None:
-            raise ValueError("YAML support requires PyYAML")
+            raise ValueError(get_message("cyberagent", "yaml_requires_pyyaml"))
         parsed = yaml.safe_load(raw)
     else:
         try:
@@ -884,21 +899,20 @@ async def _send_suggestion(parsed: ParsedSuggestion) -> None:
             ),
             timeout=SUGGEST_SEND_TIMEOUT_SECONDS,
         )
-        print("Suggestion delivered to System4.")
+        print(get_message("cyberagent", "suggestion_delivered"))
         print(
-            f"Next: run {INBOX_HINT_COMMAND} or {WATCH_HINT_COMMAND} to check for incoming messages."
+            get_message(
+                "cyberagent",
+                "next_inbox_or_watch",
+                inbox_command=INBOX_HINT_COMMAND,
+                watch_command=WATCH_HINT_COMMAND,
+            )
         )
     except asyncio.TimeoutError:
-        print(
-            "Suggestion send timed out; the runtime may still be working. "
-            "Check logs with 'cyberagent logs'."
-        )
+        print(get_message("cyberagent", "suggestion_send_timed_out"))
     except Exception as exc:  # pragma: no cover - safety net for runtime errors
         if getattr(exc, "code", None) == "output_parse_failed":
-            print(
-                "Model output could not be parsed. Try rephrasing the request or "
-                "using a more explicit payload."
-            )
+            print(get_message("cyberagent", "model_output_parse_failed"))
             return
         raise
     finally:
@@ -909,7 +923,7 @@ async def _stop_runtime_with_timeout() -> None:
     try:
         await asyncio.wait_for(stop_runtime(), timeout=SUGGEST_SHUTDOWN_TIMEOUT_SECONDS)
     except asyncio.TimeoutError:
-        print("Runtime shutdown timed out; exiting anyway.")
+        print(get_message("cyberagent", "runtime_shutdown_timed_out"))
 
 
 _HANDLERS = {

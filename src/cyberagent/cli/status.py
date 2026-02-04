@@ -5,6 +5,7 @@ from dataclasses import asdict, dataclass
 from typing import Iterable, Optional
 
 from src.cyberagent.db.init_db import get_database_path, init_db
+from src.cyberagent.cli.message_catalog import get_message
 
 TERMINAL_STATUSES = {"completed", "approved", "rejected"}
 START_COMMAND = "cyberagent start"
@@ -186,53 +187,100 @@ def render_status(teams: list[TeamView]) -> str:
     if not teams:
         return "\n".join(
             [
-                "No data found.",
-                f"Next: run {START_COMMAND} to boot the runtime.",
+                get_message("status", "no_data"),
+                get_message("status", "next_start", start_command=START_COMMAND),
             ]
         )
     lines: list[str] = []
     for team in teams:
-        lines.append(f"Team {team.id}: {team.name}")
+        lines.append(
+            get_message(
+                "status",
+                "team_line",
+                team_id=team.id,
+                team_name=team.name,
+            )
+        )
         if not team.purposes:
-            lines.append("  No purposes found.")
-            lines.append(f"  Next: run {SUGGEST_COMMAND} to give the agents a task.")
+            lines.append(f"  {get_message('status', 'no_purposes')}")
+            lines.append(
+                f"  {get_message('status', 'next_give_task', suggest_command=SUGGEST_COMMAND)}"
+            )
             continue
         for purpose in team.purposes:
-            lines.append(f"  Purpose {purpose.id}: {purpose.name}")
-            lines.append(f"    Content: {purpose.content}")
+            lines.append(
+                get_message(
+                    "status",
+                    "purpose_line",
+                    purpose_id=purpose.id,
+                    purpose_name=purpose.name,
+                )
+            )
+            lines.append(
+                get_message("status", "purpose_content", content=purpose.content)
+            )
             if not purpose.strategies:
-                lines.append("    No strategies found.")
-                lines.append(f"    Next: run {SUGGEST_COMMAND} to define a strategy.")
+                lines.append(f"    {get_message('status', 'no_strategies')}")
+                lines.append(
+                    f"    {get_message('status', 'next_suggest', suggest_command=SUGGEST_COMMAND)}"
+                )
                 continue
             for strategy in purpose.strategies:
                 lines.append(
-                    f"    Strategy {strategy.id} "
-                    f"[{_format_status(strategy.status)}]: {strategy.name}"
+                    get_message(
+                        "status",
+                        "strategy_line",
+                        strategy_id=strategy.id,
+                        status=_format_status(strategy.status),
+                        strategy_name=strategy.name,
+                    )
                 )
-                lines.append(f"      Description: {strategy.description}")
+                lines.append(
+                    get_message(
+                        "status",
+                        "strategy_description",
+                        description=strategy.description,
+                    )
+                )
                 if not strategy.initiatives:
-                    lines.append("      No initiatives found.")
+                    lines.append(f"      {get_message('status', 'no_initiatives')}")
                     lines.append(
-                        f"      Next: run {SUGGEST_COMMAND} to create initiatives."
+                        f"      {get_message('status', 'next_create_initiatives', suggest_command=SUGGEST_COMMAND)}"
                     )
                     continue
                 for initiative in strategy.initiatives:
                     lines.append(
-                        f"      Initiative {initiative.id} "
-                        f"[{_format_status(initiative.status)}]: {initiative.name}"
+                        get_message(
+                            "status",
+                            "initiative_line",
+                            initiative_id=initiative.id,
+                            status=_format_status(initiative.status),
+                            initiative_name=initiative.name,
+                        )
                     )
-                    lines.append(f"        Description: {initiative.description}")
+                    lines.append(
+                        get_message(
+                            "status",
+                            "initiative_description",
+                            description=initiative.description,
+                        )
+                    )
                     if not initiative.tasks:
-                        lines.append("        No tasks found.")
+                        lines.append(f"        {get_message('status', 'no_tasks')}")
                         lines.append(
-                            f"        Next: run {SUGGEST_COMMAND} to request tasks."
+                            f"        {get_message('status', 'next_request_tasks', suggest_command=SUGGEST_COMMAND)}"
                         )
                         continue
                     task_lines = [
                         (
-                            f"        Task {task.id} "
-                            f"[{_format_status(task.status)}] "
-                            f"(assignee: {task.assignee or '-'}) - {task.name}"
+                            get_message(
+                                "status",
+                                "task_line",
+                                task_id=task.id,
+                                status=_format_status(task.status),
+                                assignee=task.assignee or "-",
+                                task_name=task.name,
+                            )
                         )
                         for task in initiative.tasks
                     ]

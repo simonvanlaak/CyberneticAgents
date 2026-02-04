@@ -33,6 +33,7 @@ from src.cyberagent.core.runtime import (
     stop_runtime,
 )
 from src.cyberagent.secrets import get_secret
+from src.cyberagent.cli.message_catalog import get_message
 
 logger = logging.getLogger(__name__)
 
@@ -58,9 +59,7 @@ async def run_headless_session(initial_message: str | None = None) -> None:
     if os.environ.get("CYBERAGENT_ACTIVE_TEAM_ID") is None:
         team_id = get_last_team_id()
         if team_id is None:
-            print(
-                "No teams found. Run 'cyberagent onboarding' to create your first team."
-            )
+            print(get_message("headless", "no_teams_found"))
             return
         os.environ["CYBERAGENT_ACTIVE_TEAM_ID"] = str(team_id)
     await register_systems()

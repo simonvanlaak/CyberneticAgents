@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime
-import getpass
 import json
 import shutil
 import os
 from pathlib import Path
 import subprocess
 import sys
-import time
 import urllib.request
 
 from sqlalchemy.exc import SQLAlchemyError
@@ -44,11 +42,16 @@ from src.cyberagent.cli.onboarding_defaults import (
     load_root_team_defaults,
 )
 from src.cyberagent.cli.onboarding_discovery import run_discovery_onboarding
+from src.cyberagent.cli.message_catalog import get_message
 from src.cyberagent.cli.onboarding_secrets import (
     VAULT_NAME,
     get_onepassword_session_env,
     has_onepassword_auth,
     load_secret_from_1password,
+)
+from src.cyberagent.cli.onboarding_vault import (
+    prompt_store_secret_in_1password,
+    prompt_yes_no,
 )
 from src.cyberagent.cli.onboarding_memory import store_onboarding_memory
 from src.enums import SystemType
@@ -61,17 +64,17 @@ TOOL_SECRET_DOC_HINTS = {
     "BRAVE_API_KEY": "src/tools/skills/web-search/SKILL.md",
 }
 TELEGRAM_DOC_HINT = "docs/technical/telegram_setup.md"
-FEATURE_READY_MESSAGES = {
-    "BRAVE_API_KEY": "Web search is now available.",
-    "GROQ_API_KEY": "AI model access is ready.",
-    "MISTRAL_API_KEY": "AI model access is ready.",
-    "TELEGRAM_BOT_TOKEN": "Telegram messaging is now available.",
+FEATURE_READY_MESSAGE_KEYS = {
+    "BRAVE_API_KEY": "feature_web_search",
+    "GROQ_API_KEY": "feature_ai_ready",
+    "MISTRAL_API_KEY": "feature_ai_ready",
+    "TELEGRAM_BOT_TOKEN": "feature_telegram",
 }
 
 
 def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
     if not run_technical_onboarding_checks():
-        print("Technical onboarding checks failed. Resolve the issues above.")
+        print(get_message("onboarding", "technical_checks_failed"))
         return 1
     if not _validate_onboarding_inputs(args):
         return 1
@@ -89,9 +92,23 @@ def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
             team = Team(name=team_name, last_active_at=datetime.utcnow())
             session.add(team)
             session.commit()
-            print(f"Created default team: {team.name} (id={team.id}).")
+            print(
+                get_message(
+                    "onboarding",
+                    "team_created",
+                    team_name=team.name,
+                    team_id=team.id,
+                )
+            )
         else:
-            print(f"Team already exists: {team.name} (id={team.id}).")
+            print(
+                get_message(
+                    "onboarding",
+                    "team_exists",
+                    team_name=team.name,
+                    team_id=team.id,
+                )
+            )
     finally:
         session.close()
     _seed_default_team_envelope(team.id, team_defaults)
@@ -99,11 +116,8 @@ def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
     _seed_default_procedures(team.id, procedures)
     summary_path = _run_discovery_onboarding(args, team.id)
     if summary_path is None:
-        print("Discovery onboarding couldn't complete yet.")
-        print(
-            "Please confirm your repo access and make sure the GitHub token is "
-            "available, then re-run onboarding."
-        )
+        print(get_message("onboarding", "discovery_failed"))
+        print(get_message("onboarding", "discovery_failed_hint"))
         return 1
     store_onboarding_memory(team.id, summary_path)
     if auto_execute:
@@ -115,7 +129,7 @@ def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
         ):
             return 1
     _start_runtime_after_onboarding(team.id)
-    print(f"Next: run {suggest_command} to give the agents a task.")
+    print(get_message("onboarding", "next_suggest", suggest_command=suggest_command))
     return 0
 
 
@@ -124,10 +138,10 @@ def _validate_onboarding_inputs(args: argparse.Namespace) -> bool:
     user_name = getattr(args, "user_name", None)
     repo_url = getattr(args, "repo_url", None)
     if not user_name:
-        print("Onboarding needs your name to get started.")
+        print(get_message("onboarding", "onboarding_needs_name"))
         return False
     if not repo_url:
-        print("Onboarding needs your Obsidian vault repo URL to continue.")
+        print(get_message("onboarding", "onboarding_needs_repo"))
         return False
     return True
 
@@ -135,21 +149,23 @@ def _validate_onboarding_inputs(args: argparse.Namespace) -> bool:
 def _prompt_for_missing_inputs(args: argparse.Namespace) -> None:
     user_name = str(getattr(args, "user_name", "") or "").strip()
     if not user_name:
-        print("Welcome to CyberneticAgents onboarding.")
-        user_name = _prompt_required_value("What should we call you?")
+        print(get_message("onboarding", "onboarding_welcome"))
+        user_name = _prompt_required_value(
+            get_message("onboarding", "onboarding_prompt_user_name")
+        )
         setattr(args, "user_name", user_name)
 
     repo_url = str(getattr(args, "repo_url", "") or "").strip()
     if not repo_url:
         repo_url = _prompt_required_value(
-            "Paste the private GitHub repo URL for your Obsidian vault"
+            get_message("onboarding", "onboarding_prompt_repo")
         )
         setattr(args, "repo_url", repo_url)
 
     profile_links = list(getattr(args, "profile_links", []) or [])
     if not profile_links:
         raw_links = input(
-            "Any profile links to reference? (optional, comma-separated): "
+            get_message("onboarding", "onboarding_prompt_profile_links")
         ).strip()
         if raw_links:
             links = [link.strip() for link in raw_links.split(",") if link.strip()]
@@ -162,7 +178,7 @@ def _prompt_required_value(prompt: str) -> str:
         value = input(f"{prompt}: ").strip()
         if value:
             return value
-        print("Please enter a value to continue.")
+        print(get_message("onboarding", "onboarding_missing_value"))
 
 
 def _start_runtime_after_onboarding(team_id: int) -> int | None:
@@ -170,7 +186,7 @@ def _start_runtime_after_onboarding(team_id: int) -> int | None:
         return None
     pid = _load_runtime_pid()
     if pid is not None and _pid_is_running(pid):
-        print(f"Runtime already running (pid {pid}).")
+        print(get_message("onboarding", "runtime_already_running", pid=pid))
         return pid
     cmd = [sys.executable, "-m", "src.cyberagent.cli.cyberagent", "serve"]
     env = os.environ.copy()
@@ -184,7 +200,7 @@ def _start_runtime_after_onboarding(team_id: int) -> int | None:
     )
     RUNTIME_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
     RUNTIME_PID_FILE.write_text(str(proc.pid), encoding="utf-8")
-    print(f"Runtime starting in background (pid {proc.pid}).")
+    print(get_message("onboarding", "runtime_starting", pid=proc.pid))
     return proc.pid
 
 
@@ -452,12 +468,19 @@ def _trigger_onboarding_initiative(
 def _print_db_write_error(context: str, exc: SQLAlchemyError) -> None:
     db_path = get_database_path()
     message = str(exc).lower()
-    hint = "Check disk space and file permissions."
+    hint = get_message("onboarding", "db_write_hint_default")
     if "disk i/o" in message:
-        hint = "SQLite reported a disk I/O error. Check disk space and permissions."
+        hint = get_message("onboarding", "db_write_hint_disk_io")
     location = "in-memory database" if db_path == ":memory:" else db_path
-    print(f"Failed to write {context} data to the database ({location}).")
-    print(hint)
+    print(
+        get_message(
+            "onboarding",
+            "db_write_failed",
+            context=context,
+            location=location,
+        )
+    )
+    print(get_message("onboarding", "db_write_hint", hint=hint))
 
 
 def _pid_is_running(pid: int) -> bool:
@@ -481,14 +504,14 @@ def run_technical_onboarding_checks() -> bool:
     state = _collect_technical_onboarding_state()
     cached = _load_technical_onboarding_state()
     if cached and cached.get("state") == state and cached.get("ok") is True:
-        print("Technical onboarding already verified.")
+        print(get_message("onboarding", "technical_already_verified"))
         return True
 
     if not _check_db_writable():
         return False
     if not _check_logs_writable():
         return False
-    print("Activating features...")
+    print(get_message("onboarding", "activating_features"))
 
     checks = [
         _check_llm_credentials,
@@ -507,7 +530,7 @@ def run_technical_onboarding_checks() -> bool:
     _warn_optional_api_keys()
     _offer_optional_telegram_setup()
     _save_technical_onboarding_state({"state": state, "ok": True})
-    print("Technical onboarding checks passed.")
+    print(get_message("onboarding", "technical_checks_passed"))
     return True
 
 
@@ -564,8 +587,15 @@ def _is_path_writable(path: Path) -> bool:
 def _check_path_writable(label: str, path: Path) -> bool:
     if _is_path_writable(path):
         return True
-    print(f"{label} is not writable: {path}")
-    print("Fix permissions and re-run onboarding.")
+    print(
+        get_message(
+            "onboarding",
+            "path_not_writable",
+            label=label,
+            path=path,
+        )
+    )
+    print(get_message("onboarding", "fix_permissions_rerun"))
     return False
 
 
@@ -577,8 +607,14 @@ def _check_db_writable() -> bool:
     if not _check_path_writable("Database directory", db_file.parent):
         return False
     if db_file.exists() and not os.access(db_file, os.W_OK):
-        print(f"Database file is not writable: {db_file}")
-        print("Fix permissions and re-run onboarding.")
+        print(
+            get_message(
+                "onboarding",
+                "database_file_not_writable",
+                path=db_file,
+            )
+        )
+        print(get_message("onboarding", "fix_permissions_rerun"))
         return False
     return True
 
@@ -597,14 +633,17 @@ def _format_skill_names(skills: list[str]) -> str:
 
 
 def _print_feature_ready(env_name: str, skills: list[str] | None = None) -> None:
-    message = FEATURE_READY_MESSAGES.get(env_name)
+    message_key = FEATURE_READY_MESSAGE_KEYS.get(env_name)
+    message = get_message("onboarding", message_key) if message_key else None
     if not message and skills:
         skill_names = _format_skill_names(skills)
         if skill_names:
-            message = f"{skill_names} is now available."
+            message = get_message(
+                "onboarding", "feature_skills_ready", skill_names=skill_names
+            )
     if not message:
         return
-    print(f"✓ {message}")
+    print(get_message("onboarding", "feature_ready", message=message))
 
 
 def _check_llm_credentials() -> bool:
@@ -617,16 +656,21 @@ def _check_llm_credentials() -> bool:
         if loaded:
             _print_feature_ready("GROQ_API_KEY")
             return True
-        print("Missing GROQ_API_KEY.")
+        print(get_message("onboarding", "missing_groq"))
         print(
-            "CyberneticAgents stores LLM provider keys in 1Password. Create a vault "
-            f"named '{VAULT_NAME}' and add an item named GROQ_API_KEY."
+            get_message(
+                "onboarding",
+                "llm_key_hint",
+                vault_name=VAULT_NAME,
+                key_name="GROQ_API_KEY",
+            )
         )
-        print("Field name should be 'credential'.")
-        if not _prompt_store_secret_in_1password(
+        print(get_message("onboarding", "field_name_hint"))
+        if not prompt_store_secret_in_1password(
             env_name="GROQ_API_KEY",
             description="Groq API key",
             doc_hint=None,
+            vault_name=VAULT_NAME,
         ):
             return False
     _print_feature_ready("GROQ_API_KEY")
@@ -640,16 +684,21 @@ def _check_llm_credentials() -> bool:
             if loaded:
                 _print_feature_ready("MISTRAL_API_KEY")
                 return True
-            print("Missing MISTRAL_API_KEY.")
+            print(get_message("onboarding", "missing_mistral"))
             print(
-                "CyberneticAgents stores LLM provider keys in 1Password. Create a vault "
-                f"named '{VAULT_NAME}' and add an item named MISTRAL_API_KEY."
+                get_message(
+                    "onboarding",
+                    "llm_key_hint",
+                    vault_name=VAULT_NAME,
+                    key_name="MISTRAL_API_KEY",
+                )
             )
-            print("Field name should be 'credential'.")
-            if not _prompt_store_secret_in_1password(
+            print(get_message("onboarding", "field_name_hint"))
+            if not prompt_store_secret_in_1password(
                 env_name="MISTRAL_API_KEY",
                 description="Mistral API key",
                 doc_hint=None,
+                vault_name=VAULT_NAME,
             ):
                 return False
         _print_feature_ready("MISTRAL_API_KEY")
@@ -667,24 +716,9 @@ def _get_onepassword_session_env() -> str | None:
 def _check_onepassword_auth() -> bool:
     if _has_onepassword_auth():
         return True
-    print("Missing 1Password authentication (service account or session).")
-    print(
-        "Export OP_SERVICE_ACCOUNT_TOKEN (or set it in .env) or OP_SESSION_* and "
-        "re-run onboarding."
-    )
+    print(get_message("onboarding", "missing_onepassword_auth"))
+    print(get_message("onboarding", "missing_onepassword_auth_hint"))
     return False
-
-
-def _format_op_signin_hint() -> list[str]:
-    if not shutil.which("op"):
-        return [
-            "Install the 1Password CLI (`op`) and re-run onboarding.",
-            "Docs: https://developer.1password.com/docs/cli/",
-        ]
-    return [
-        "Set OP_SERVICE_ACCOUNT_TOKEN for a 1Password service account, then re-run onboarding.",
-        "Docs: https://developer.1password.com/docs/cli/service-accounts/",
-    ]
 
 
 def _check_required_tool_secrets() -> bool:
@@ -714,19 +748,31 @@ def _check_required_tool_secrets() -> bool:
             _print_feature_ready(env_name, skills_for_env)
             continue
         skills_list = ", ".join(sorted(required_by_env.get(env_name, [])))
-        print(f"Missing {env_name} for required tools: {skills_list}.")
         print(
-            "CyberneticAgents stores tool secrets in 1Password. Create a vault named "
-            f"'{VAULT_NAME}' and add an item named {env_name}."
+            get_message(
+                "onboarding",
+                "missing_tool_secret",
+                env_name=env_name,
+                skills_list=skills_list,
+            )
         )
-        print("Field name should be 'credential'.")
+        print(
+            get_message(
+                "onboarding",
+                "tool_secret_hint",
+                vault_name=VAULT_NAME,
+                env_name=env_name,
+            )
+        )
+        print(get_message("onboarding", "field_name_hint"))
         doc_hint = TOOL_SECRET_DOC_HINTS.get(env_name)
         if doc_hint:
-            print(f"See docs in `{doc_hint}`.")
-        if not _prompt_store_secret_in_1password(
+            print(get_message("onboarding", "see_docs_hint", doc_hint=doc_hint))
+        if not prompt_store_secret_in_1password(
             env_name=env_name,
             description=f"{env_name} secret",
             doc_hint=doc_hint,
+            vault_name=VAULT_NAME,
         ):
             return False
     return True
@@ -734,10 +780,22 @@ def _check_required_tool_secrets() -> bool:
 
 def _check_skill_root_access() -> bool:
     if not DEFAULT_SKILLS_ROOT.exists():
-        print(f"Skills root not found: {DEFAULT_SKILLS_ROOT}")
+        print(
+            get_message(
+                "onboarding",
+                "skills_root_not_found",
+                skills_root=DEFAULT_SKILLS_ROOT,
+            )
+        )
         return False
     if not os.access(DEFAULT_SKILLS_ROOT, os.R_OK):
-        print(f"Skills root is not readable: {DEFAULT_SKILLS_ROOT}")
+        print(
+            get_message(
+                "onboarding",
+                "skills_root_not_readable",
+                skills_root=DEFAULT_SKILLS_ROOT,
+            )
+        )
         return False
     return True
 
@@ -751,8 +809,8 @@ def _check_network_access() -> bool:
     skills_list = ", ".join(
         sorted({skill.name for skill in skills if skill.name in NETWORK_SKILL_NAMES})
     )
-    print("Network access is required for web research tools " f"({skills_list}).")
-    print("Enable outbound network access and re-run onboarding.")
+    print(get_message("onboarding", "network_access_required", skills_list=skills_list))
+    print(get_message("onboarding", "enable_network_rerun"))
     return False
 
 
@@ -788,7 +846,13 @@ def _warn_optional_api_keys() -> None:
         missing.append(key)
     if missing:
         missing_str = ", ".join(missing)
-        print(f"Optional API keys not set: {missing_str}.")
+        print(
+            get_message(
+                "onboarding",
+                "optional_api_keys_missing",
+                missing_keys=missing_str,
+            )
+        )
 
 
 def _offer_optional_telegram_setup() -> None:
@@ -807,14 +871,12 @@ def _offer_optional_telegram_setup() -> None:
         _print_feature_ready("TELEGRAM_BOT_TOKEN")
         _offer_optional_telegram_webhook_setup()
         return
-    print(
-        "Telegram is not configured. You can add TELEGRAM_BOT_TOKEN now to enable the "
-        "Telegram channel."
-    )
-    if not _prompt_store_secret_in_1password(
+    print(get_message("onboarding", "telegram_not_configured"))
+    if not prompt_store_secret_in_1password(
         env_name="TELEGRAM_BOT_TOKEN",
         description="Telegram bot token",
         doc_hint=TELEGRAM_DOC_HINT,
+        vault_name=VAULT_NAME,
     ):
         return
     _offer_optional_telegram_webhook_setup()
@@ -823,110 +885,16 @@ def _offer_optional_telegram_setup() -> None:
 def _offer_optional_telegram_webhook_setup() -> None:
     if os.environ.get("TELEGRAM_WEBHOOK_SECRET"):
         return
-    print(
-        "Webhook mode is optional. It requires TELEGRAM_WEBHOOK_URL and a secret to "
-        "validate incoming requests."
-    )
-    if not _prompt_yes_no("Would you like to store a Telegram webhook secret now?"):
-        print(f"See setup guide in `{TELEGRAM_DOC_HINT}`.")
+    print(get_message("onboarding", "webhook_mode_optional"))
+    if not prompt_yes_no(get_message("onboarding", "webhook_secret_prompt")):
+        print(get_message("onboarding", "setup_guide_hint", doc_hint=TELEGRAM_DOC_HINT))
         return
-    _prompt_store_secret_in_1password(
+    prompt_store_secret_in_1password(
         env_name="TELEGRAM_WEBHOOK_SECRET",
         description="Telegram webhook secret",
         doc_hint=TELEGRAM_DOC_HINT,
+        vault_name=VAULT_NAME,
     )
-
-
-def _prompt_store_secret_in_1password(
-    env_name: str, description: str, doc_hint: str | None
-) -> bool:
-    if not shutil.which("op"):
-        print("Install the 1Password CLI (`op`) to store secrets automatically.")
-        return False
-    if not has_onepassword_auth():
-        for line in _format_op_signin_hint():
-            print(line)
-        return False
-    if not _check_onepassword_write_access(VAULT_NAME):
-        print(
-            "Your 1Password session does not have write access to the "
-            f"'{VAULT_NAME}' vault."
-        )
-        print(
-            "Ask for write access or use a service account token with write "
-            "permissions, then re-run onboarding."
-        )
-        return False
-    if not _prompt_yes_no(
-        f"Would you like to paste your {description} now and store it in 1Password?"
-    ):
-        return False
-    secret_value = getpass.getpass(f"Paste {env_name}: ").strip()
-    if not secret_value:
-        print(f"No value provided for {env_name}.")
-        return False
-    if not _ensure_onepassword_vault(VAULT_NAME):
-        return False
-    if not _create_onepassword_item(VAULT_NAME, env_name, secret_value):
-        print(f"Failed to store {env_name} in 1Password.")
-        if doc_hint:
-            print(f"See {doc_hint} for details.")
-        return False
-    print(f"Stored {env_name} in 1Password.")
-    return True
-
-
-def _prompt_yes_no(question: str) -> bool:
-    response = input(f"{question} [y/N]: ").strip().lower()
-    return response in {"y", "yes"}
-
-
-def _ensure_onepassword_vault(vault_name: str) -> bool:
-    result = subprocess.run(
-        ["op", "vault", "get", vault_name],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode == 0:
-        return True
-    result = subprocess.run(
-        ["op", "vault", "create", vault_name],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode == 0:
-        return True
-    print(f"Failed to create 1Password vault '{vault_name}'.")
-    if result.stderr:
-        print(result.stderr.strip())
-    return False
-
-
-def _create_onepassword_item(vault_name: str, title: str, secret: str) -> bool:
-    result = subprocess.run(
-        [
-            "op",
-            "item",
-            "create",
-            "--category",
-            "API Credential",
-            "--vault",
-            vault_name,
-            "--title",
-            title,
-            f"credential={secret}",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode == 0:
-        return True
-    if result.stderr:
-        print(result.stderr.strip())
-    return False
 
 
 def _load_secret_from_1password(
@@ -935,45 +903,3 @@ def _load_secret_from_1password(
     return load_secret_from_1password(
         vault_name=vault_name, item_name=item_name, field_label=field_label
     )
-
-
-def _check_onepassword_write_access(vault_name: str) -> bool:
-    if not _ensure_onepassword_vault(vault_name):
-        return False
-    check_title = f"cyberagent-write-check-{int(time.time())}"
-    result = subprocess.run(
-        [
-            "op",
-            "item",
-            "create",
-            "--category",
-            "API Credential",
-            "--vault",
-            vault_name,
-            "--title",
-            check_title,
-            "credential=probe",
-            "--format",
-            "json",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    if result.returncode != 0:
-        return False
-    item_id = None
-    if result.stdout:
-        try:
-            payload = json.loads(result.stdout)
-            item_id = payload.get("id") if isinstance(payload, dict) else None
-        except json.JSONDecodeError:
-            item_id = None
-    if item_id:
-        subprocess.run(
-            ["op", "item", "delete", item_id, "--vault", vault_name],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-    return True
