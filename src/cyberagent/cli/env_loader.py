@@ -4,9 +4,17 @@ import os
 from pathlib import Path
 
 
+def _find_env_file(start: Path) -> Path | None:
+    for path in [start, *start.parents]:
+        candidate = path / ".env"
+        if candidate.exists():
+            return candidate
+    return None
+
+
 def load_op_service_account_token() -> None:
-    env_path = Path(".env")
-    if os.environ.get("OP_SERVICE_ACCOUNT_TOKEN") or not env_path.exists():
+    env_path = _find_env_file(Path.cwd())
+    if os.environ.get("OP_SERVICE_ACCOUNT_TOKEN") or env_path is None:
         return
     try:
         content = env_path.read_text(encoding="utf-8")

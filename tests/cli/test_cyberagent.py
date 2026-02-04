@@ -937,6 +937,23 @@ def test_loads_op_service_account_token_from_env_file(
     assert os.environ.get("OP_SERVICE_ACCOUNT_TOKEN") == "service-token"
 
 
+def test_loads_op_service_account_token_from_parent_env_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("OP_SERVICE_ACCOUNT_TOKEN", raising=False)
+    root = tmp_path / "repo"
+    nested = root / "subdir"
+    nested.mkdir(parents=True)
+    (root / ".env").write_text(
+        "OP_SERVICE_ACCOUNT_TOKEN=service-token\n", encoding="utf-8"
+    )
+    monkeypatch.chdir(nested)
+
+    load_op_service_account_token()
+
+    assert os.environ.get("OP_SERVICE_ACCOUNT_TOKEN") == "service-token"
+
+
 @pytest.mark.asyncio
 async def test_dev_system_run_sends_message(
     monkeypatch: pytest.MonkeyPatch,

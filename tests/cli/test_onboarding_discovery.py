@@ -28,6 +28,8 @@ def _stub_messages(monkeypatch: pytest.MonkeyPatch) -> None:
             return "We couldn't access your PKM vault yet."
         if key == "pkm_sync_failed":
             return "We couldn't sync your PKM vault."
+        if key == "onepassword_cli_not_ready":
+            return "1Password CLI authentication failed."
         if key == "continue_without_pkm_prompt":
             return "Continue without PKM sync? [y/N]: "
         if key == "need_github_token":
@@ -58,6 +60,12 @@ def test_discovery_prompts_and_continues_without_token(
         onboarding_discovery, "_ensure_onboarding_token", lambda *_: False
     )
     _stub_messages(monkeypatch)
+    monkeypatch.setattr(onboarding_discovery, "has_onepassword_auth", lambda: False)
+    monkeypatch.setattr(
+        onboarding_discovery,
+        "load_secret_from_1password_with_error",
+        lambda **_kwargs: (None, "1Password CLI not authenticated."),
+    )
     monkeypatch.setattr(onboarding_discovery, "_create_cli_tool", lambda: object())
     monkeypatch.setattr(
         onboarding_discovery, "_fetch_profile_links", lambda *_: "profiles"
@@ -78,6 +86,12 @@ def test_discovery_aborts_without_token_when_declined(
         onboarding_discovery, "_ensure_onboarding_token", lambda *_: False
     )
     _stub_messages(monkeypatch)
+    monkeypatch.setattr(onboarding_discovery, "has_onepassword_auth", lambda: False)
+    monkeypatch.setattr(
+        onboarding_discovery,
+        "load_secret_from_1password_with_error",
+        lambda **_kwargs: (None, "1Password CLI not authenticated."),
+    )
     monkeypatch.setattr(onboarding_discovery, "_create_cli_tool", lambda: object())
     monkeypatch.setattr("builtins.input", lambda *_: "n")
 
@@ -93,6 +107,12 @@ def test_discovery_aborts_on_sync_failure_when_declined(
         onboarding_discovery, "_ensure_onboarding_token", lambda *_: True
     )
     _stub_messages(monkeypatch)
+    monkeypatch.setattr(onboarding_discovery, "has_onepassword_auth", lambda: False)
+    monkeypatch.setattr(
+        onboarding_discovery,
+        "load_secret_from_1password_with_error",
+        lambda **_kwargs: ("token", None),
+    )
     monkeypatch.setattr(onboarding_discovery, "_create_cli_tool", lambda: object())
     monkeypatch.setattr(
         onboarding_discovery, "_resolve_default_branch", lambda *_: "main"
@@ -120,6 +140,12 @@ def test_discovery_continues_on_sync_failure_when_accepted(
         onboarding_discovery, "_ensure_onboarding_token", lambda *_: True
     )
     _stub_messages(monkeypatch)
+    monkeypatch.setattr(onboarding_discovery, "has_onepassword_auth", lambda: False)
+    monkeypatch.setattr(
+        onboarding_discovery,
+        "load_secret_from_1password_with_error",
+        lambda **_kwargs: ("token", None),
+    )
     monkeypatch.setattr(onboarding_discovery, "_create_cli_tool", lambda: object())
     monkeypatch.setattr(
         onboarding_discovery, "_resolve_default_branch", lambda *_: "main"
@@ -176,6 +202,7 @@ def test_prompt_continue_without_pkm_handles_eof(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _stub_messages(monkeypatch)
+    monkeypatch.setattr(onboarding_discovery, "has_onepassword_auth", lambda: False)
 
     def _raise_eof(*_args: object, **_kwargs: object) -> str:
         raise EOFError
@@ -208,6 +235,29 @@ def test_run_cli_tool_returns_error_when_start_fails() -> None:
 
     assert result["success"] is False
     assert "start failed" in str(result["error"])
+
+
+def test_ensure_onboarding_token_reports_op_auth_failure(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    _stub_messages(monkeypatch)
+    monkeypatch.setattr(onboarding_discovery, "has_onepassword_auth", lambda: True)
+    monkeypatch.setattr(
+        onboarding_discovery,
+        "load_secret_from_1password_with_error",
+        lambda **_kwargs: (None, "not signed in"),
+    )
+    monkeypatch.setattr(
+        onboarding_discovery,
+        "check_onepassword_cli_access",
+        lambda: (False, "not signed in"),
+    )
+
+    assert (
+        onboarding_discovery._ensure_onboarding_token("GITHUB_READONLY_TOKEN") is False
+    )
+    captured = capsys.readouterr().out
+    assert "1Password CLI authentication failed" in captured
 
 
 def test_sync_repo_uses_kebab_case_token_flags(

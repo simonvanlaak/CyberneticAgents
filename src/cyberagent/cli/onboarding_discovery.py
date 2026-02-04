@@ -18,7 +18,9 @@ from src.cyberagent.cli.onboarding_constants import (
 )
 from src.cyberagent.cli.onboarding_secrets import (
     VAULT_NAME,
-    load_secret_from_1password,
+    check_onepassword_cli_access,
+    has_onepassword_auth,
+    load_secret_from_1password_with_error,
 )
 from src.cyberagent.cli.message_catalog import get_message
 
@@ -96,7 +98,7 @@ def run_discovery_onboarding(args: object) -> Path | None:
 def _ensure_onboarding_token(token_env: str) -> bool:
     if os.environ.get(token_env):
         return True
-    loaded = load_secret_from_1password(
+    loaded, error = load_secret_from_1password_with_error(
         vault_name=VAULT_NAME,
         item_name=token_env,
         field_label="credential",
@@ -104,7 +106,41 @@ def _ensure_onboarding_token(token_env: str) -> bool:
     if loaded:
         os.environ[token_env] = loaded
         return True
+    if has_onepassword_auth():
+        if error and _is_onepassword_auth_error(error):
+            print(
+                get_message(
+                    "onboarding_discovery",
+                    "onepassword_cli_not_ready",
+                    reason=error,
+                )
+            )
+        else:
+            ok, detail = check_onepassword_cli_access()
+            if not ok and detail:
+                print(
+                    get_message(
+                        "onboarding_discovery",
+                        "onepassword_cli_not_ready",
+                        reason=detail,
+                    )
+                )
     return False
+
+
+def _is_onepassword_auth_error(error: str) -> bool:
+    lowered = error.lower()
+    return any(
+        fragment in lowered
+        for fragment in (
+            "not signed in",
+            "sign in",
+            "not authenticated",
+            "unauthorized",
+            "permission denied",
+            "forbidden",
+        )
+    )
 
 
 def _create_cli_tool() -> CliTool | None:
