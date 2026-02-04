@@ -162,3 +162,7 @@ Implemented:
 I have further polished my working style with codex. First I discuss product ideas I have with codex and create a PRD in docs/product_requirements then I let an agent implement them. Once their implementation is verified, the PRD gets deleted and a feature entry like the ones above gets created. 
 I still haven't manually tested most of these though. I need to integrate this in the flow the next times.
 After manual testing I also need to do another architecture & docs review, to ensure that we are keeping everything clean. A lot of features were added, so a change of architecture might be required.
+
+### 2026-02-03
+Updated shared inbox behavior and documentation. Unified shared inbox entries across CLI and inbox channel, and enforced routing warnings with related test coverage. Refined telegram integration docs with updated verification steps and setup guidance.
+Manually tested telegram feature.
