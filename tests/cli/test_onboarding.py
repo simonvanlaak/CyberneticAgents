@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 
 import pytest
 
 from src.cyberagent.cli import cyberagent
+from src.cyberagent.cli import onboarding_interview
+from src.cyberagent.channels.telegram import session_store
 from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.models.system import System
 from src.cyberagent.db.models.team import Team
@@ -55,14 +56,19 @@ def _default_onboarding_args() -> argparse.Namespace:
 def test_handle_onboarding_creates_default_team(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
-    tmp_path: Path,
 ) -> None:
     _clear_teams()
     _patch_run_checks(monkeypatch, True)
-    summary_path = tmp_path / "summary.md"
-    summary_path.write_text("summary", encoding="utf-8")
+    called: dict[str, bool] = {}
     monkeypatch.setattr(
-        ONBOARDING, "_run_discovery_onboarding", lambda *_: summary_path
+        ONBOARDING,
+        "_start_discovery_background",
+        lambda *_args, **_kwargs: called.setdefault("background", True),
+    )
+    monkeypatch.setattr(
+        ONBOARDING,
+        "start_onboarding_interview",
+        lambda *_args, **_kwargs: called.setdefault("interview", True),
     )
     monkeypatch.setattr(
         ONBOARDING, "_trigger_onboarding_initiative", lambda *_, **__: True
@@ -75,6 +81,8 @@ def test_handle_onboarding_creates_default_team(
     assert "Created default team" in captured
     assert "Starting PKM sync and profile discovery" in captured
     assert "cyberagent inbox" in captured
+    assert called.get("background") is True
+    assert called.get("interview") is True
 
     expected_name = (
         "root" if hasattr(ONBOARDING, "handle_onboarding") else "default_team"
@@ -90,7 +98,6 @@ def test_handle_onboarding_creates_default_team(
 def test_handle_onboarding_skips_when_team_exists(
     monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
-    tmp_path: Path,
 ) -> None:
     _clear_teams()
     session = next(get_db())
@@ -101,10 +108,16 @@ def test_handle_onboarding_skips_when_team_exists(
         session.close()
 
     _patch_run_checks(monkeypatch, True)
-    summary_path = tmp_path / "summary.md"
-    summary_path.write_text("summary", encoding="utf-8")
+    called: dict[str, bool] = {}
     monkeypatch.setattr(
-        ONBOARDING, "_run_discovery_onboarding", lambda *_: summary_path
+        ONBOARDING,
+        "_start_discovery_background",
+        lambda *_args, **_kwargs: called.setdefault("background", True),
+    )
+    monkeypatch.setattr(
+        ONBOARDING,
+        "start_onboarding_interview",
+        lambda *_args, **_kwargs: called.setdefault("interview", True),
     )
     monkeypatch.setattr(
         ONBOARDING, "_trigger_onboarding_initiative", lambda *_, **__: True
@@ -117,6 +130,8 @@ def test_handle_onboarding_skips_when_team_exists(
     assert "Team already exists" in captured
     assert "Starting PKM sync and profile discovery" in captured
     assert "cyberagent inbox" in captured
+    assert called.get("background") is True
+    assert called.get("interview") is True
 
     session = next(get_db())
     try:
@@ -137,3 +152,68 @@ def test_handle_onboarding_requires_technical_checks(
 
     assert exit_code == 1
     assert "technical onboarding" in captured.lower()
+
+
+def test_select_latest_telegram_session_picks_most_recent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    older = session_store.TelegramSession(
+        telegram_user_id=1,
+        telegram_chat_id=10,
+        agent_session_id="telegram:chat-10:user-1",
+        user_info={},
+        chat_type="private",
+        created_at=1.0,
+        last_activity=2.0,
+    )
+    newer = session_store.TelegramSession(
+        telegram_user_id=2,
+        telegram_chat_id=20,
+        agent_session_id="telegram:chat-20:user-2",
+        user_info={},
+        chat_type="private",
+        created_at=1.0,
+        last_activity=5.0,
+    )
+
+    monkeypatch.setattr(onboarding_interview, "session_store", session_store)
+    monkeypatch.setattr(
+        onboarding_interview.session_store, "list_sessions", lambda: [older, newer]
+    )
+
+    selected = onboarding_interview.select_latest_telegram_session()
+
+    assert selected is newer
+
+
+def test_send_onboarding_intro_messages_sends_two_messages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    session = session_store.TelegramSession(
+        telegram_user_id=2,
+        telegram_chat_id=20,
+        agent_session_id="telegram:chat-20:user-2",
+        user_info={},
+        chat_type="private",
+        created_at=1.0,
+        last_activity=5.0,
+    )
+    sent: list[tuple[int, str]] = []
+
+    def _fake_send(chat_id: int, text: str) -> None:
+        sent.append((chat_id, text))
+
+    monkeypatch.setattr(onboarding_interview, "session_store", session_store)
+    monkeypatch.setattr(
+        onboarding_interview.session_store, "list_sessions", lambda: [session]
+    )
+    monkeypatch.setattr(onboarding_interview, "get_secret", lambda *_args: "token")
+    monkeypatch.setattr(onboarding_interview, "send_telegram_message", _fake_send)
+
+    used = onboarding_interview.send_onboarding_intro_messages(
+        welcome_message="Welcome!",
+        first_question="First question?",
+    )
+
+    assert used is True
+    assert sent == [(20, "Welcome!"), (20, "First question?")]

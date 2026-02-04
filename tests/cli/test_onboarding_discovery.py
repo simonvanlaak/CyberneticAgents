@@ -73,7 +73,9 @@ def test_discovery_prompts_and_continues_without_token(
     )
     monkeypatch.setattr(onboarding_discovery, "_create_cli_tool", lambda: object())
     monkeypatch.setattr(
-        onboarding_discovery, "_fetch_profile_links", lambda *_: "profiles"
+        onboarding_discovery,
+        "_fetch_profile_links",
+        lambda *_args, **_kwargs: "profiles",
     )
     monkeypatch.setattr(onboarding_discovery, "_write_onboarding_summary", _fake_write)
     monkeypatch.setattr("builtins.input", lambda *_: "y")
@@ -159,7 +161,9 @@ def test_discovery_continues_on_sync_failure_when_accepted(
         onboarding_discovery, "_sync_obsidian_repo", lambda **_: (Path("x"), False)
     )
     monkeypatch.setattr(
-        onboarding_discovery, "_fetch_profile_links", lambda *_: "profiles"
+        onboarding_discovery,
+        "_fetch_profile_links",
+        lambda *_args, **_kwargs: "profiles",
     )
     monkeypatch.setattr(onboarding_discovery, "_write_onboarding_summary", _fake_write)
     monkeypatch.setattr("builtins.input", lambda *_: "yes")
@@ -310,6 +314,29 @@ def test_sync_repo_reports_stderr_when_error_missing(
 
     captured = capsys.readouterr().out
     assert "boom" in captured
+
+
+def test_fetch_profile_links_calls_callback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[tuple[str, str]] = []
+
+    def _fake_run_cli_tool(*_args: object, **_kwargs: object) -> dict[str, object]:
+        return {"success": True, "output": {"content": "Profile content"}}
+
+    def _on_entry(link: str, content: str) -> None:
+        calls.append((link, content))
+
+    monkeypatch.setattr(onboarding_discovery, "_run_cli_tool", _fake_run_cli_tool)
+
+    summary = onboarding_discovery._fetch_profile_links(
+        cli_tool=cast(CliTool, object()),
+        links=["https://example.com/profile"],
+        on_entry=_on_entry,
+    )
+
+    assert "Profile content" in summary
+    assert calls == [("https://example.com/profile", "Profile content")]
 
 
 def test_sync_repo_reports_unknown_error_when_missing_details(

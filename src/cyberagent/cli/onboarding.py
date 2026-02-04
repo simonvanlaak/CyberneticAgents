@@ -42,6 +42,8 @@ from src.cyberagent.cli.onboarding_defaults import (
     load_root_team_defaults,
 )
 from src.cyberagent.cli.onboarding_discovery import run_discovery_onboarding
+from src.cyberagent.cli.onboarding_discovery import start_discovery_background
+from src.cyberagent.cli.onboarding_interview import start_onboarding_interview
 from src.cyberagent.cli.message_catalog import get_message
 from src.cyberagent.cli.onboarding_constants import DEFAULT_GIT_TOKEN_ENV
 from src.cyberagent.cli.onboarding_secrets import (
@@ -55,7 +57,6 @@ from src.cyberagent.cli.onboarding_vault import (
     prompt_store_secret_in_1password,
     prompt_yes_no,
 )
-from src.cyberagent.cli.onboarding_memory import store_onboarding_memory
 from src.enums import SystemType
 
 LOGS_DIR = Path("logs")
@@ -119,12 +120,12 @@ def handle_onboarding(
     _ensure_team_systems(team.id, team_defaults)
     _seed_default_procedures(team.id, procedures)
     print(get_message("onboarding", "discovery_starting"))
-    summary_path = _run_discovery_onboarding(args, team.id)
-    if summary_path is None:
-        print(get_message("onboarding", "discovery_failed"))
-        print(get_message("onboarding", "discovery_failed_hint"))
-        return 1
-    store_onboarding_memory(team.id, summary_path)
+    start_onboarding_interview(
+        user_name=str(getattr(args, "user_name", "")).strip(),
+        repo_url=str(getattr(args, "repo_url", "")).strip(),
+        profile_links=list(getattr(args, "profile_links", []) or []),
+    )
+    _start_discovery_background(args, team.id)
     if auto_execute:
         if not _trigger_onboarding_initiative(
             team.id,
@@ -376,6 +377,10 @@ def _build_onboarding_prompt(summary_path: Path, summary_text: str) -> str:
 def _run_discovery_onboarding(args: argparse.Namespace, team_id: int) -> Path | None:
     del team_id
     return run_discovery_onboarding(args)
+
+
+def _start_discovery_background(args: argparse.Namespace, team_id: int) -> None:
+    start_discovery_background(args, team_id)
 
 
 def _trigger_onboarding_initiative(

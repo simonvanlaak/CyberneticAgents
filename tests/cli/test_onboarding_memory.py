@@ -6,7 +6,12 @@ from typing import Any, cast
 import pytest
 
 from src.cyberagent.cli import onboarding_memory
-from src.cyberagent.memory.models import MemoryLayer, MemoryPriority, MemoryScope
+from src.cyberagent.memory.models import (
+    MemoryLayer,
+    MemoryPriority,
+    MemoryScope,
+    MemorySource,
+)
 from src.enums import SystemType
 
 
@@ -103,3 +108,43 @@ def test_store_onboarding_memory_warns_on_failure(
     onboarding_memory.store_onboarding_memory(1, summary_path)
     captured = capsys.readouterr()
     assert "unable to store onboarding summary" in captured.out
+
+
+def test_store_onboarding_memory_entry_success(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeSystem:
+        id = 10
+        type = SystemType.INTELLIGENCE
+        agent_id_str = "System4/root"
+
+    recorded: dict[str, Any] = {}
+
+    class FakeService:
+        def create_entries(self, *, actor, requests) -> None:  # type: ignore[no-untyped-def]
+            recorded["actor"] = actor
+            recorded["requests"] = requests
+
+    monkeypatch.setattr(
+        onboarding_memory, "get_system_by_type", lambda *_: FakeSystem()
+    )
+    monkeypatch.setattr(
+        onboarding_memory, "_build_memory_service", lambda: FakeService()
+    )
+
+    onboarding_memory.store_onboarding_memory_entry(
+        team_id=1,
+        content="Profile details",
+        tags=["onboarding", "profile_link"],
+        source=MemorySource.TOOL,
+        priority=MemoryPriority.MEDIUM,
+        layer=MemoryLayer.SESSION,
+    )
+
+    requests = cast(list, recorded["requests"])
+    request = requests[0]
+    assert request.content == "Profile details"
+    assert request.scope == MemoryScope.GLOBAL
+    assert request.source == MemorySource.TOOL
+    assert request.priority == MemoryPriority.MEDIUM
+    assert request.layer == MemoryLayer.SESSION

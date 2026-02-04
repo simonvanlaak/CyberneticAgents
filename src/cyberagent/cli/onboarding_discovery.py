@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 import subprocess
 import threading
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import urlparse, urlunparse
 
 from src.cyberagent.cli.suggestion_queue import enqueue_suggestion
@@ -25,6 +25,11 @@ from src.cyberagent.cli.onboarding_secrets import (
     load_secret_from_1password_with_error,
 )
 from src.cyberagent.cli.message_catalog import get_message
+from src.cyberagent.cli.onboarding_memory import (
+    store_onboarding_memory,
+    store_onboarding_memory_entry,
+)
+from src.cyberagent.memory.models import MemoryLayer, MemoryPriority, MemorySource
 
 from src.cyberagent.tools.cli_executor.cli_tool import CliTool
 from src.cyberagent.tools.cli_executor.factory import create_cli_executor
@@ -33,6 +38,35 @@ logger = logging.getLogger(__name__)
 
 
 def run_discovery_onboarding(args: object) -> Path | None:
+    return _run_discovery_pipeline(
+        args,
+        team_id=None,
+        allow_prompt=True,
+        enqueue_prompt=True,
+    )
+
+
+def start_discovery_background(args: object, team_id: int) -> None:
+    thread = threading.Thread(
+        target=_run_discovery_pipeline,
+        kwargs={
+            "args": args,
+            "team_id": team_id,
+            "allow_prompt": False,
+            "enqueue_prompt": False,
+        },
+        daemon=True,
+    )
+    thread.start()
+
+
+def _run_discovery_pipeline(
+    args: object,
+    *,
+    team_id: int | None,
+    allow_prompt: bool,
+    enqueue_prompt: bool,
+) -> Path | None:
     user_name = str(getattr(args, "user_name", "")).strip()
     repo_url = str(getattr(args, "repo_url", "")).strip()
     profile_links = list(getattr(args, "profile_links", []) or [])
@@ -52,16 +86,34 @@ def run_discovery_onboarding(args: object) -> Path | None:
                 token_env=token_env,
             )
         )
-        if not _prompt_continue_without_pkm(
-            get_message("onboarding_discovery", "pkm_access_unavailable")
-        ):
-            return None
+        if allow_prompt:
+            if not _prompt_continue_without_pkm(
+                get_message("onboarding_discovery", "pkm_access_unavailable")
+            ):
+                return None
         repo_sync_allowed = False
 
     cli_tool = _create_cli_tool()
     if cli_tool is None:
         print(get_message("onboarding_discovery", "cli_tool_unavailable"))
         return None
+
+    profile_summary = _fetch_profile_links(
+        cli_tool,
+        profile_links,
+        on_entry=(
+            _build_profile_link_entry_writer(team_id) if team_id is not None else None
+        ),
+    )
+    if team_id is not None and profile_summary.strip():
+        store_onboarding_memory_entry(
+            team_id=team_id,
+            content=profile_summary,
+            tags=["onboarding", "profile_links_summary"],
+            source=MemorySource.TOOL,
+            priority=MemoryPriority.MEDIUM,
+            layer=MemoryLayer.SESSION,
+        )
 
     markdown_summary = get_message("onboarding_discovery", "pkm_sync_skipped")
     if repo_sync_allowed:
@@ -76,11 +128,20 @@ def run_discovery_onboarding(args: object) -> Path | None:
         )
         if success:
             markdown_summary = _summarize_markdown_repo(repo_path)
-        elif not _prompt_continue_without_pkm(
-            get_message("onboarding_discovery", "pkm_sync_failed")
-        ):
-            return None
-    profile_summary = _fetch_profile_links(cli_tool, profile_links)
+            if team_id is not None and markdown_summary.strip():
+                store_onboarding_memory_entry(
+                    team_id=team_id,
+                    content=markdown_summary,
+                    tags=["onboarding", "pkm"],
+                    source=MemorySource.IMPORT,
+                    priority=MemoryPriority.HIGH,
+                    layer=MemoryLayer.LONG_TERM,
+                )
+        elif allow_prompt:
+            if not _prompt_continue_without_pkm(
+                get_message("onboarding_discovery", "pkm_sync_failed")
+            ):
+                return None
     summary_text = _render_onboarding_summary(
         user_name=user_name,
         repo_url=repo_url,
@@ -89,7 +150,9 @@ def run_discovery_onboarding(args: object) -> Path | None:
         profile_summary=profile_summary,
     )
     summary_path = _write_onboarding_summary(summary_text)
-    if summary_path is not None:
+    if team_id is not None:
+        store_onboarding_memory(team_id, summary_path)
+    if summary_path is not None and enqueue_prompt:
         enqueue_suggestion(
             build_onboarding_prompt(
                 summary_path=summary_path, summary_text=summary_text
@@ -257,7 +320,11 @@ def _summarize_markdown_repo(repo_path: Path) -> str:
     return "\n".join(lines)
 
 
-def _fetch_profile_links(cli_tool: CliTool, links: list[str]) -> str:
+def _fetch_profile_links(
+    cli_tool: CliTool,
+    links: list[str],
+    on_entry: Callable[[str, str], None] | None = None,
+) -> str:
     if not links:
         return "No profile links provided."
     sections = []
@@ -271,8 +338,28 @@ def _fetch_profile_links(cli_tool: CliTool, links: list[str]) -> str:
         if not content:
             sections.append(f"## {link}\nNo content.")
             continue
-        sections.append(f"## {link}\n{content[:2000]}")
+        excerpt = content[:2000]
+        sections.append(f"## {link}\n{excerpt}")
+        if on_entry is not None:
+            on_entry(link, excerpt)
     return "\n".join(sections)
+
+
+def _build_profile_link_entry_writer(
+    team_id: int,
+) -> Callable[[str, str], None]:
+    def _writer(link: str, content: str) -> None:
+        payload = f"Profile link: {link}\n\n{content}".strip()
+        store_onboarding_memory_entry(
+            team_id=team_id,
+            content=payload,
+            tags=["onboarding", "profile_link"],
+            source=MemorySource.TOOL,
+            priority=MemoryPriority.MEDIUM,
+            layer=MemoryLayer.SESSION,
+        )
+
+    return _writer
 
 
 def _render_onboarding_summary(
@@ -320,10 +407,43 @@ def build_onboarding_prompt(summary_path: Path, summary_text: str) -> str:
         [
             "## ONBOARDING DISCOVERY",
             "Use the onboarding summary to run a full discovery interview.",
+            "Before each question, check memory for new onboarding entries.",
+            "Log user responses into memory as you learn them.",
+            "If the user mentions a specific company, city, product, or industry",
+            "that is not in memory, trigger background web research and store",
+            "the results in memory for future questions.",
             f"Summary file: {summary_path}",
             "",
             "# Onboarding Summary",
             summary_text,
+        ]
+    )
+
+
+def build_onboarding_interview_prompt(
+    *,
+    user_name: str,
+    repo_url: str,
+    profile_links: list[str],
+    first_question: str,
+) -> str:
+    links_text = "\n".join(profile_links) if profile_links else "None"
+    return "\n".join(
+        [
+            "## ONBOARDING INTERVIEW",
+            "Start the onboarding interview now.",
+            f"The first question has already been sent: {first_question}",
+            "Wait for the user response before sending the next question.",
+            "Before each question, check memory for new onboarding entries.",
+            "Log user responses into memory as you learn them.",
+            "If the user mentions a specific company, city, product, or industry",
+            "that is not in memory, trigger background web research and store",
+            "the results in memory for future questions.",
+            "",
+            f"User: {user_name}",
+            f"Repo: {repo_url}",
+            "Profile links:",
+            links_text,
         ]
     )
 

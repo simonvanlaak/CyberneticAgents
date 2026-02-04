@@ -32,16 +32,9 @@ def store_onboarding_memory(team_id: int, summary_path: Path | None) -> None:
     if not summary_text:
         return
 
-    system4 = get_system_by_type(team_id, SystemType.INTELLIGENCE)
-    if system4 is None:
+    actor = _build_system4_actor(team_id)
+    if actor is None:
         return
-
-    actor = MemoryActorContext(
-        agent_id=system4.agent_id_str,
-        system_id=system4.id,
-        team_id=team_id,
-        system_type=system4.type,
-    )
     service = _build_memory_service()
     request = MemoryCreateRequest(
         content=summary_text,
@@ -53,12 +46,72 @@ def store_onboarding_memory(team_id: int, summary_path: Path | None) -> None:
         confidence=0.7,
         expires_at=None,
         layer=MemoryLayer.LONG_TERM,
-        owner_agent_id=system4.agent_id_str,
+        owner_agent_id=actor.agent_id,
     )
     try:
         service.create_entries(actor=actor, requests=[request])
     except (PermissionError, ValueError):
         print(get_message("onboarding_memory", "unable_store_summary"))
+
+
+def store_onboarding_memory_entry(
+    *,
+    team_id: int,
+    content: str,
+    tags: list[str],
+    source: MemorySource,
+    priority: MemoryPriority,
+    layer: MemoryLayer,
+    namespace: str = "user",
+    confidence: float = 0.6,
+) -> None:
+    """
+    Store an incremental onboarding memory entry for live interview enrichment.
+
+    Args:
+        team_id: Team ID to store the entry under.
+        content: Memory content payload.
+        tags: Tags describing the entry.
+        source: Memory source classification.
+        priority: Memory priority.
+        layer: Memory layer.
+        namespace: Memory namespace.
+        confidence: Confidence level between 0 and 1.
+    """
+    if not content.strip():
+        return
+    actor = _build_system4_actor(team_id)
+    if actor is None:
+        return
+    service = _build_memory_service()
+    request = MemoryCreateRequest(
+        content=content.strip(),
+        namespace=namespace,
+        scope=MemoryScope.GLOBAL,
+        tags=tags,
+        priority=priority,
+        source=source,
+        confidence=confidence,
+        expires_at=None,
+        layer=layer,
+        owner_agent_id=actor.agent_id,
+    )
+    try:
+        service.create_entries(actor=actor, requests=[request])
+    except (PermissionError, ValueError):
+        print(get_message("onboarding_memory", "unable_store_summary"))
+
+
+def _build_system4_actor(team_id: int) -> MemoryActorContext | None:
+    system4 = get_system_by_type(team_id, SystemType.INTELLIGENCE)
+    if system4 is None:
+        return None
+    return MemoryActorContext(
+        agent_id=system4.agent_id_str,
+        system_id=system4.id,
+        team_id=team_id,
+        system_type=system4.type,
+    )
 
 
 def _build_memory_service() -> MemoryCrudService:

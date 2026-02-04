@@ -77,3 +77,19 @@ The interview should run through the shared inbox + `UserAgent` to support multi
 - The SOP is executed by System3 after successful secrets/config validation.
 - The root team is created with its root purpose and root initiative assigned from the
   onboarding SOP.
+
+# Onboarding with live research
+Flow requirements:
+1. User enters their name, web links, and PKM vault details.
+2. Send two Telegram messages immediately: a welcome message explaining CyberneticAgents and that
+   an interview starts now, and the first interview question (pre-defined). If Telegram is not
+   configured, fall back to CLI output.
+3. Begin the interview immediately (no waiting for PKM or web link fetch).
+4. Fetch web links in the background. As each link finishes, append the content to memory so the
+   interview agent can read it before each next question.
+5. After web links finish, start PKM sync in the background. As PKM analysis completes, append
+   it to memory the same way so it enriches the interview in real time.
+6. When agents receive new information from user responses, they add it to memory.
+7. Use a fixed heuristic to trigger background web research when the user mentions a specific
+   business, city, product, or other named entity not already present in memory. Store results
+   into memory for future questions.
