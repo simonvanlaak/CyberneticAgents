@@ -4,6 +4,7 @@ Common database components shared across all modules
 
 import os
 from datetime import datetime
+from datetime import timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -60,10 +61,22 @@ def init_db():
     except OperationalError as exc:
         if "disk i/o error" in str(exc).lower():
             db_path = get_database_path()
-            raise RuntimeError(
-                f"SQLite disk I/O error while initializing database at {db_path}. "
-                "Check permissions and available disk space."
-            ) from exc
+            backup_path = _attempt_recover_sqlite(db_path)
+            try:
+                Base.metadata.create_all(bind=engine)
+            except OperationalError as retry_exc:
+                hint = (
+                    f" Backup saved to {backup_path}."
+                    if backup_path is not None
+                    else ""
+                )
+                raise RuntimeError(
+                    f"SQLite disk I/O error while initializing database at {db_path}."
+                    f"{hint} Check permissions and available disk space."
+                ) from retry_exc
+            else:
+                _ensure_team_last_active_column()
+                return
         raise
     _ensure_team_last_active_column()
 
@@ -133,6 +146,21 @@ def _ensure_db_writable() -> None:
             )
         if not os.access(db_file, os.W_OK):
             raise PermissionError(f"Database file is not writable: {db_file}")
+
+
+def _attempt_recover_sqlite(db_path: str) -> str | None:
+    if db_path == ":memory:":
+        return None
+    db_file = Path(db_path)
+    if not db_file.exists() or not db_file.is_file():
+        return None
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    backup_path = db_file.with_suffix(f".corrupt.{timestamp}.db")
+    try:
+        db_file.rename(backup_path)
+    except OSError:
+        return None
+    return str(backup_path)
 
 
 # Note: init_db() is NOT called automatically during import to avoid circular dependencies

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from src import init_db
@@ -48,4 +50,33 @@ def test_init_db_raises_when_db_dir_not_writable(tmp_path) -> None:
             init_db.init_db()
     finally:
         db_dir.chmod(0o700)
+        init_db.configure_database(previous)
+
+
+def test_init_db_recovers_from_sqlite_disk_io_error(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db_path = tmp_path / "bad.db"
+    db_path.write_text("corrupt", encoding="utf-8")
+    previous = init_db.DATABASE_URL
+    try:
+        init_db.configure_database(f"sqlite:///{db_path.resolve()}")
+        call_state = {"count": 0}
+
+        def _fake_create_all(*_args: object, **_kwargs: object) -> None:
+            call_state["count"] += 1
+            if call_state["count"] == 1:
+                raise init_db.OperationalError(
+                    "disk I/O error", None, Exception("disk I/O error")
+                )
+
+        monkeypatch.setattr(init_db.Base.metadata, "create_all", _fake_create_all)
+        monkeypatch.setattr(init_db, "_ensure_team_last_active_column", lambda: None)
+
+        init_db.init_db()
+
+        backups = list(tmp_path.glob("bad.corrupt.*.db"))
+        assert backups
+        assert call_state["count"] == 2
+    finally:
         init_db.configure_database(previous)
