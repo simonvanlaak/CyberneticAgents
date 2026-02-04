@@ -179,7 +179,12 @@ def test_handle_onboarding_stops_when_discovery_fails(
 ) -> None:
     _clear_teams()
     monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
-    monkeypatch.setattr(onboarding_cli, "_run_discovery_onboarding", lambda *_: None)
+    monkeypatch.setattr(
+        onboarding_cli, "_start_discovery_background", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        onboarding_cli, "start_onboarding_interview", lambda **_kwargs: None
+    )
     monkeypatch.setattr(
         onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: True
     )
@@ -198,20 +203,21 @@ def test_handle_onboarding_stops_when_discovery_fails(
     )
     captured = capsys.readouterr().out
 
-    assert exit_code == 1
-    assert "Discovery onboarding couldn't complete yet" in captured
-    assert start_calls == []
+    assert exit_code == 0
+    assert "Starting PKM sync and profile discovery" in captured
+    assert start_calls == [1]
 
 
 def test_handle_onboarding_stops_when_trigger_fails(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _clear_teams()
     monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
-    summary_path = tmp_path / "summary.md"
-    summary_path.write_text("summary", encoding="utf-8")
     monkeypatch.setattr(
-        onboarding_cli, "_run_discovery_onboarding", lambda *_: summary_path
+        onboarding_cli, "_start_discovery_background", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        onboarding_cli, "start_onboarding_interview", lambda **_kwargs: None
     )
     monkeypatch.setattr(
         onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: False

@@ -103,7 +103,10 @@ def store_onboarding_memory_entry(
 
 
 def _build_system4_actor(team_id: int) -> MemoryActorContext | None:
-    system4 = get_system_by_type(team_id, SystemType.INTELLIGENCE)
+    try:
+        system4 = get_system_by_type(team_id, SystemType.INTELLIGENCE)
+    except ValueError:
+        return None
     if system4 is None:
         return None
     return MemoryActorContext(
