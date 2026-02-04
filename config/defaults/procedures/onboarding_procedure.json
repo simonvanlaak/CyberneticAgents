@@ -1,0 +1,45 @@
+{
+  "onboarding_procedure_name": "First Run Discovery",
+  "onboarding_strategy_name": "Onboarding SOP",
+  "procedures": [
+    {
+      "name": "First Run Discovery",
+      "description": "Capture initial user context, documents, and interview insights to establish a baseline purpose and strategy.",
+      "risk_level": "low",
+      "impact": "high",
+      "rollback_plan": "Revert to prior purpose/strategy and re-interview the user.",
+      "tasks": [
+        {
+          "name": "Collect user identity and disambiguation links",
+          "description": "Gather user name and confirm public profile links to avoid misidentification.",
+          "position": 1
+        },
+        {
+          "name": "Collect user documents and sources",
+          "description": "Request access to relevant docs (Notion, Obsidian, files) and confirm what should be analyzed.",
+          "position": 2
+        },
+        {
+          "name": "Analyze documents for needs and active work",
+          "description": "Summarize current projects, goals, constraints, and pain points from provided materials.",
+          "position": 3
+        },
+        {
+          "name": "Prepare discovery interview plan",
+          "description": "Draft focused questions based on known context.",
+          "position": 4
+        },
+        {
+          "name": "Conduct discovery interview",
+          "description": "Run the interview and capture answers verbatim.",
+          "position": 5
+        },
+        {
+          "name": "Propose initial purpose and strategy",
+          "description": "Draft purpose, objectives, and KPIs based on the interview.",
+          "position": 6
+        }
+      ]
+    }
+  ]
+}

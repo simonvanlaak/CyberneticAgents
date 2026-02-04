@@ -1,0 +1,36 @@
+{
+  "team": {
+    "name": "root"
+  },
+  "allowed_skills": ["speech-to-text"],
+  "systems": [
+    {
+      "name": "System1/root",
+      "type": "OPERATION",
+      "agent_id": "System1/root",
+      "skill_grants": [],
+      "config": {}
+    },
+    {
+      "name": "System3/root",
+      "type": "CONTROL",
+      "agent_id": "System3/root",
+      "skill_grants": [],
+      "config": {}
+    },
+    {
+      "name": "System4/root",
+      "type": "INTELLIGENCE",
+      "agent_id": "System4/root",
+      "skill_grants": [],
+      "config": {}
+    },
+    {
+      "name": "System5/root",
+      "type": "POLICY",
+      "agent_id": "System5/root",
+      "skill_grants": [],
+      "config": {}
+    }
+  ]
+}

@@ -54,7 +54,7 @@ def test_handle_onboarding_creates_default_team(
     monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_run_discovery_onboarding", lambda *_: None)
     monkeypatch.setattr(
-        onboarding_cli, "_trigger_onboarding_initiative", lambda *_: None
+        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: None
     )
     start_calls: list[int] = []
 
@@ -99,7 +99,7 @@ def test_handle_onboarding_skips_when_team_exists(
     monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_run_discovery_onboarding", lambda *_: None)
     monkeypatch.setattr(
-        onboarding_cli, "_trigger_onboarding_initiative", lambda *_: None
+        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: None
     )
     start_calls: list[int] = []
 
@@ -163,7 +163,7 @@ def test_handle_onboarding_seeds_default_sops(
     monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_run_discovery_onboarding", lambda *_: None)
     monkeypatch.setattr(
-        onboarding_cli, "_trigger_onboarding_initiative", lambda *_: None
+        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: None
     )
 
     exit_code = onboarding_cli.handle_onboarding(
@@ -181,11 +181,7 @@ def test_handle_onboarding_seeds_default_sops(
         assert team is not None
         procedures = session.query(Procedure).filter(Procedure.team_id == team.id).all()
         procedure_names = {procedure.name for procedure in procedures}
-        assert procedure_names == {
-            "First Run Discovery",
-            "Purpose Adjustment Review",
-            "Product Discovery Research Loop",
-        }
+        assert procedure_names == {"First Run Discovery"}
         assert all(
             procedure.status == ProcedureStatus.APPROVED for procedure in procedures
         )
@@ -207,7 +203,7 @@ def test_handle_onboarding_sets_root_team_envelope() -> None:
     monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_run_discovery_onboarding", lambda *_: None)
     monkeypatch.setattr(
-        onboarding_cli, "_trigger_onboarding_initiative", lambda *_: None
+        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: None
     )
 
     onboarding_cli.handle_onboarding(
@@ -233,7 +229,7 @@ def test_handle_onboarding_seeds_default_sops_once() -> None:
     monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_run_discovery_onboarding", lambda *_: None)
     monkeypatch.setattr(
-        onboarding_cli, "_trigger_onboarding_initiative", lambda *_: None
+        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: None
     )
 
     onboarding_cli.handle_onboarding(
@@ -249,7 +245,7 @@ def test_handle_onboarding_seeds_default_sops_once() -> None:
         team = session.query(Team).filter(Team.name == "root").first()
         assert team is not None
         count = session.query(Procedure).filter(Procedure.team_id == team.id).count()
-        assert count == 3
+        assert count == 1
     finally:
         session.close()
 

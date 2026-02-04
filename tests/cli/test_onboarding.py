@@ -55,7 +55,9 @@ def test_handle_onboarding_creates_default_team(
     _clear_teams()
     _patch_run_checks(monkeypatch, True)
     monkeypatch.setattr(ONBOARDING, "_run_discovery_onboarding", lambda *_: None)
-    monkeypatch.setattr(ONBOARDING, "_trigger_onboarding_initiative", lambda *_: None)
+    monkeypatch.setattr(
+        ONBOARDING, "_trigger_onboarding_initiative", lambda *_, **__: None
+    )
 
     exit_code = _handle_onboarding(_default_onboarding_args())
     captured = capsys.readouterr().out
@@ -88,7 +90,9 @@ def test_handle_onboarding_skips_when_team_exists(
 
     _patch_run_checks(monkeypatch, True)
     monkeypatch.setattr(ONBOARDING, "_run_discovery_onboarding", lambda *_: None)
-    monkeypatch.setattr(ONBOARDING, "_trigger_onboarding_initiative", lambda *_: None)
+    monkeypatch.setattr(
+        ONBOARDING, "_trigger_onboarding_initiative", lambda *_, **__: None
+    )
 
     exit_code = _handle_onboarding(_default_onboarding_args())
     captured = capsys.readouterr().out

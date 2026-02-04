@@ -18,18 +18,24 @@ from src.cyberagent.db.init_db import get_database_path, init_db
 from src.cyberagent.db.models.procedure import Procedure
 from src.cyberagent.db.models.procedure_run import ProcedureRun
 from src.cyberagent.db.models.strategy import Strategy
+from src.cyberagent.db.models.system import System
 from src.cyberagent.db.models.system import ensure_default_systems_for_team
 from src.cyberagent.db.models.system import get_system_by_type
 from src.cyberagent.db.models.team import Team
 from src.cyberagent.services import procedures as procedures_service
 from src.cyberagent.services import purposes as purposes_service
 from src.cyberagent.services import strategies as strategies_service
+from src.cyberagent.services import systems as systems_service
 from src.cyberagent.services import teams as teams_service
 from src.cyberagent.tools.cli_executor.skill_loader import (
     SkillDefinition,
     load_skill_definitions,
 )
 from src.cyberagent.tools.cli_executor.skill_runtime import DEFAULT_SKILLS_ROOT
+from src.cyberagent.cli.onboarding_defaults import (
+    load_procedure_defaults,
+    load_root_team_defaults,
+)
 from src.cyberagent.cli.onboarding_discovery import run_discovery_onboarding
 from src.cyberagent.cli.onboarding_secrets import (
     VAULT_NAME,
@@ -47,142 +53,6 @@ TOOL_SECRET_DOC_HINTS = {
     "BRAVE_API_KEY": "src/tools/skills/web-search/SKILL.md",
 }
 TELEGRAM_DOC_HINT = "docs/technical/telegram_setup.md"
-DEFAULT_PROCEDURES = [
-    {
-        "name": "First Run Discovery",
-        "description": (
-            "Capture initial user context, documents, and interview insights to "
-            "establish a baseline purpose and strategy."
-        ),
-        "risk_level": "low",
-        "impact": "high",
-        "rollback_plan": "Revert to prior purpose/strategy and re-interview the user.",
-        "tasks": [
-            {
-                "name": "Collect user identity and disambiguation links",
-                "description": (
-                    "Gather user name and confirm public profile links to avoid "
-                    "misidentification."
-                ),
-                "position": 1,
-            },
-            {
-                "name": "Collect user documents and sources",
-                "description": (
-                    "Request access to relevant docs (Notion, Obsidian, files) and "
-                    "confirm what should be analyzed."
-                ),
-                "position": 2,
-            },
-            {
-                "name": "Analyze documents for needs and active work",
-                "description": (
-                    "Summarize current projects, goals, constraints, and pain points "
-                    "from provided materials."
-                ),
-                "position": 3,
-            },
-            {
-                "name": "Prepare discovery interview plan",
-                "description": "Draft focused questions based on known context.",
-                "position": 4,
-            },
-            {
-                "name": "Conduct discovery interview",
-                "description": "Run the interview and capture answers verbatim.",
-                "position": 5,
-            },
-            {
-                "name": "Propose initial purpose and strategy",
-                "description": (
-                    "Draft purpose, objectives, and KPIs based on the interview."
-                ),
-                "position": 6,
-            },
-        ],
-    },
-    {
-        "name": "Purpose Adjustment Review",
-        "description": (
-            "Review recent work and knowledge to refine purpose and strategy."
-        ),
-        "risk_level": "low",
-        "impact": "medium",
-        "rollback_plan": "Restore last approved purpose and log adjustments.",
-        "tasks": [
-            {
-                "name": "Review recent initiatives and tasks",
-                "description": (
-                    "Summarize completed work since the last review and key outcomes."
-                ),
-                "position": 1,
-            },
-            {
-                "name": "Compare new knowledge to current purpose",
-                "description": (
-                    "Identify gaps or changes in user needs vs the current purpose."
-                ),
-                "position": 2,
-            },
-            {
-                "name": "Identify recurring tasks for automation",
-                "description": (
-                    "List repeatable work that could be automated or templated."
-                ),
-                "position": 3,
-            },
-            {
-                "name": "Propose purpose/strategy updates",
-                "description": (
-                    "Draft recommended updates and user follow-up questions."
-                ),
-                "position": 4,
-            },
-        ],
-    },
-    {
-        "name": "Product Discovery Research Loop",
-        "description": (
-            "Continuously update the discovery framework using best practices."
-        ),
-        "risk_level": "low",
-        "impact": "medium",
-        "rollback_plan": "Revert to the last vetted framework and note changes.",
-        "tasks": [
-            {
-                "name": "Research interview best practices",
-                "description": (
-                    "Gather current guidance on user interviews and discovery."
-                ),
-                "position": 1,
-            },
-            {
-                "name": "Review internal discovery notes",
-                "description": (
-                    "Analyze existing research syntheses and onboarding learnings."
-                ),
-                "position": 2,
-            },
-            {
-                "name": "Synthesize discovery framework updates",
-                "description": (
-                    "Update the interview flow/guide with actionable steps."
-                ),
-                "position": 3,
-            },
-            {
-                "name": "Publish updated framework summary",
-                "description": ("Record changes and share with System4 and System5."),
-                "position": 4,
-            },
-        ],
-    },
-]
-DEFAULT_TEAM_ENVELOPE_SKILLS = [
-    "speech-to-text",
-]
-ONBOARDING_PROCEDURE_NAME = "First Run Discovery"
-ONBOARDING_STRATEGY_NAME = "Onboarding SOP"
 
 
 def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
@@ -191,12 +61,15 @@ def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
         return 1
     if not _validate_onboarding_inputs(args):
         return 1
+    procedures, procedure_name, strategy_name = load_procedure_defaults()
+    team_defaults = load_root_team_defaults()
+    team_name = _get_default_team_name(team_defaults)
     init_db()
     session = next(get_db())
     try:
         team = session.query(Team).order_by(Team.id).first()
         if team is None:
-            team = Team(name="root", last_active_at=datetime.utcnow())
+            team = Team(name=team_name, last_active_at=datetime.utcnow())
             session.add(team)
             session.commit()
             print(f"Created default team: {team.name} (id={team.id}).")
@@ -204,10 +77,15 @@ def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
             print(f"Team already exists: {team.name} (id={team.id}).")
     finally:
         session.close()
-    _seed_default_team_envelope(team.id)
-    _seed_default_procedures(team.id)
-    run_discovery_onboarding(args)
-    _trigger_onboarding_initiative(team.id)
+    _seed_default_team_envelope(team.id, team_defaults)
+    _ensure_team_systems(team.id, team_defaults)
+    _seed_default_procedures(team.id, procedures)
+    _run_discovery_onboarding(args, team.id)
+    _trigger_onboarding_initiative(
+        team.id,
+        onboarding_procedure_name=procedure_name,
+        onboarding_strategy_name=strategy_name,
+    )
     _start_runtime_after_onboarding(team.id)
     print(f"Next: run {suggest_command} to give the agents a task.")
     return 0
@@ -248,7 +126,16 @@ def _start_runtime_after_onboarding(team_id: int) -> int | None:
     return proc.pid
 
 
-def _seed_default_procedures(team_id: int) -> None:
+def _get_default_team_name(team_defaults: dict[str, object]) -> str:
+    team_block = team_defaults.get("team")
+    if isinstance(team_block, dict):
+        name = team_block.get("name")
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+    return "root"
+
+
+def _seed_default_procedures(team_id: int, procedures: list[dict[str, object]]) -> None:
     ensure_default_systems_for_team(team_id)
     system4 = get_system_by_type(team_id, SystemType.INTELLIGENCE)
     system5 = get_system_by_type(team_id, SystemType.POLICY)
@@ -264,27 +151,101 @@ def _seed_default_procedures(team_id: int) -> None:
     finally:
         session.close()
 
-    for template in DEFAULT_PROCEDURES:
-        if template["name"] in existing_names:
+    for template in procedures:
+        name = template.get("name")
+        if not isinstance(name, str):
             continue
+        if name in existing_names:
+            continue
+        tasks = template.get("tasks")
+        if not isinstance(tasks, list):
+            tasks = []
         procedure = procedures_service.create_procedure_draft(
             team_id=team_id,
-            name=template["name"],
-            description=template["description"],
-            risk_level=template["risk_level"],
-            impact=template["impact"],
-            rollback_plan=template["rollback_plan"],
+            name=name,
+            description=str(template.get("description", "")),
+            risk_level=str(template.get("risk_level", "")),
+            impact=str(template.get("impact", "")),
+            rollback_plan=str(template.get("rollback_plan", "")),
             created_by_system_id=system4.id,
-            tasks=template["tasks"],
+            tasks=tasks,
         )
         procedures_service.approve_procedure(
             procedure_id=procedure.id, approved_by_system_id=system5.id
         )
 
 
-def _seed_default_team_envelope(team_id: int) -> None:
-    for skill_name in DEFAULT_TEAM_ENVELOPE_SKILLS:
-        teams_service.add_allowed_skill(team_id, skill_name, actor_id="onboarding")
+def _seed_default_team_envelope(team_id: int, team_defaults: dict[str, object]) -> None:
+    allowed = team_defaults.get("allowed_skills")
+    if not isinstance(allowed, list):
+        return
+    skill_names = [skill for skill in allowed if isinstance(skill, str)]
+    teams_service.set_allowed_skills(team_id, skill_names, actor_id="onboarding")
+
+
+def _ensure_team_systems(team_id: int, team_defaults: dict[str, object]) -> None:
+    systems_block = team_defaults.get("systems")
+    if not isinstance(systems_block, list):
+        ensure_default_systems_for_team(team_id)
+        return
+    session = next(get_db())
+    try:
+        existing = {
+            system.type: system
+            for system in session.query(System).filter(System.team_id == team_id).all()
+        }
+        for entry in systems_block:
+            if not isinstance(entry, dict):
+                continue
+            type_value = entry.get("type")
+            name = entry.get("name")
+            agent_id = entry.get("agent_id")
+            if not isinstance(type_value, str):
+                continue
+            try:
+                system_type = SystemType[type_value]
+            except KeyError:
+                continue
+            if system_type in existing:
+                continue
+            if not isinstance(name, str) or not isinstance(agent_id, str):
+                continue
+            system = System(
+                team_id=team_id,
+                name=name,
+                type=system_type,
+                agent_id_str=agent_id,
+            )
+            session.add(system)
+            existing[system_type] = system
+        session.commit()
+    finally:
+        session.close()
+
+    for entry in systems_block:
+        if not isinstance(entry, dict):
+            continue
+        type_value = entry.get("type")
+        if not isinstance(type_value, str):
+            continue
+        try:
+            system_type = SystemType[type_value]
+        except KeyError:
+            continue
+        systems = (
+            systems_service.get_systems_by_type(team_id, system_type)
+            if system_type == SystemType.OPERATION
+            else [get_system_by_type(team_id, system_type)]
+        )
+        skill_grants = entry.get("skill_grants")
+        if not isinstance(skill_grants, list):
+            continue
+        for system in systems:
+            for skill_name in skill_grants:
+                if isinstance(skill_name, str):
+                    systems_service.add_skill_grant(
+                        system.id, skill_name, actor_id="onboarding"
+                    )
 
 
 def _build_onboarding_prompt(summary_path: Path, summary_text: str) -> str:
@@ -298,7 +259,9 @@ def _run_discovery_onboarding(args: argparse.Namespace, team_id: int) -> Path | 
     return run_discovery_onboarding(args)
 
 
-def _trigger_onboarding_initiative(team_id: int) -> None:
+def _trigger_onboarding_initiative(
+    team_id: int, onboarding_procedure_name: str, onboarding_strategy_name: str
+) -> None:
     ensure_default_systems_for_team(team_id)
     session = next(get_db())
     try:
@@ -306,7 +269,7 @@ def _trigger_onboarding_initiative(team_id: int) -> None:
             session.query(Procedure)
             .filter(
                 Procedure.team_id == team_id,
-                Procedure.name == ONBOARDING_PROCEDURE_NAME,
+                Procedure.name == onboarding_procedure_name,
             )
             .first()
         )
@@ -335,7 +298,8 @@ def _trigger_onboarding_initiative(team_id: int) -> None:
         strategy = (
             session.query(Strategy)
             .filter(
-                Strategy.team_id == team_id, Strategy.name == ONBOARDING_STRATEGY_NAME
+                Strategy.team_id == team_id,
+                Strategy.name == onboarding_strategy_name,
             )
             .first()
         )
@@ -345,7 +309,7 @@ def _trigger_onboarding_initiative(team_id: int) -> None:
         strategy = strategies_service.create_strategy(
             team_id=team_id,
             purpose_id=purpose.id,
-            name=ONBOARDING_STRATEGY_NAME,
+            name=onboarding_strategy_name,
             description=procedure.description,
         )
 
