@@ -5,6 +5,7 @@ from typing import cast
 
 import pytest
 from sqlalchemy import create_engine
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 
 from src import policy_database
@@ -77,3 +78,26 @@ def test_list_policy_prompts(temp_policy_db: None) -> None:
 
     system_ids = {policy.system_id for policy in policies}
     assert {"system-a", "system-b"}.issubset(system_ids)
+
+
+def test_init_database_recovers_disk_io(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db_path = tmp_path / "policy.db"
+    db_path.write_text("corrupt", encoding="utf-8")
+    monkeypatch.setattr(policy_database, "DATABASE_URL", f"sqlite:///{db_path}")
+    monkeypatch.setattr(policy_database, "DEFAULT_DB_PATH", str(db_path))
+    policy_database._configure_engine(policy_database.DATABASE_URL)
+
+    calls = {"count": 0}
+
+    def _fake_create_all(*_args: object, **_kwargs: object) -> None:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise OperationalError("disk I/O error", None, Exception("disk I/O error"))
+
+    monkeypatch.setattr(policy_database.Base.metadata, "create_all", _fake_create_all)
+
+    policy_database.init_database()
+
+    assert calls["count"] == 2

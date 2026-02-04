@@ -9,12 +9,14 @@ import os
 from typing import List, Optional
 
 from sqlalchemy import Column, Integer, String, create_engine
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 
 # Database setup
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATABASE_URL = f"sqlite:///{os.path.join(BASE_DIR, 'data', 'CyberneticAgents.db')}"
+DEFAULT_DB_PATH = os.path.join(BASE_DIR, "data", "CyberneticAgents.db")
+DATABASE_URL = os.environ.get("CYBERAGENT_DB_URL", f"sqlite:///{DEFAULT_DB_PATH}")
 
 Base = declarative_base()
 engine = create_engine(DATABASE_URL)
@@ -34,15 +36,53 @@ class PolicyPrompt(Base):
 def init_database():
     """Initialize database and create tables."""
     # Ensure data directory exists
-    data_dir = os.path.join(BASE_DIR, "data")
-    os.makedirs(data_dir, exist_ok=True)
-
-    Base.metadata.create_all(bind=engine)
+    _ensure_data_dir()
+    try:
+        Base.metadata.create_all(bind=engine)
+    except OperationalError as exc:
+        if "disk i/o" in str(exc).lower():
+            backup = _attempt_recover_sqlite()
+            if backup:
+                _configure_engine(DATABASE_URL)
+                Base.metadata.create_all(bind=engine)
+                return
+            raise RuntimeError(
+                "SQLite disk I/O error while initializing policy database."
+            ) from exc
+        raise
 
 
 def get_session():
     """Get database session."""
     return SessionLocal()
+
+
+def _configure_engine(database_url: str) -> None:
+    global engine
+    global SessionLocal
+    engine = create_engine(database_url)
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+def _ensure_data_dir() -> None:
+    if not DATABASE_URL.startswith("sqlite:///"):
+        return
+    data_dir = os.path.join(BASE_DIR, "data")
+    os.makedirs(data_dir, exist_ok=True)
+
+
+def _attempt_recover_sqlite() -> str | None:
+    if not DATABASE_URL.startswith("sqlite:///"):
+        return None
+    db_path = DEFAULT_DB_PATH
+    if not os.path.exists(db_path) or not os.path.isfile(db_path):
+        return None
+    backup_path = f"{db_path}.corrupt"
+    try:
+        os.replace(db_path, backup_path)
+    except OSError:
+        return None
+    return backup_path
 
 
 def create_policy_prompt(system_id: str, content: str):
