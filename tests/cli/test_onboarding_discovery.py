@@ -172,6 +172,44 @@ def test_run_cli_tool_starts_and_stops_executor() -> None:
     assert cli_tool.executor.stopped is True
 
 
+def test_prompt_continue_without_pkm_handles_eof(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _stub_messages(monkeypatch)
+
+    def _raise_eof(*_args: object, **_kwargs: object) -> str:
+        raise EOFError
+
+    monkeypatch.setattr("builtins.input", _raise_eof)
+
+    assert onboarding_discovery._prompt_continue_without_pkm("reason") is False
+
+
+def test_run_cli_tool_returns_error_when_start_fails() -> None:
+    class _FailExecutor:
+        def __init__(self) -> None:
+            self._running = False
+
+        async def start(self) -> None:
+            raise RuntimeError("start failed")
+
+    class _FakeCliTool:
+        def __init__(self) -> None:
+            self.executor = _FailExecutor()
+
+        async def execute(
+            self, _tool_name: str, **_kwargs: object
+        ) -> dict[str, object]:
+            return {"success": True}
+
+    cli_tool = _FakeCliTool()
+
+    result = onboarding_discovery._run_cli_tool(cli_tool, "web-fetch", url="x")
+
+    assert result["success"] is False
+    assert "start failed" in str(result["error"])
+
+
 def test_sync_repo_uses_kebab_case_token_flags(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

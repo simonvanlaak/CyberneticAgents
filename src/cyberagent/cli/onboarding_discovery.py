@@ -254,11 +254,14 @@ def _render_onboarding_summary(
 def _prompt_continue_without_pkm(reason: str) -> bool:
     print(reason)
     print(get_message("onboarding_discovery", "onboarding_interview_longer"))
-    response = (
-        input(get_message("onboarding_discovery", "continue_without_pkm_prompt"))
-        .strip()
-        .lower()
-    )
+    try:
+        response = (
+            input(get_message("onboarding_discovery", "continue_without_pkm_prompt"))
+            .strip()
+            .lower()
+        )
+    except EOFError:
+        return False
     return response in {"y", "yes"}
 
 
@@ -297,10 +300,13 @@ def _run_cli_tool(cli_tool: Any, tool_name: str, **kwargs: object) -> dict[str, 
         if executor is not None:
             start = getattr(executor, "start", None)
             if callable(start) and not getattr(executor, "_running", False):
-                result = start()
-                if inspect.isawaitable(result):
-                    await result
-                started = True
+                try:
+                    result = start()
+                    if inspect.isawaitable(result):
+                        await result
+                    started = True
+                except Exception as exc:
+                    return {"success": False, "error": str(exc)}
         try:
             return await cli_tool.execute(tool_name, **kwargs)
         finally:
