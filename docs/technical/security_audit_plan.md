@@ -10,7 +10,7 @@
 ## Scope
 1. Application code in `src/` and `main.py`.
 2. Config and secrets handling (`.env.example`, `pyproject.toml`, runtime env).
-3. Data stores (`data/`, `security_logs.db`, `data/rbac.db`).
+3. Data stores (`data/`, `data/security_logs.db`, `data/rbac.db`).
 4. CLI tooling and skill execution paths.
 5. Docs for security-critical behavior (memory, RBAC, observability).
 6. Scheduled recurring audit cadence and evidence retention.
@@ -18,7 +18,7 @@
 ## Audit Cadence (Recurring)
 1. Frequency: monthly.
 2. Triggered audits: before any major release or security-sensitive refactor.
-3. Evidence retention: keep audit artifacts for 12 months.
+3. Evidence retention: do not retain audit artifacts or outputs after the audit completes.
 
 ## Phase 0: Prep
 1. Define threat model and assets (PII, tokens, memory artifacts, audit logs).
@@ -26,17 +26,17 @@
 3. Establish audit evidence checklist and report template.
 
 ### Threat Model (Project-Specific)
-1. Assets
+1. Assets:
 2. `data/rbac.db` (authorization policy).
 3. `data/security_logs.db` (security events and audit signals).
 4. `data/` memory stores (agent/team/global).
 5. Environment secrets (API keys, service tokens, OnePassword session data).
-6. Attackers
+6. Attackers:
 7. Untrusted CLI users.
 8. Malicious tool/skill payloads.
 9. Misconfigured or compromised agents.
 10. Supply-chain threats in dependencies and tool images.
-11. Trust Boundaries
+11. Trust Boundaries:
 12. CLI input to runtime.
 13. Skill execution boundary (CLI executor).
 14. RBAC enforcement and namespace resolution.
@@ -64,7 +64,7 @@
 2. Memory CRUD enforces scope defaults and permission checks before any store access.
 3. Namespace is required for team/global scope; agent scope defaults to actor ID.
 4. No secrets are logged in audit or observability logs.
-5. All data stores persist under `data/`.
+5. All data stores persist under `data/` (requirement).
 
 ## Phase 2: Dependency & Supply Chain
 1. Review `pyproject.toml` dependencies for known CVEs.
@@ -98,6 +98,7 @@
 2. Validate delete/redaction behavior for memory.
 3. Verify backup/retention posture for DBs and logs.
 4. Confirm `security_logs.db` is stored under `data/`.
+5. Confirm no persistent DBs or logs exist outside `data/`.
 
 ## Phase 5: Deployment & Ops
 1. Review docker-compose and runtime env configuration.
@@ -109,7 +110,7 @@
 1. Findings report with severity, impact, and remediation.
 2. Patch plan with owners and timelines.
 3. Verification tests for fixed issues.
-4. Evidence bundle (logs, commands, test results).
+4. Evidence summary only (no stored logs, command outputs, or artifacts).
 
 ## Exit Criteria
 1. High/critical findings remediated or accepted with documented risk.
@@ -118,8 +119,8 @@
 
 ## Evidence Checklist (Minimum)
 1. `git rev-parse HEAD` captured for the audit baseline.
-2. `python3 -m pytest tests/ -v` results saved.
-3. `python3 -m pip freeze` saved.
+2. `python3 -m pytest tests/ -v` executed and outcome recorded in the report.
+3. `python3 -m pip freeze` executed and summarized in the report.
 4. Summary of RBAC/VSM matrix test results.
 5. Dependency CVE review notes with remediation decisions.
-6. Confirmation that `data/` contains all persisted DBs.
+6. Confirmation that `data/` contains all persisted DBs and logs.
