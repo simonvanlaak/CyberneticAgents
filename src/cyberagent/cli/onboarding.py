@@ -14,7 +14,12 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from src.cyberagent.cli.agent_message_queue import enqueue_agent_message
 from src.cyberagent.db.db_utils import get_db
-from src.cyberagent.db.init_db import DATABASE_URL, get_database_path, init_db
+from src.cyberagent.db.init_db import (
+    DATABASE_URL,
+    get_database_path,
+    init_db,
+    recover_sqlite_database,
+)
 from src.cyberagent.db.models.procedure import Procedure
 from src.cyberagent.db.models.procedure_run import ProcedureRun
 from src.cyberagent.db.models.strategy import Strategy
@@ -491,6 +496,15 @@ def _print_db_write_error(context: str, exc: SQLAlchemyError) -> None:
     message = str(exc).lower()
     hint = get_message("onboarding", "db_write_hint_default")
     if "disk i/o" in message:
+        backup_path = recover_sqlite_database()
+        if backup_path is not None:
+            print(
+                get_message(
+                    "onboarding",
+                    "db_recovered_hint",
+                    backup_path=backup_path,
+                )
+            )
         hint = get_message("onboarding", "db_write_hint_disk_io")
     location = "in-memory database" if db_path == ":memory:" else db_path
     print(

@@ -25,6 +25,7 @@
         "db_write_hint": "{hint}",
         "db_write_hint_default": "Check disk space and file permissions.",
         "db_write_hint_disk_io": "SQLite reported a disk I/O error. Check disk space and permissions.",
+        "db_recovered_hint": "Recovered the SQLite database after a disk I/O error (backup saved to {backup_path}). Re-run onboarding.",
         "technical_already_verified": "Technical onboarding already verified.",
         "activating_features": "Activating features...",
         "technical_checks_passed": "Technical onboarding checks passed.",

@@ -88,3 +88,34 @@ def test_init_db_recovers_from_sqlite_disk_io_error(
         assert configured
     finally:
         original_configure(previous)
+
+
+def test_recover_sqlite_database_returns_backup(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db_path = tmp_path / "recovery.db"
+    db_path.write_text("corrupt", encoding="utf-8")
+    previous = init_db.DATABASE_URL
+    try:
+        init_db.configure_database(f"sqlite:///{db_path.resolve()}")
+        monkeypatch.setattr(init_db, "_attempt_recover_sqlite", lambda *_: "backup.db")
+        monkeypatch.setattr(
+            init_db.Base.metadata, "create_all", lambda *_args, **_kwargs: None
+        )
+        monkeypatch.setattr(init_db, "_ensure_team_last_active_column", lambda: None)
+
+        backup = init_db.recover_sqlite_database()
+
+        assert backup == "backup.db"
+    finally:
+        init_db.configure_database(previous)
+
+
+def test_recover_sqlite_database_noop_for_memory() -> None:
+    previous = init_db.DATABASE_URL
+    try:
+        init_db.configure_database("sqlite:///:memory:")
+        backup = init_db.recover_sqlite_database()
+        assert backup is None
+    finally:
+        init_db.configure_database(previous)

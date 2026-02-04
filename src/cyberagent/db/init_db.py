@@ -165,5 +165,27 @@ def _attempt_recover_sqlite(db_path: str) -> str | None:
     return str(backup_path)
 
 
+def recover_sqlite_database() -> str | None:
+    """
+    Attempt to recover the configured SQLite database after a disk I/O error.
+
+    Returns:
+        Path to the backup file if recovery succeeded, otherwise None.
+    """
+    db_path = get_database_path()
+    if db_path == ":memory:":
+        return None
+    backup_path = _attempt_recover_sqlite(db_path)
+    if backup_path is None:
+        return None
+    configure_database(DATABASE_URL)
+    try:
+        Base.metadata.create_all(bind=engine)
+    except OperationalError:
+        return None
+    _ensure_team_last_active_column()
+    return backup_path
+
+
 # Note: init_db() is NOT called automatically during import to avoid circular dependencies
 # It should be called explicitly when the application starts

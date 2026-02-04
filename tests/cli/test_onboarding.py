@@ -5,6 +5,9 @@ import argparse
 import pytest
 
 from src.cyberagent.cli import cyberagent
+from sqlalchemy.exc import SQLAlchemyError
+
+from src.cyberagent.cli import onboarding as onboarding_cli
 from src.cyberagent.cli import onboarding_interview
 from src.cyberagent.channels.telegram import session_store
 from src.cyberagent.db.db_utils import get_db
@@ -234,3 +237,27 @@ def test_send_onboarding_intro_messages_no_session_returns_false(
 
     assert used is False
     assert session_found is False
+
+
+def test_print_db_write_error_attempts_recovery(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(onboarding_cli, "get_database_path", lambda: "data/test.db")
+    monkeypatch.setattr(onboarding_cli, "recover_sqlite_database", lambda: "backup.db")
+    monkeypatch.setattr(
+        onboarding_cli,
+        "get_message",
+        lambda _group, key, **kwargs: (
+            f"Recovered {kwargs['backup_path']}"
+            if key == "db_recovered_hint"
+            else "hint"
+        ),
+    )
+
+    onboarding_cli._print_db_write_error(
+        "procedure run", SQLAlchemyError("disk I/O error")
+    )
+
+    captured = capsys.readouterr().out
+    assert "Recovered backup.db" in captured
