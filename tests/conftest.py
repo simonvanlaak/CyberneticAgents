@@ -14,6 +14,7 @@ from src.cyberagent.db.models.team import Team
 from src.rbac import skill_permissions_enforcer
 
 TEST_DB_PATH = (Path(".pytest_db") / "test.db").resolve()
+TEST_SKILL_DB_PATH = (Path(".pytest_db") / "skill_permissions.db").resolve()
 
 
 def pytest_configure() -> None:
@@ -27,9 +28,12 @@ def pytest_configure() -> None:
     init_db.init_db()
     if db_path.exists():
         os.chmod(db_path, 0o666)
-    skill_db = Path("data") / "skill_permissions.db"
-    if skill_db.exists():
-        skill_db.unlink()
+    os.environ["CYBERAGENT_SKILL_PERMISSIONS_DB_URL"] = (
+        f"sqlite:///{TEST_SKILL_DB_PATH}"
+    )
+    if TEST_SKILL_DB_PATH.exists():
+        os.chmod(TEST_SKILL_DB_PATH, 0o666)
+        TEST_SKILL_DB_PATH.unlink()
     session = next(get_db())
     try:
         team = Team(name="default_team", last_active_at=datetime.utcnow())
@@ -44,10 +48,13 @@ def pytest_configure() -> None:
 def _clear_active_team_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("CYBERAGENT_ACTIVE_TEAM_ID", raising=False)
     monkeypatch.delenv("OP_SERVICE_ACCOUNT_TOKEN", raising=False)
-    skill_db = Path("data") / "skill_permissions.db"
-    if skill_db.exists():
-        os.chmod(skill_db, 0o666)
-        skill_db.unlink()
+    monkeypatch.setenv(
+        "CYBERAGENT_SKILL_PERMISSIONS_DB_URL",
+        f"sqlite:///{TEST_SKILL_DB_PATH}",
+    )
+    if TEST_SKILL_DB_PATH.exists():
+        os.chmod(TEST_SKILL_DB_PATH, 0o666)
+        TEST_SKILL_DB_PATH.unlink()
     skill_permissions_enforcer._global_enforcer = None
     if TEST_DB_PATH.exists():
         os.chmod(TEST_DB_PATH, 0o666)
