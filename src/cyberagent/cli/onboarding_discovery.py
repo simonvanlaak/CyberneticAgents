@@ -30,28 +30,38 @@ def run_discovery_onboarding(args: object) -> Path | None:
         getattr(args, "token_username", DEFAULT_TOKEN_USERNAME)
     ).strip()
 
+    repo_sync_allowed = True
     if not _ensure_onboarding_token(token_env):
         print("We need a GitHub read-only token to sync your private vault.")
         print(
             "Store it in the 1Password vault 'CyberneticAgents' as an item named "
-            f"'{token_env}' with a field called 'credential', then re-run onboarding."
+            f"'{token_env}' with a field called 'credential'."
         )
-        return None
+        if not _prompt_continue_without_pkm("We couldn't access your PKM vault yet."):
+            return None
+        repo_sync_allowed = False
 
     cli_tool = _create_cli_tool()
     if cli_tool is None:
         print("CLI tool executor unavailable; cannot sync onboarding repo.")
         return None
 
-    branch = _resolve_default_branch(repo_url, token_env, token_username)
-    repo_path = _sync_obsidian_repo(
-        cli_tool=cli_tool,
-        repo_url=repo_url,
-        branch=branch,
-        token_env=token_env,
-        token_username=token_username,
+    markdown_summary = (
+        "PKM sync skipped. The onboarding interview will take longer without it."
     )
-    markdown_summary = _summarize_markdown_repo(repo_path)
+    if repo_sync_allowed:
+        branch = _resolve_default_branch(repo_url, token_env, token_username)
+        repo_path, success = _sync_obsidian_repo(
+            cli_tool=cli_tool,
+            repo_url=repo_url,
+            branch=branch,
+            token_env=token_env,
+            token_username=token_username,
+        )
+        if success:
+            markdown_summary = _summarize_markdown_repo(repo_path)
+        elif not _prompt_continue_without_pkm("We couldn't sync your PKM vault."):
+            return None
     profile_summary = _fetch_profile_links(cli_tool, profile_links)
     summary_text = _render_onboarding_summary(
         user_name=user_name,
@@ -138,7 +148,7 @@ def _sync_obsidian_repo(
     branch: str,
     token_env: str,
     token_username: str,
-) -> Path:
+) -> tuple[Path, bool]:
     repo_name = _repo_name_from_url(repo_url)
     dest = Path("data") / "obsidian" / repo_name
     dest.parent.mkdir(parents=True, exist_ok=True)
@@ -155,7 +165,8 @@ def _sync_obsidian_repo(
     if not result.get("success"):
         error = result.get("error") or result.get("raw_output", "")
         print(f"Failed to sync onboarding repo: {error}")
-    return dest
+        return dest, False
+    return dest, True
 
 
 def _summarize_markdown_repo(repo_path: Path) -> str:
@@ -218,6 +229,13 @@ def _render_onboarding_summary(
             profile_summary,
         ]
     )
+
+
+def _prompt_continue_without_pkm(reason: str) -> bool:
+    print(reason)
+    print("The onboarding interview will take longer without your PKM.")
+    response = input("Continue without PKM sync? [y/N]: ").strip().lower()
+    return response in {"y", "yes"}
 
 
 def build_onboarding_prompt(summary_path: Path, summary_text: str) -> str:
