@@ -88,7 +88,8 @@ See `docs/product_requirements/memory.md` for the authoritative defaults.
 2. `FORBIDDEN` (RBAC/VSM deny)
 3. `NOT_FOUND` (missing entry)
 4. `CONFLICT` (ETag mismatch or conflict flag set)
-5. `RATE_LIMITED` (request throttled)
+5. `NOT_IMPLEMENTED` (backend does not support the operation)
+6. `RATE_LIMITED` (request throttled)
 
 ## Audit Logging Defaults
 Audit logs must capture authorization failures and avoid sensitive data; log volume should be balanced to avoid blind spots.
