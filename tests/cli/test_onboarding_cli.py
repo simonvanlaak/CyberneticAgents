@@ -559,6 +559,23 @@ def test_has_onepassword_auth_loads_service_token_from_env_file(
     assert os.environ.get("OP_SERVICE_ACCOUNT_TOKEN") == "service-token"
 
 
+def test_has_onepassword_auth_loads_service_token_from_parent_env_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("OP_SERVICE_ACCOUNT_TOKEN", raising=False)
+    monkeypatch.delenv("OP_SESSION_CYBERAGENT", raising=False)
+    root = tmp_path / "repo"
+    nested = root / "subdir"
+    nested.mkdir(parents=True)
+    (root / ".env").write_text(
+        "OP_SERVICE_ACCOUNT_TOKEN=service-token\n", encoding="utf-8"
+    )
+    monkeypatch.chdir(nested)
+
+    assert onboarding_cli._has_onepassword_auth() is True
+    assert os.environ.get("OP_SERVICE_ACCOUNT_TOKEN") == "service-token"
+
+
 def test_missing_brave_key_explains_vault_and_item(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -631,6 +648,7 @@ def test_optional_telegram_setup_prompts_when_missing(
 ) -> None:
     monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
     monkeypatch.setattr(onboarding_cli.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(onboarding_cli, "_load_secret_from_1password", lambda **_: None)
     monkeypatch.setattr(onboarding_vault.shutil, "which", lambda *_: "/usr/bin/op")
     monkeypatch.setattr(onboarding_vault, "has_onepassword_auth", lambda: True)
     monkeypatch.setattr(
