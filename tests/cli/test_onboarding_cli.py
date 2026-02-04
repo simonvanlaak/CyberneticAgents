@@ -12,6 +12,10 @@ from src.cyberagent.db.models.procedure_run import ProcedureRun
 from src.cyberagent.db.models.procedure_task import ProcedureTask
 from src.cyberagent.db.models.system import System
 from src.cyberagent.db.models.team import Team
+from src.cyberagent.db.models.initiative import Initiative
+from src.cyberagent.db.models.purpose import Purpose
+from src.cyberagent.db.models.strategy import Strategy
+from src.cyberagent.cli import agent_message_queue
 from src.cyberagent.services import systems as systems_service
 from src.cyberagent.services import teams as teams_service
 from src.cyberagent.tools.cli_executor.skill_loader import SkillDefinition
@@ -32,12 +36,26 @@ def _clear_teams() -> None:
         session.close()
 
 
+def _default_onboarding_args() -> argparse.Namespace:
+    return argparse.Namespace(
+        user_name="Test User",
+        repo_url="https://github.com/example/repo",
+        profile_links=["https://example.com/profile"],
+        token_env="GITHUB_READONLY_TOKEN",
+        token_username="x-access-token",
+    )
+
+
 def test_handle_onboarding_creates_default_team(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     _clear_teams()
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
+    monkeypatch.setattr(onboarding_cli, "_run_discovery_onboarding", lambda *_: None)
+    monkeypatch.setattr(
+        onboarding_cli, "_trigger_onboarding_initiative", lambda *_: None
+    )
     start_calls: list[int] = []
 
     def _fake_start(team_id: int) -> int | None:
@@ -47,7 +65,7 @@ def test_handle_onboarding_creates_default_team(
     monkeypatch.setattr(onboarding_cli, "_start_runtime_after_onboarding", _fake_start)
 
     exit_code = onboarding_cli.handle_onboarding(
-        argparse.Namespace(), 'cyberagent suggest "Describe the task"'
+        _default_onboarding_args(), 'cyberagent suggest "Describe the task"'
     )
     captured = capsys.readouterr().out
     monkeypatch.undo()
@@ -79,6 +97,10 @@ def test_handle_onboarding_skips_when_team_exists(
 
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
+    monkeypatch.setattr(onboarding_cli, "_run_discovery_onboarding", lambda *_: None)
+    monkeypatch.setattr(
+        onboarding_cli, "_trigger_onboarding_initiative", lambda *_: None
+    )
     start_calls: list[int] = []
 
     def _fake_start(team_id: int) -> int | None:
@@ -87,7 +109,7 @@ def test_handle_onboarding_skips_when_team_exists(
 
     monkeypatch.setattr(onboarding_cli, "_start_runtime_after_onboarding", _fake_start)
     exit_code = onboarding_cli.handle_onboarding(
-        argparse.Namespace(), 'cyberagent suggest "Describe the task"'
+        _default_onboarding_args(), 'cyberagent suggest "Describe the task"'
     )
     captured = capsys.readouterr().out
     monkeypatch.undo()
@@ -124,7 +146,7 @@ def test_handle_onboarding_requires_technical_checks(
     monkeypatch.setattr(onboarding_cli, "_start_runtime_after_onboarding", _fake_start)
 
     exit_code = onboarding_cli.handle_onboarding(
-        argparse.Namespace(), 'cyberagent suggest "Describe the task"'
+        _default_onboarding_args(), 'cyberagent suggest "Describe the task"'
     )
     captured = capsys.readouterr().out
 
@@ -139,9 +161,13 @@ def test_handle_onboarding_seeds_default_sops(
     _clear_teams()
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
+    monkeypatch.setattr(onboarding_cli, "_run_discovery_onboarding", lambda *_: None)
+    monkeypatch.setattr(
+        onboarding_cli, "_trigger_onboarding_initiative", lambda *_: None
+    )
 
     exit_code = onboarding_cli.handle_onboarding(
-        argparse.Namespace(), 'cyberagent suggest "Describe the task"'
+        _default_onboarding_args(), 'cyberagent suggest "Describe the task"'
     )
     captured = capsys.readouterr().out
     monkeypatch.undo()
@@ -179,9 +205,13 @@ def test_handle_onboarding_sets_root_team_envelope() -> None:
     _clear_teams()
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
+    monkeypatch.setattr(onboarding_cli, "_run_discovery_onboarding", lambda *_: None)
+    monkeypatch.setattr(
+        onboarding_cli, "_trigger_onboarding_initiative", lambda *_: None
+    )
 
     onboarding_cli.handle_onboarding(
-        argparse.Namespace(), 'cyberagent suggest "Describe the task"'
+        _default_onboarding_args(), 'cyberagent suggest "Describe the task"'
     )
     monkeypatch.undo()
 
@@ -201,12 +231,16 @@ def test_handle_onboarding_seeds_default_sops_once() -> None:
     _clear_teams()
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
+    monkeypatch.setattr(onboarding_cli, "_run_discovery_onboarding", lambda *_: None)
+    monkeypatch.setattr(
+        onboarding_cli, "_trigger_onboarding_initiative", lambda *_: None
+    )
 
     onboarding_cli.handle_onboarding(
-        argparse.Namespace(), 'cyberagent suggest "Describe the task"'
+        _default_onboarding_args(), 'cyberagent suggest "Describe the task"'
     )
     onboarding_cli.handle_onboarding(
-        argparse.Namespace(), 'cyberagent suggest "Describe the task"'
+        _default_onboarding_args(), 'cyberagent suggest "Describe the task"'
     )
     monkeypatch.undo()
 
@@ -218,6 +252,71 @@ def test_handle_onboarding_seeds_default_sops_once() -> None:
         assert count == 3
     finally:
         session.close()
+
+
+def test_handle_onboarding_triggers_onboarding_sop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _clear_teams()
+    monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
+    monkeypatch.setattr(
+        onboarding_cli, "_start_runtime_after_onboarding", lambda *_: None
+    )
+    monkeypatch.setattr(onboarding_cli, "_run_discovery_onboarding", lambda *_: None)
+    monkeypatch.setattr(
+        agent_message_queue, "AGENT_MESSAGE_QUEUE_DIR", tmp_path / "agent_queue"
+    )
+
+    onboarding_cli.handle_onboarding(
+        _default_onboarding_args(), 'cyberagent suggest "Describe the task"'
+    )
+
+    session = next(get_db())
+    try:
+        team = session.query(Team).filter(Team.name == "root").first()
+        assert team is not None
+        purpose = (
+            session.query(Purpose)
+            .filter(Purpose.team_id == team.id, Purpose.name == "Default Purpose")
+            .first()
+        )
+        assert purpose is not None
+        strategy = (
+            session.query(Strategy)
+            .filter(Strategy.team_id == team.id, Strategy.name == "Onboarding SOP")
+            .first()
+        )
+        assert strategy is not None
+        procedure = (
+            session.query(Procedure)
+            .filter(
+                Procedure.team_id == team.id, Procedure.name == "First Run Discovery"
+            )
+            .first()
+        )
+        assert procedure is not None
+        assert purpose.content == procedure.description
+        run = session.query(ProcedureRun).first()
+        assert run is not None
+        initiative = (
+            session.query(Initiative).filter(Initiative.id == run.initiative_id).first()
+        )
+        assert initiative is not None
+    finally:
+        session.close()
+
+    queued = agent_message_queue.read_queued_agent_messages()
+    assert len(queued) == 1
+    assert queued[0].recipient == "System3:root"
+
+
+def test_build_onboarding_prompt_includes_summary_path() -> None:
+    prompt = onboarding_cli._build_onboarding_prompt(
+        summary_path=Path("data/onboarding/20260204_120000/summary.md"),
+        summary_text="Summary content here.",
+    )
+    assert "Onboarding Summary" in prompt
+    assert "data/onboarding/20260204_120000/summary.md" in prompt
 
 
 def test_technical_onboarding_requires_groq_key(

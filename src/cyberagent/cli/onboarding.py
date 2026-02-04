@@ -12,25 +12,36 @@ import sys
 import time
 import urllib.request
 
+from src.cyberagent.cli.agent_message_queue import enqueue_agent_message
 from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.init_db import get_database_path, init_db
 from src.cyberagent.db.models.procedure import Procedure
+from src.cyberagent.db.models.procedure_run import ProcedureRun
+from src.cyberagent.db.models.strategy import Strategy
 from src.cyberagent.db.models.system import ensure_default_systems_for_team
 from src.cyberagent.db.models.system import get_system_by_type
 from src.cyberagent.db.models.team import Team
 from src.cyberagent.services import procedures as procedures_service
+from src.cyberagent.services import purposes as purposes_service
+from src.cyberagent.services import strategies as strategies_service
 from src.cyberagent.services import teams as teams_service
 from src.cyberagent.tools.cli_executor.skill_loader import (
     SkillDefinition,
     load_skill_definitions,
 )
 from src.cyberagent.tools.cli_executor.skill_runtime import DEFAULT_SKILLS_ROOT
+from src.cyberagent.cli.onboarding_discovery import run_discovery_onboarding
+from src.cyberagent.cli.onboarding_secrets import (
+    VAULT_NAME,
+    get_onepassword_session_env,
+    has_onepassword_auth,
+    load_secret_from_1password,
+)
 from src.enums import SystemType
 
 LOGS_DIR = Path("logs")
 TECH_ONBOARDING_STATE_FILE = Path("logs/technical_onboarding.json")
 RUNTIME_PID_FILE = Path("logs/cyberagent.pid")
-VAULT_NAME = "CyberneticAgents"
 NETWORK_SKILL_NAMES = {"web-fetch", "web-search", "git-readonly-sync"}
 TOOL_SECRET_DOC_HINTS = {
     "BRAVE_API_KEY": "src/tools/skills/web-search/SKILL.md",
@@ -170,11 +181,15 @@ DEFAULT_PROCEDURES = [
 DEFAULT_TEAM_ENVELOPE_SKILLS = [
     "speech-to-text",
 ]
+ONBOARDING_PROCEDURE_NAME = "First Run Discovery"
+ONBOARDING_STRATEGY_NAME = "Onboarding SOP"
 
 
 def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
     if not run_technical_onboarding_checks():
         print("Technical onboarding checks failed. Resolve the issues above.")
+        return 1
+    if not _validate_onboarding_inputs(args):
         return 1
     init_db()
     session = next(get_db())
@@ -191,9 +206,23 @@ def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
         session.close()
     _seed_default_team_envelope(team.id)
     _seed_default_procedures(team.id)
+    run_discovery_onboarding(args)
+    _trigger_onboarding_initiative(team.id)
     _start_runtime_after_onboarding(team.id)
     print(f"Next: run {suggest_command} to give the agents a task.")
     return 0
+
+
+def _validate_onboarding_inputs(args: argparse.Namespace) -> bool:
+    user_name = getattr(args, "user_name", None)
+    repo_url = getattr(args, "repo_url", None)
+    if not user_name:
+        print("Missing required --name for onboarding.")
+        return False
+    if not repo_url:
+        print("Missing required --repo for onboarding.")
+        return False
+    return True
 
 
 def _start_runtime_after_onboarding(team_id: int) -> int | None:
@@ -258,6 +287,89 @@ def _seed_default_team_envelope(team_id: int) -> None:
         teams_service.add_allowed_skill(team_id, skill_name, actor_id="onboarding")
 
 
+def _build_onboarding_prompt(summary_path: Path, summary_text: str) -> str:
+    from src.cyberagent.cli.onboarding_discovery import build_onboarding_prompt
+
+    return build_onboarding_prompt(summary_path=summary_path, summary_text=summary_text)
+
+
+def _run_discovery_onboarding(args: argparse.Namespace, team_id: int) -> Path | None:
+    del team_id
+    return run_discovery_onboarding(args)
+
+
+def _trigger_onboarding_initiative(team_id: int) -> None:
+    ensure_default_systems_for_team(team_id)
+    session = next(get_db())
+    try:
+        procedure = (
+            session.query(Procedure)
+            .filter(
+                Procedure.team_id == team_id,
+                Procedure.name == ONBOARDING_PROCEDURE_NAME,
+            )
+            .first()
+        )
+    finally:
+        session.close()
+    if procedure is None:
+        return
+    session = next(get_db())
+    try:
+        existing_run = (
+            session.query(ProcedureRun)
+            .filter(ProcedureRun.procedure_id == procedure.id)
+            .first()
+        )
+    finally:
+        session.close()
+    if existing_run is not None:
+        return
+
+    purpose = purposes_service.get_or_create_default_purpose(team_id)
+    purpose.content = procedure.description
+    purpose.update()
+
+    session = next(get_db())
+    try:
+        strategy = (
+            session.query(Strategy)
+            .filter(
+                Strategy.team_id == team_id, Strategy.name == ONBOARDING_STRATEGY_NAME
+            )
+            .first()
+        )
+    finally:
+        session.close()
+    if strategy is None:
+        strategy = strategies_service.create_strategy(
+            team_id=team_id,
+            purpose_id=purpose.id,
+            name=ONBOARDING_STRATEGY_NAME,
+            description=procedure.description,
+        )
+
+    system3 = get_system_by_type(team_id, SystemType.CONTROL)
+    if system3 is None:
+        return
+    run = procedures_service.execute_procedure(
+        procedure_id=procedure.id,
+        team_id=team_id,
+        strategy_id=strategy.id,
+        executed_by_system_id=system3.id,
+    )
+    enqueue_agent_message(
+        recipient="System3:root",
+        sender="System4:root",
+        message_type="initiative_assign",
+        payload={
+            "initiative_id": run.initiative_id,
+            "source": "Onboarding",
+            "content": f"Start onboarding initiative {run.initiative_id}.",
+        },
+    )
+
+
 def _pid_is_running(pid: int) -> bool:
     try:
         os.kill(pid, 0)
@@ -318,8 +430,8 @@ def _collect_technical_onboarding_state() -> dict[str, object]:
         "has_telegram_token": bool(os.environ.get("TELEGRAM_BOT_TOKEN")),
         "has_telegram_webhook_secret": bool(os.environ.get("TELEGRAM_WEBHOOK_SECRET")),
         "has_telegram_webhook_url": bool(os.environ.get("TELEGRAM_WEBHOOK_URL")),
-        "has_onepassword_auth": _has_onepassword_auth(),
-        "has_op_session": bool(_get_onepassword_session_env()),
+        "has_onepassword_auth": has_onepassword_auth(),
+        "has_op_session": bool(get_onepassword_session_env()),
         "skills_root_exists": DEFAULT_SKILLS_ROOT.exists(),
         "docker_host": os.environ.get("DOCKER_HOST", ""),
         "docker_path": shutil.which("docker") or "",
@@ -491,53 +603,11 @@ def _check_docker_available() -> bool:
 
 
 def _has_onepassword_auth() -> bool:
-    if not os.getenv("OP_SERVICE_ACCOUNT_TOKEN"):
-        _load_service_account_token_from_env_file()
-    return bool(os.getenv("OP_SERVICE_ACCOUNT_TOKEN")) or bool(
-        _get_onepassword_session_env()
-    )
-
-
-def _load_service_account_token_from_env_file() -> None:
-    env_path = Path(".env")
-    if not env_path.exists():
-        return
-    try:
-        content = env_path.read_text(encoding="utf-8")
-    except OSError:
-        return
-    for line in content.splitlines():
-        entry = line.strip()
-        if not entry or entry.startswith("#"):
-            continue
-        if "=" not in entry:
-            continue
-        key, value = entry.split("=", 1)
-        key = key.strip()
-        if key != "OP_SERVICE_ACCOUNT_TOKEN":
-            continue
-        token = _parse_env_value(value)
-        if token:
-            os.environ.setdefault("OP_SERVICE_ACCOUNT_TOKEN", token)
-        return
-
-
-def _parse_env_value(value: str) -> str | None:
-    cleaned = value.strip()
-    if not cleaned:
-        return None
-    if (cleaned.startswith('"') and cleaned.endswith('"')) or (
-        cleaned.startswith("'") and cleaned.endswith("'")
-    ):
-        cleaned = cleaned[1:-1].strip()
-    return cleaned or None
+    return has_onepassword_auth()
 
 
 def _get_onepassword_session_env() -> str | None:
-    for key, value in os.environ.items():
-        if key.startswith("OP_SESSION_") and value:
-            return value
-    return None
+    return get_onepassword_session_env()
 
 
 def _check_onepassword_auth() -> bool:
@@ -743,7 +813,7 @@ def _prompt_store_secret_in_1password(
     if not shutil.which("op"):
         print("Install the 1Password CLI (`op`) to store secrets automatically.")
         return False
-    if not _has_onepassword_auth():
+    if not has_onepassword_auth():
         for line in _format_op_signin_hint():
             print(line)
         return False
@@ -832,41 +902,9 @@ def _create_onepassword_item(vault_name: str, title: str, secret: str) -> bool:
 def _load_secret_from_1password(
     vault_name: str, item_name: str, field_label: str
 ) -> str | None:
-    if not shutil.which("op"):
-        return None
-    if not _has_onepassword_auth():
-        return None
-    result = subprocess.run(
-        [
-            "op",
-            "item",
-            "get",
-            item_name,
-            "--vault",
-            vault_name,
-            "--fields",
-            f"label={field_label}",
-            "--reveal",
-            "--format",
-            "json",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
+    return load_secret_from_1password(
+        vault_name=vault_name, item_name=item_name, field_label=field_label
     )
-    if result.returncode != 0 or not result.stdout:
-        return None
-    try:
-        payload = json.loads(result.stdout)
-    except json.JSONDecodeError:
-        return None
-    if isinstance(payload, list) and payload:
-        value = payload[0].get("value") if isinstance(payload[0], dict) else None
-        return value if isinstance(value, str) and value else None
-    if isinstance(payload, dict):
-        value = payload.get("value")
-        return value if isinstance(value, str) and value else None
-    return None
 
 
 def _check_onepassword_write_access(vault_name: str) -> bool:

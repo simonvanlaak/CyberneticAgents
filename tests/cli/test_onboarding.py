@@ -39,13 +39,25 @@ def _clear_teams() -> None:
         session.close()
 
 
+def _default_onboarding_args() -> argparse.Namespace:
+    return argparse.Namespace(
+        user_name="Test User",
+        repo_url="https://github.com/example/repo",
+        profile_links=["https://example.com/profile"],
+        token_env="GITHUB_READONLY_TOKEN",
+        token_username="x-access-token",
+    )
+
+
 def test_handle_onboarding_creates_default_team(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _clear_teams()
     _patch_run_checks(monkeypatch, True)
+    monkeypatch.setattr(ONBOARDING, "_run_discovery_onboarding", lambda *_: None)
+    monkeypatch.setattr(ONBOARDING, "_trigger_onboarding_initiative", lambda *_: None)
 
-    exit_code = _handle_onboarding(argparse.Namespace())
+    exit_code = _handle_onboarding(_default_onboarding_args())
     captured = capsys.readouterr().out
 
     assert exit_code == 0
@@ -75,8 +87,10 @@ def test_handle_onboarding_skips_when_team_exists(
         session.close()
 
     _patch_run_checks(monkeypatch, True)
+    monkeypatch.setattr(ONBOARDING, "_run_discovery_onboarding", lambda *_: None)
+    monkeypatch.setattr(ONBOARDING, "_trigger_onboarding_initiative", lambda *_: None)
 
-    exit_code = _handle_onboarding(argparse.Namespace())
+    exit_code = _handle_onboarding(_default_onboarding_args())
     captured = capsys.readouterr().out
 
     assert exit_code == 0
@@ -97,7 +111,7 @@ def test_handle_onboarding_requires_technical_checks(
 
     _patch_run_checks(monkeypatch, False)
 
-    exit_code = _handle_onboarding(argparse.Namespace())
+    exit_code = _handle_onboarding(_default_onboarding_args())
     captured = capsys.readouterr().out
 
     assert exit_code == 1

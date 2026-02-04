@@ -41,6 +41,7 @@ from src.cyberagent.cli.status import main as status_main
 from src.cyberagent.cli.suggestion_queue import enqueue_suggestion
 from src.cyberagent.cli.transcribe import add_transcribe_parser, handle_transcribe
 from src.cyberagent.core.runtime import get_runtime, stop_runtime
+from src.cyberagent.cli.onboarding_args import add_onboarding_args
 from src.cyberagent.core.state import get_last_team_id, mark_team_active
 from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.init_db import init_db
@@ -110,11 +111,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Send an initial message after startup.",
     )
-    subparsers.add_parser(
-        "onboarding",
-        help="Initialize the default team.",
-        description="Create the default root team if none exists.",
-    )
+    add_onboarding_args(subparsers)
 
     status_parser = subparsers.add_parser(
         "status", help="Show current team/strategy/task hierarchy."

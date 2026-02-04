@@ -7,7 +7,7 @@ from typing import Protocol
 
 from autogen_core import AgentId, CancellationToken
 
-from src.agents.messages import UserMessage
+from src.agents.messages import InitiativeAssignMessage, UserMessage
 from src.agents.user_agent import UserAgent
 from src.cli_session import forward_user_messages, read_stdin_loop
 from src.cyberagent.channels.inbox import DEFAULT_CHANNEL, DEFAULT_SESSION_ID
@@ -17,6 +17,10 @@ from src.cyberagent.cli.suggestion_queue import (
     SUGGEST_QUEUE_POLL_SECONDS,
     ack_suggestion,
     read_queued_suggestions,
+)
+from src.cyberagent.cli.agent_message_queue import (
+    ack_agent_message,
+    read_queued_agent_messages,
 )
 from src.cyberagent.db.init_db import init_db
 from src.cyberagent.core.state import get_last_team_id
@@ -87,6 +91,9 @@ async def run_headless_session(initial_message: str | None = None) -> None:
     suggestion_task = asyncio.create_task(
         _process_suggestion_queue(runtime, stop_event)
     )
+    agent_message_task = asyncio.create_task(
+        _process_agent_message_queue(runtime, stop_event)
+    )
     telegram_task: asyncio.Task[None] | None = None
     webhook_server: TelegramWebhookServer | None = None
     token = get_secret("TELEGRAM_BOT_TOKEN")
@@ -115,6 +122,7 @@ async def run_headless_session(initial_message: str | None = None) -> None:
         reader_task.cancel()
         forward_task.cancel()
         suggestion_task.cancel()
+        agent_message_task.cancel()
         if webhook_server:
             webhook_server.stop()
         if telegram_task:
@@ -144,5 +152,46 @@ async def _process_suggestion_queue(
                 ack_suggestion(suggestion.path)
             except Exception:  # pragma: no cover - safety net
                 logger.exception("Failed to deliver suggestion %s", suggestion.path)
+                break
+        await asyncio.sleep(SUGGEST_QUEUE_POLL_SECONDS)
+
+
+def _build_agent_message(message_type: str, payload: dict[str, object]) -> object:
+    if message_type == "initiative_assign":
+        initiative_id = payload.get("initiative_id")
+        if not isinstance(initiative_id, int):
+            raise ValueError("initiative_assign payload missing initiative_id")
+        source = payload.get("source")
+        content = payload.get("content")
+        return InitiativeAssignMessage(
+            initiative_id=initiative_id,
+            source=str(source) if source is not None else "Onboarding",
+            content=str(content) if content is not None else "Start initiative.",
+        )
+    raise ValueError(f"Unsupported agent message type: {message_type}")
+
+
+async def _process_agent_message_queue(
+    runtime: SuggestionRuntime, stop_event: asyncio.Event
+) -> None:
+    while not stop_event.is_set():
+        messages = read_queued_agent_messages()
+        for message in messages:
+            if stop_event.is_set():
+                break
+            try:
+                payload_message = _build_agent_message(
+                    message.message_type, message.payload
+                )
+                recipient = AgentId.from_str(message.recipient)
+                sender = AgentId.from_str(message.sender) if message.sender else None
+                await runtime.send_message(
+                    message=payload_message,
+                    recipient=recipient,
+                    sender=sender,
+                )
+                ack_agent_message(message.path)
+            except Exception:  # pragma: no cover - safety net
+                logger.exception("Failed to deliver agent message %s", message.path)
                 break
         await asyncio.sleep(SUGGEST_QUEUE_POLL_SECONDS)
