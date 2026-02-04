@@ -273,7 +273,7 @@ def test_handle_onboarding_triggers_onboarding_sop(
         assert team is not None
         purpose = (
             session.query(Purpose)
-            .filter(Purpose.team_id == team.id, Purpose.name == "Default Purpose")
+            .filter(Purpose.team_id == team.id, Purpose.name == "Onboarding SOP")
             .first()
         )
         assert purpose is not None

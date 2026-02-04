@@ -4,15 +4,13 @@ import json
 from pathlib import Path
 from typing import Any
 
-DEFAULTS_ROOT = Path("config") / "defaults"
+DEFAULTS_ROOT = Path(__file__).resolve().parents[3] / "config" / "defaults"
 PROCEDURES_DIR = DEFAULTS_ROOT / "procedures"
 TEAMS_DIR = DEFAULTS_ROOT / "teams"
 
 
-def load_procedure_defaults() -> tuple[list[dict[str, Any]], str, str]:
+def load_procedure_defaults() -> list[dict[str, Any]]:
     procedures: list[dict[str, Any]] = []
-    onboarding_name: str | None = None
-    strategy_name: str | None = None
 
     for path in sorted(PROCEDURES_DIR.glob("*.json")):
         data = _read_json(path)
@@ -23,20 +21,7 @@ def load_procedure_defaults() -> tuple[list[dict[str, Any]], str, str]:
             procedures.extend(
                 item for item in file_procedures if isinstance(item, dict)
             )
-        if isinstance(data.get("onboarding_procedure_name"), str):
-            onboarding_name = data["onboarding_procedure_name"]
-        if isinstance(data.get("onboarding_strategy_name"), str):
-            strategy_name = data["onboarding_strategy_name"]
-
-    if onboarding_name is None and procedures:
-        first = procedures[0].get("name")
-        if isinstance(first, str):
-            onboarding_name = first
-    if onboarding_name is None:
-        onboarding_name = "First Run Discovery"
-    if strategy_name is None:
-        strategy_name = "Onboarding SOP"
-    return procedures, onboarding_name, strategy_name
+    return procedures
 
 
 def load_root_team_defaults() -> dict[str, Any]:

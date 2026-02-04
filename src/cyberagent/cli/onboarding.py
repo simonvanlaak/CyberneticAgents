@@ -61,9 +61,12 @@ def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
         return 1
     if not _validate_onboarding_inputs(args):
         return 1
-    procedures, procedure_name, strategy_name = load_procedure_defaults()
+    procedures = load_procedure_defaults()
     team_defaults = load_root_team_defaults()
     team_name = _get_default_team_name(team_defaults)
+    purpose_name = _get_default_purpose_name(team_defaults)
+    strategy_name = _get_default_strategy_name(team_defaults)
+    auto_execute = _get_auto_execute_procedure(team_defaults, procedures)
     init_db()
     session = next(get_db())
     try:
@@ -81,11 +84,13 @@ def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
     _ensure_team_systems(team.id, team_defaults)
     _seed_default_procedures(team.id, procedures)
     _run_discovery_onboarding(args, team.id)
-    _trigger_onboarding_initiative(
-        team.id,
-        onboarding_procedure_name=procedure_name,
-        onboarding_strategy_name=strategy_name,
-    )
+    if auto_execute:
+        _trigger_onboarding_initiative(
+            team.id,
+            onboarding_procedure_name=auto_execute,
+            onboarding_strategy_name=strategy_name,
+            onboarding_purpose_name=purpose_name,
+        )
     _start_runtime_after_onboarding(team.id)
     print(f"Next: run {suggest_command} to give the agents a task.")
     return 0
@@ -133,6 +138,42 @@ def _get_default_team_name(team_defaults: dict[str, object]) -> str:
         if isinstance(name, str) and name.strip():
             return name.strip()
     return "root"
+
+
+def _get_default_purpose_name(team_defaults: dict[str, object]) -> str:
+    purpose = team_defaults.get("purpose")
+    if isinstance(purpose, dict):
+        name = purpose.get("name")
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+    return "Onboarding SOP"
+
+
+def _get_default_strategy_name(team_defaults: dict[str, object]) -> str:
+    strategy = team_defaults.get("strategy")
+    if isinstance(strategy, dict):
+        name = strategy.get("name")
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+    return "Onboarding SOP"
+
+
+def _get_auto_execute_procedure(
+    team_defaults: dict[str, object], procedures: list[dict[str, object]]
+) -> str | None:
+    value = team_defaults.get("auto_execute_procedure")
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    listed = team_defaults.get("procedures")
+    if isinstance(listed, list) and listed:
+        first = listed[0]
+        if isinstance(first, str) and first.strip():
+            return first.strip()
+    if procedures:
+        first_name = procedures[0].get("name")
+        if isinstance(first_name, str) and first_name.strip():
+            return first_name.strip()
+    return None
 
 
 def _seed_default_procedures(team_id: int, procedures: list[dict[str, object]]) -> None:
@@ -260,7 +301,10 @@ def _run_discovery_onboarding(args: argparse.Namespace, team_id: int) -> Path | 
 
 
 def _trigger_onboarding_initiative(
-    team_id: int, onboarding_procedure_name: str, onboarding_strategy_name: str
+    team_id: int,
+    onboarding_procedure_name: str,
+    onboarding_strategy_name: str,
+    onboarding_purpose_name: str,
 ) -> None:
     ensure_default_systems_for_team(team_id)
     session = next(get_db())
@@ -290,6 +334,7 @@ def _trigger_onboarding_initiative(
         return
 
     purpose = purposes_service.get_or_create_default_purpose(team_id)
+    purpose.name = onboarding_purpose_name
     purpose.content = procedure.description
     purpose.update()
 
