@@ -250,6 +250,7 @@ def test_ensure_onboarding_token_reports_op_auth_failure(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _stub_messages(monkeypatch)
+    monkeypatch.delenv("GITHUB_READONLY_TOKEN", raising=False)
     monkeypatch.setattr(onboarding_discovery, "has_onepassword_auth", lambda: True)
     monkeypatch.setattr(
         onboarding_discovery,
