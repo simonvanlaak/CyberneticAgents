@@ -5,6 +5,7 @@
 2. Verify data protection, privacy, and auditability requirements.
 3. Validate RBAC/VSM enforcement and skill permission boundaries.
 4. Ensure supply-chain and deployment hardening.
+5. Produce repeatable evidence for recurring audits.
 
 ## Scope
 1. Application code in `src/` and `main.py`.
@@ -12,11 +13,34 @@
 3. Data stores (`data/`, `security_logs.db`, `data/rbac.db`).
 4. CLI tooling and skill execution paths.
 5. Docs for security-critical behavior (memory, RBAC, observability).
+6. Scheduled recurring audit cadence and evidence retention.
+
+## Audit Cadence (Recurring)
+1. Frequency: monthly.
+2. Triggered audits: before any major release or security-sensitive refactor.
+3. Evidence retention: keep audit artifacts for 12 months.
 
 ## Phase 0: Prep
 1. Define threat model and assets (PII, tokens, memory artifacts, audit logs).
 2. Enumerate entry points (CLI, tools, agent skill APIs).
 3. Establish audit evidence checklist and report template.
+
+### Threat Model (Project-Specific)
+1. Assets
+2. `data/rbac.db` (authorization policy).
+3. `data/security_logs.db` (security events and audit signals).
+4. `data/` memory stores (agent/team/global).
+5. Environment secrets (API keys, service tokens, OnePassword session data).
+6. Attackers
+7. Untrusted CLI users.
+8. Malicious tool/skill payloads.
+9. Misconfigured or compromised agents.
+10. Supply-chain threats in dependencies and tool images.
+11. Trust Boundaries
+12. CLI input to runtime.
+13. Skill execution boundary (CLI executor).
+14. RBAC enforcement and namespace resolution.
+15. Data persistence boundary (`data/` and logs).
 
 ## Phase 1: Static Review
 1. Manual code review for authz/authn boundaries (RBAC, VSM).
@@ -24,35 +48,78 @@
 3. Data handling review for memory and audit logs (redaction, retention).
 4. Secrets and config review (no plaintext, no hardcoded tokens).
 5. File system access review for tools and CLI executor.
+6. Identify all security-sensitive modules and invariants.
+
+### Security-Sensitive Modules (Must Review Each Audit)
+1. RBAC and namespace parsing: `src/rbac/`.
+2. Skill permission enforcement: `src/rbac/skill_permissions_enforcer.py`.
+3. CLI executor and skill runtime: `src/cyberagent/tools/cli_executor/`.
+4. Memory CRUD, permissions, and scopes: `src/cyberagent/memory/`.
+5. Observability/audit logging: `src/cyberagent/memory/observability.py`.
+6. Secrets handling: `src/cyberagent/secrets.py` and `.env.example`.
+7. Data persistence initialization: `src/cyberagent/db/` and `src/rbac/enforcer.py`.
+
+### Static Invariants (Must Hold)
+1. RBAC checks occur before any tool execution in CLI executor.
+2. Memory CRUD enforces scope defaults and permission checks before any store access.
+3. Namespace is required for team/global scope; agent scope defaults to actor ID.
+4. No secrets are logged in audit or observability logs.
+5. All data stores persist under `data/`.
 
 ## Phase 2: Dependency & Supply Chain
 1. Review `pyproject.toml` dependencies for known CVEs.
 2. Validate lockfile usage (if any) and pinning strategy.
 3. Confirm build and runtime images for CLI tooling are minimal.
 4. Verify license compliance for key deps.
+5. Identify transitive dependency risks.
+
+### Dependency Audit Rules
+1. CVE threshold: no unpatched critical or high CVEs.
+2. If no lockfile, capture dependency versions via `python3 -m pip freeze`.
+3. Verify docker images are pinned by digest when used in production.
+4. Record license summary for new or updated dependencies.
 
 ## Phase 3: Dynamic & Behavioral Tests
 1. Permission bypass tests for `memory_crud` and RBAC paths.
 2. Namespace and scope isolation tests (agent/team/global).
 3. Adversarial prompt and tool injection tests for CLI executor.
 4. Audit log integrity tests (no sensitive payloads logged).
+5. Verify deny-by-default for unknown tools.
+
+### RBAC/VSM Test Matrix (Must Execute)
+1. Team scope read: Sys1/Sys2 allowed, Sys3+ allowed.
+2. Team scope write: Sys3+ allowed, Sys1/Sys2 denied.
+3. Global scope read/write: Sys4 only.
+4. Agent scope: owner only; cross-team access denied.
+5. Namespace mismatch: denied.
 
 ## Phase 4: Data & Storage Security
 1. Check storage paths and permissions for `data/` and logs.
 2. Validate delete/redaction behavior for memory.
 3. Verify backup/retention posture for DBs and logs.
+4. Confirm `security_logs.db` is stored under `data/`.
 
 ## Phase 5: Deployment & Ops
 1. Review docker-compose and runtime env configuration.
 2. Validate least-privilege for runtime execution.
 3. Confirm monitoring and alerting for security events.
+4. Confirm secrets are injected only at runtime and not persisted.
 
 ## Deliverables
 1. Findings report with severity, impact, and remediation.
 2. Patch plan with owners and timelines.
 3. Verification tests for fixed issues.
+4. Evidence bundle (logs, commands, test results).
 
 ## Exit Criteria
 1. High/critical findings remediated or accepted with documented risk.
 2. Security tests added where applicable and passing.
 3. Docs updated for security-relevant behavior changes.
+
+## Evidence Checklist (Minimum)
+1. `git rev-parse HEAD` captured for the audit baseline.
+2. `python3 -m pytest tests/ -v` results saved.
+3. `python3 -m pip freeze` saved.
+4. Summary of RBAC/VSM matrix test results.
+5. Dependency CVE review notes with remediation decisions.
+6. Confirmation that `data/` contains all persisted DBs.
