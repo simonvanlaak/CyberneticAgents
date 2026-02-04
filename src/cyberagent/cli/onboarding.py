@@ -74,7 +74,9 @@ FEATURE_READY_MESSAGE_KEYS = {
 }
 
 
-def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
+def handle_onboarding(
+    args: argparse.Namespace, suggest_command: str, inbox_command: str
+) -> int:
     if not run_technical_onboarding_checks():
         print(get_message("onboarding", "technical_checks_failed"))
         return 1
@@ -132,7 +134,7 @@ def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
         ):
             return 1
     _start_runtime_after_onboarding(team.id)
-    print(get_message("onboarding", "next_suggest", suggest_command=suggest_command))
+    print(get_message("onboarding", "next_inbox", inbox_command=inbox_command))
     return 0
 
 

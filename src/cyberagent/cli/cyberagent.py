@@ -423,7 +423,7 @@ def _handle_status(args: argparse.Namespace) -> int:
 
 
 def _handle_onboarding(args: argparse.Namespace) -> int:
-    return onboarding_cli.handle_onboarding(args, SUGGEST_COMMAND)
+    return onboarding_cli.handle_onboarding(args, SUGGEST_COMMAND, INBOX_COMMAND)
 
 
 def _handle_suggest(args: argparse.Namespace) -> int:

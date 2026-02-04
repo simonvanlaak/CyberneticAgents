@@ -17,6 +17,7 @@ from src.cyberagent.channels.inbox import (
     clear_pending_questions,
     list_inbox_entries,
 )
+from src.cyberagent.channels.telegram import session_store
 from src.cli_session import enqueue_pending_question, get_pending_question
 
 
@@ -38,6 +39,46 @@ class TestUserAgent:
         assert hasattr(user_agent, "handle_task_result")
         assert callable(getattr(user_agent, "handle_user_message"))
         assert callable(getattr(user_agent, "handle_task_result"))
+
+    def test_user_agent_primes_telegram_context_when_available(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Prefer the most recent Telegram session when token is available."""
+        sessions = [
+            session_store.TelegramSession(
+                telegram_user_id=1,
+                telegram_chat_id=111,
+                agent_session_id="telegram:chat-111:user-1",
+                user_info={},
+                chat_type="private",
+                created_at=10.0,
+                last_activity=10.0,
+                context={},
+            ),
+            session_store.TelegramSession(
+                telegram_user_id=2,
+                telegram_chat_id=222,
+                agent_session_id="telegram:chat-222:user-2",
+                user_info={},
+                chat_type="private",
+                created_at=20.0,
+                last_activity=30.0,
+                context={},
+            ),
+        ]
+        monkeypatch.setattr("src.agents.user_agent.get_secret", lambda *_: "token")
+        monkeypatch.setattr(
+            "src.agents.user_agent.session_store.list_sessions",
+            lambda: sessions,
+        )
+
+        user_agent = UserAgent("test_user")
+
+        assert user_agent._last_channel_context == ChannelContext(
+            channel="telegram",
+            session_id="telegram:chat-222:user-2",
+            telegram_chat_id=222,
+        )
 
 
 class TestSystem4:

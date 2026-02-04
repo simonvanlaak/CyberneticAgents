@@ -15,6 +15,7 @@ from src.cli_session import (
 )
 from src.cyberagent.channels.routing import MessageRoute
 from src.cyberagent.channels.inbox import DEFAULT_CHANNEL, DEFAULT_SESSION_ID
+from src.cyberagent.channels.telegram import session_store
 from src.cyberagent.channels.telegram.outbound import (
     send_message as send_telegram_message,
 )
@@ -36,6 +37,7 @@ class UserAgent(RoutedAgent):
         if not hasattr(self, "_id"):
             self._id = AgentId(type=self.__class__.__name__, key=description)
         self._last_channel_context: ChannelContext | None = None
+        self._prime_channel_context()
 
     @message_handler
     async def handle_user_message(
@@ -199,6 +201,21 @@ class UserAgent(RoutedAgent):
             channel=channel,
             session_id=session_id,
             telegram_chat_id=telegram_chat_id,
+        )
+
+    def _prime_channel_context(self) -> None:
+        if self._last_channel_context is not None:
+            return
+        if not get_secret("TELEGRAM_BOT_TOKEN"):
+            return
+        sessions = session_store.list_sessions()
+        if not sessions:
+            return
+        latest = max(sessions, key=lambda session: session.last_activity)
+        self._last_channel_context = ChannelContext(
+            channel="telegram",
+            session_id=latest.agent_session_id,
+            telegram_chat_id=latest.telegram_chat_id,
         )
 
     async def _send_telegram_prompt(self, chat_id: int, text: str) -> None:

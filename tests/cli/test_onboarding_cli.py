@@ -74,14 +74,16 @@ def test_handle_onboarding_creates_default_team(
     monkeypatch.setattr(onboarding_cli, "_start_runtime_after_onboarding", _fake_start)
 
     exit_code = onboarding_cli.handle_onboarding(
-        _default_onboarding_args(), 'cyberagent suggest "Describe the task"'
+        _default_onboarding_args(),
+        'cyberagent suggest "Describe the task"',
+        "cyberagent inbox",
     )
     captured = capsys.readouterr().out
     monkeypatch.undo()
 
     assert exit_code == 0
     assert "Created default team" in captured
-    assert "cyberagent suggest" in captured
+    assert "cyberagent inbox" in captured
     assert len(start_calls) == 1
 
     session = next(get_db())
@@ -122,14 +124,16 @@ def test_handle_onboarding_skips_when_team_exists(
 
     monkeypatch.setattr(onboarding_cli, "_start_runtime_after_onboarding", _fake_start)
     exit_code = onboarding_cli.handle_onboarding(
-        _default_onboarding_args(), 'cyberagent suggest "Describe the task"'
+        _default_onboarding_args(),
+        'cyberagent suggest "Describe the task"',
+        "cyberagent inbox",
     )
     captured = capsys.readouterr().out
     monkeypatch.undo()
 
     assert exit_code == 0
     assert "Team already exists" in captured
-    assert "cyberagent suggest" in captured
+    assert "cyberagent inbox" in captured
     assert len(start_calls) == 1
 
     session = next(get_db())
@@ -159,7 +163,9 @@ def test_handle_onboarding_requires_technical_checks(
     monkeypatch.setattr(onboarding_cli, "_start_runtime_after_onboarding", _fake_start)
 
     exit_code = onboarding_cli.handle_onboarding(
-        _default_onboarding_args(), 'cyberagent suggest "Describe the task"'
+        _default_onboarding_args(),
+        'cyberagent suggest "Describe the task"',
+        "cyberagent inbox",
     )
     captured = capsys.readouterr().out
 
@@ -186,7 +192,9 @@ def test_handle_onboarding_stops_when_discovery_fails(
     monkeypatch.setattr(onboarding_cli, "_start_runtime_after_onboarding", _fake_start)
 
     exit_code = onboarding_cli.handle_onboarding(
-        _default_onboarding_args(), 'cyberagent suggest "Describe the task"'
+        _default_onboarding_args(),
+        'cyberagent suggest "Describe the task"',
+        "cyberagent inbox",
     )
     captured = capsys.readouterr().out
 
@@ -217,7 +225,9 @@ def test_handle_onboarding_stops_when_trigger_fails(
     monkeypatch.setattr(onboarding_cli, "_start_runtime_after_onboarding", _fake_start)
 
     exit_code = onboarding_cli.handle_onboarding(
-        _default_onboarding_args(), 'cyberagent suggest "Describe the task"'
+        _default_onboarding_args(),
+        'cyberagent suggest "Describe the task"',
+        "cyberagent inbox",
     )
 
     assert exit_code == 1
@@ -311,13 +321,15 @@ def test_handle_onboarding_seeds_default_sops(
     )
 
     exit_code = onboarding_cli.handle_onboarding(
-        _default_onboarding_args(), 'cyberagent suggest "Describe the task"'
+        _default_onboarding_args(),
+        'cyberagent suggest "Describe the task"',
+        "cyberagent inbox",
     )
     captured = capsys.readouterr().out
     monkeypatch.undo()
 
     assert exit_code == 0
-    assert "cyberagent suggest" in captured
+    assert "cyberagent inbox" in captured
 
     session = next(get_db())
     try:
@@ -355,7 +367,9 @@ def test_handle_onboarding_sets_root_team_envelope(tmp_path: Path) -> None:
     )
 
     onboarding_cli.handle_onboarding(
-        _default_onboarding_args(), 'cyberagent suggest "Describe the task"'
+        _default_onboarding_args(),
+        'cyberagent suggest "Describe the task"',
+        "cyberagent inbox",
     )
     monkeypatch.undo()
 
@@ -385,10 +399,14 @@ def test_handle_onboarding_seeds_default_sops_once(tmp_path: Path) -> None:
     )
 
     onboarding_cli.handle_onboarding(
-        _default_onboarding_args(), 'cyberagent suggest "Describe the task"'
+        _default_onboarding_args(),
+        'cyberagent suggest "Describe the task"',
+        "cyberagent inbox",
     )
     onboarding_cli.handle_onboarding(
-        _default_onboarding_args(), 'cyberagent suggest "Describe the task"'
+        _default_onboarding_args(),
+        'cyberagent suggest "Describe the task"',
+        "cyberagent inbox",
     )
     monkeypatch.undo()
 
@@ -420,7 +438,9 @@ def test_handle_onboarding_triggers_onboarding_sop(
     )
 
     onboarding_cli.handle_onboarding(
-        _default_onboarding_args(), 'cyberagent suggest "Describe the task"'
+        _default_onboarding_args(),
+        'cyberagent suggest "Describe the task"',
+        "cyberagent inbox",
     )
 
     session = next(get_db())

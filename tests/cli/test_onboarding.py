@@ -16,7 +16,9 @@ ONBOARDING = getattr(cyberagent, "onboarding_cli", cyberagent)
 def _handle_onboarding(args: argparse.Namespace) -> int:
     handle_onboarding = getattr(ONBOARDING, "handle_onboarding", None)
     if handle_onboarding is not None:
-        return handle_onboarding(args, cyberagent.SUGGEST_COMMAND)
+        return handle_onboarding(
+            args, cyberagent.SUGGEST_COMMAND, cyberagent.INBOX_COMMAND
+        )
     return ONBOARDING._handle_onboarding(args)
 
 
@@ -72,7 +74,7 @@ def test_handle_onboarding_creates_default_team(
     assert exit_code == 0
     assert "Created default team" in captured
     assert "Starting PKM sync and profile discovery" in captured
-    assert "cyberagent suggest" in captured
+    assert "cyberagent inbox" in captured
 
     expected_name = (
         "root" if hasattr(ONBOARDING, "handle_onboarding") else "default_team"
@@ -114,7 +116,7 @@ def test_handle_onboarding_skips_when_team_exists(
     assert exit_code == 0
     assert "Team already exists" in captured
     assert "Starting PKM sync and profile discovery" in captured
-    assert "cyberagent suggest" in captured
+    assert "cyberagent inbox" in captured
 
     session = next(get_db())
     try:
