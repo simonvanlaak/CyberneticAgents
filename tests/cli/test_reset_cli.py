@@ -15,13 +15,16 @@ def test_reset_removes_data_and_logs(
     logs_dir = tmp_path / "logs"
     data_dir.mkdir()
     logs_dir.mkdir()
+    (data_dir / ".gitkeep").write_text("", encoding="utf-8")
     (data_dir / "CyberneticAgents.db").write_text("db", encoding="utf-8")
     (logs_dir / "runtime.log").write_text("log", encoding="utf-8")
 
     exit_code = cyberagent.main(["reset", "--yes"])
 
     assert exit_code == 0
-    assert not data_dir.exists()
+    assert data_dir.exists()
+    assert (data_dir / ".gitkeep").exists()
+    assert not (data_dir / "CyberneticAgents.db").exists()
     assert not logs_dir.exists()
 
 

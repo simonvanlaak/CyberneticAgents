@@ -692,10 +692,19 @@ async def _handle_reset(args: argparse.Namespace) -> int:
     if _runtime_pid_is_running():
         await _handle_stop(args)
 
-    _remove_dir(Path("data"))
+    _reset_data_dir(Path("data"))
     _remove_dir(Path("logs"))
     print(get_message("cyberagent", "reset_complete"))
     return 0
+
+
+def _reset_data_dir(path: Path) -> None:
+    _remove_dir_contents(path, keep_files={".gitkeep"})
+    if not path.exists():
+        path.mkdir(parents=True, exist_ok=True)
+    gitkeep = path / ".gitkeep"
+    if not gitkeep.exists():
+        gitkeep.write_text("", encoding="utf-8")
 
 
 def _remove_dir(path: Path) -> None:
@@ -704,6 +713,21 @@ def _remove_dir(path: Path) -> None:
     if not path.is_dir():
         raise ValueError(f"Expected directory at {path}")
     shutil.rmtree(path)
+
+
+def _remove_dir_contents(path: Path, keep_files: set[str] | None = None) -> None:
+    if not path.exists():
+        return
+    if not path.is_dir():
+        raise ValueError(f"Expected directory at {path}")
+    keep = keep_files or set()
+    for child in path.iterdir():
+        if child.name in keep:
+            continue
+        if child.is_dir():
+            shutil.rmtree(child)
+        else:
+            child.unlink()
 
 
 async def _handle_dev(args: argparse.Namespace) -> int:
