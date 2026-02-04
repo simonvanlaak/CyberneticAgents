@@ -16,6 +16,10 @@ def load_procedure_defaults() -> list[dict[str, Any]]:
         data = _read_json(path)
         if not isinstance(data, dict):
             continue
+        procedure = data.get("procedure")
+        if isinstance(procedure, dict):
+            procedures.append(procedure)
+            continue
         file_procedures = data.get("procedures")
         if isinstance(file_procedures, list):
             procedures.extend(

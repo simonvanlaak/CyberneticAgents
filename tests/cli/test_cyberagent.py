@@ -14,6 +14,7 @@ import pytest
 from autogen_core import AgentId
 
 from src.cyberagent.cli import cyberagent
+from src.cyberagent.cli import log_filters
 from src.cyberagent.cli import transcribe as transcribe_cli
 from src.cyberagent.cli.env_loader import load_op_service_account_token
 from src.cyberagent.channels.inbox import InboxEntry
@@ -34,6 +35,7 @@ from src.cyberagent.channels.inbox import InboxEntry
         (["transcribe", "audio.wav"], "transcribe"),
         (["config", "view"], "config"),
         (["login"], "login"),
+        (["reset", "--yes"], "reset"),
     ],
 )
 def test_build_parser_includes_commands(command: Sequence[str], label: str) -> None:
@@ -394,7 +396,7 @@ async def test_handle_watch_requires_team(
 
 def test_filter_logs_applies_pattern_and_limit() -> None:
     lines = ["alpha", "Beta", "gamma", "delta"]
-    filtered = cyberagent._filter_logs(lines, "a", 2, None)
+    filtered = log_filters.filter_logs(lines, "a", 2, None)
     assert filtered == ["gamma", "delta"]
 
 
@@ -404,9 +406,9 @@ def test_filter_logs_with_levels() -> None:
         "2025-01-01 00:00:01.000 WARNING [x] warn",
         "2025-01-01 00:00:02.000 ERROR [x] boom",
     ]
-    levels = cyberagent._normalize_log_levels(["error,warning"])
+    levels = log_filters.resolve_log_levels(["error,warning"], False)
     assert levels == {"ERROR", "WARNING"}
-    filtered = cyberagent._filter_logs(lines, None, 10, levels)
+    filtered = log_filters.filter_logs(lines, None, 10, levels)
     assert filtered == [
         "2025-01-01 00:00:01.000 WARNING [x] warn",
         "2025-01-01 00:00:02.000 ERROR [x] boom",
@@ -414,7 +416,7 @@ def test_filter_logs_with_levels() -> None:
 
 
 def test_resolve_log_levels_errors_only() -> None:
-    levels = cyberagent._resolve_log_levels(None, True)
+    levels = log_filters.resolve_log_levels(None, True)
     assert levels == {"ERROR", "CRITICAL"}
 
 
