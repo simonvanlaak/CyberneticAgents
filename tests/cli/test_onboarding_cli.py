@@ -62,7 +62,7 @@ def test_handle_onboarding_creates_default_team(
         onboarding_cli, "_run_discovery_onboarding", lambda *_: summary_path
     )
     monkeypatch.setattr(
-        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: None
+        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: True
     )
     start_calls: list[int] = []
 
@@ -111,7 +111,7 @@ def test_handle_onboarding_skips_when_team_exists(
         onboarding_cli, "_run_discovery_onboarding", lambda *_: summary_path
     )
     monkeypatch.setattr(
-        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: None
+        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: True
     )
     start_calls: list[int] = []
 
@@ -174,7 +174,7 @@ def test_handle_onboarding_stops_when_discovery_fails(
     monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_run_discovery_onboarding", lambda *_: None)
     monkeypatch.setattr(
-        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: None
+        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: True
     )
     start_calls: list[int] = []
 
@@ -191,6 +191,35 @@ def test_handle_onboarding_stops_when_discovery_fails(
 
     assert exit_code == 1
     assert "Discovery onboarding couldn't complete yet" in captured
+    assert start_calls == []
+
+
+def test_handle_onboarding_stops_when_trigger_fails(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _clear_teams()
+    monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
+    summary_path = tmp_path / "summary.md"
+    summary_path.write_text("summary", encoding="utf-8")
+    monkeypatch.setattr(
+        onboarding_cli, "_run_discovery_onboarding", lambda *_: summary_path
+    )
+    monkeypatch.setattr(
+        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: False
+    )
+    start_calls: list[int] = []
+
+    def _fake_start(team_id: int) -> int | None:
+        start_calls.append(team_id)
+        return 1234
+
+    monkeypatch.setattr(onboarding_cli, "_start_runtime_after_onboarding", _fake_start)
+
+    exit_code = onboarding_cli.handle_onboarding(
+        _default_onboarding_args(), 'cyberagent suggest "Describe the task"'
+    )
+
+    assert exit_code == 1
     assert start_calls == []
 
 
@@ -277,7 +306,7 @@ def test_handle_onboarding_seeds_default_sops(
         onboarding_cli, "_run_discovery_onboarding", lambda *_: summary_path
     )
     monkeypatch.setattr(
-        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: None
+        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: True
     )
 
     exit_code = onboarding_cli.handle_onboarding(
@@ -311,13 +340,17 @@ def test_handle_onboarding_seeds_default_sops(
         session.close()
 
 
-def test_handle_onboarding_sets_root_team_envelope() -> None:
+def test_handle_onboarding_sets_root_team_envelope(tmp_path: Path) -> None:
     _clear_teams()
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
-    monkeypatch.setattr(onboarding_cli, "_run_discovery_onboarding", lambda *_: None)
+    summary_path = tmp_path / "summary.md"
+    summary_path.write_text("summary", encoding="utf-8")
     monkeypatch.setattr(
-        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: None
+        onboarding_cli, "_run_discovery_onboarding", lambda *_: summary_path
+    )
+    monkeypatch.setattr(
+        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: True
     )
 
     onboarding_cli.handle_onboarding(
@@ -337,13 +370,17 @@ def test_handle_onboarding_sets_root_team_envelope() -> None:
         session.close()
 
 
-def test_handle_onboarding_seeds_default_sops_once() -> None:
+def test_handle_onboarding_seeds_default_sops_once(tmp_path: Path) -> None:
     _clear_teams()
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
-    monkeypatch.setattr(onboarding_cli, "_run_discovery_onboarding", lambda *_: None)
+    summary_path = tmp_path / "summary.md"
+    summary_path.write_text("summary", encoding="utf-8")
     monkeypatch.setattr(
-        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: None
+        onboarding_cli, "_run_discovery_onboarding", lambda *_: summary_path
+    )
+    monkeypatch.setattr(
+        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: True
     )
 
     onboarding_cli.handle_onboarding(

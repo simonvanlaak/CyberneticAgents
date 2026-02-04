@@ -12,6 +12,8 @@ import sys
 import time
 import urllib.request
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from src.cyberagent.cli.agent_message_queue import enqueue_agent_message
 from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.init_db import get_database_path, init_db
@@ -99,12 +101,13 @@ def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
         return 1
     store_onboarding_memory(team.id, summary_path)
     if auto_execute:
-        _trigger_onboarding_initiative(
+        if not _trigger_onboarding_initiative(
             team.id,
             onboarding_procedure_name=auto_execute,
             onboarding_strategy_name=strategy_name,
             onboarding_purpose_name=purpose_name,
-        )
+        ):
+            return 1
     _start_runtime_after_onboarding(team.id)
     print(f"Next: run {suggest_command} to give the agents a task.")
     return 0
@@ -353,7 +356,7 @@ def _trigger_onboarding_initiative(
     onboarding_procedure_name: str,
     onboarding_strategy_name: str,
     onboarding_purpose_name: str,
-) -> None:
+) -> bool:
     ensure_default_systems_for_team(team_id)
     session = next(get_db())
     try:
@@ -368,7 +371,7 @@ def _trigger_onboarding_initiative(
     finally:
         session.close()
     if procedure is None:
-        return
+        return True
     session = next(get_db())
     try:
         existing_run = (
@@ -379,12 +382,16 @@ def _trigger_onboarding_initiative(
     finally:
         session.close()
     if existing_run is not None:
-        return
+        return True
 
     purpose = purposes_service.get_or_create_default_purpose(team_id)
     purpose.name = onboarding_purpose_name
     purpose.content = procedure.description
-    purpose.update()
+    try:
+        purpose.update()
+    except SQLAlchemyError as exc:
+        _print_db_write_error("purpose", exc)
+        return False
 
     session = next(get_db())
     try:
@@ -399,22 +406,30 @@ def _trigger_onboarding_initiative(
     finally:
         session.close()
     if strategy is None:
-        strategy = strategies_service.create_strategy(
-            team_id=team_id,
-            purpose_id=purpose.id,
-            name=onboarding_strategy_name,
-            description=procedure.description,
-        )
+        try:
+            strategy = strategies_service.create_strategy(
+                team_id=team_id,
+                purpose_id=purpose.id,
+                name=onboarding_strategy_name,
+                description=procedure.description,
+            )
+        except SQLAlchemyError as exc:
+            _print_db_write_error("strategy", exc)
+            return False
 
     system3 = get_system_by_type(team_id, SystemType.CONTROL)
     if system3 is None:
-        return
-    run = procedures_service.execute_procedure(
-        procedure_id=procedure.id,
-        team_id=team_id,
-        strategy_id=strategy.id,
-        executed_by_system_id=system3.id,
-    )
+        return False
+    try:
+        run = procedures_service.execute_procedure(
+            procedure_id=procedure.id,
+            team_id=team_id,
+            strategy_id=strategy.id,
+            executed_by_system_id=system3.id,
+        )
+    except SQLAlchemyError as exc:
+        _print_db_write_error("procedure run", exc)
+        return False
     enqueue_agent_message(
         recipient="System3/root",
         sender="System4/root",
@@ -425,6 +440,18 @@ def _trigger_onboarding_initiative(
             "content": f"Start onboarding initiative {run.initiative_id}.",
         },
     )
+    return True
+
+
+def _print_db_write_error(context: str, exc: SQLAlchemyError) -> None:
+    db_path = get_database_path()
+    message = str(exc).lower()
+    hint = "Check disk space and file permissions."
+    if "disk i/o" in message:
+        hint = "SQLite reported a disk I/O error. Check disk space and permissions."
+    location = "in-memory database" if db_path == ":memory:" else db_path
+    print(f"Failed to write {context} data to the database ({location}).")
+    print(hint)
 
 
 def _pid_is_running(pid: int) -> bool:
