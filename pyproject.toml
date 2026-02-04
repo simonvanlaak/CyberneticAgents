@@ -103,7 +103,6 @@ norecursedirs = [
   ".pytest_db",
   "data",
   "logs",
-  "security_logs.db",
 ]
 
 [tool.setuptools.packages.find]
