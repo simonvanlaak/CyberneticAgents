@@ -1,7 +1,7 @@
 # Memory Architecture (Technical Notes)
 
 ## Purpose
-Describe how MemEngine integrates with the system memory architecture without duplicating PRD details.
+Describe how MemEngine integrates with the system memory architecture without duplicating PRD details. This doc is the technical source of truth for the `memory_crud` API contract and implementation-level defaults.
 
 ## Decision
 We will use MemEngine for core memory operations (storage, retrieval, summarization, reflection primitives) and wrap it with system-specific layers for scope, permissions, and auditability.
@@ -34,39 +34,64 @@ We will use MemEngine for core memory operations (storage, retrieval, summarizat
 1. Default write target scope is `agent` unless explicitly specified.
 
 ## Conflict Handling
-Use versioned merge. Conflicts are stored as separate entries with a conflict flag and require review to reconcile.
+Use optimistic concurrency for updates plus versioned merge for conflicts:
+1. Each memory entry includes a `version` (integer) and `etag` (opaque string) that change on update.
+2. Update/delete operations accept optional `if_match` to enforce optimistic concurrency.
+3. If `if_match` does not match the current `etag`, reject with a conflict error and store the new content as a separate entry with `conflict_of` pointing to the original entry ID and `conflict` flag set.
+4. Conflicts require review to reconcile.
 
 ## Permissions (Skill-Gated)
-1. Permissions are enforced by existing skill permission rules before any operation.
-2. Sys3-Sys5 can write to team scope.
-3. Sys1-Sys2 can read team scope but cannot edit it.
-4. No system can edit another team's knowledge.
-5. Only Sys4 (any team) can read and write global scope.
+See `docs/product_requirements/memory.md` for the authoritative permissions list.
 
 ## Bulk Operations
 1. Bulk CRUD is allowed.
 2. Hard limit of 10 items per request.
 
 ## Shared Memory Schema (Team and Global)
-1. `id`
-2. `scope` (`agent` | `team` | `global`)
-3. `namespace`
-4. `owner_agent_id`
-5. `content`
-6. `tags` (optional)
-7. `priority` (`low` | `medium` | `high`)
-8. `created_at`
-9. `updated_at`
-10. `expires_at` (nullable)
-11. `source` (`reflection` | `manual` | `tool` | `import`)
-12. `confidence` (0.0 to 1.0)
+See `docs/product_requirements/memory.md` for the authoritative schema. This doc only adds:
+1. `layer` (`working` | `session` | `long_term` | `meta`) to make layer explicit for shared entries.
+2. `version` (integer) and `etag` (opaque string) for optimistic concurrency.
+3. `conflict` (boolean) and `conflict_of` (nullable ID) for conflict tracking.
 
 ## Retention and Pruning Defaults
-1. Use compaction-style summaries for durable retention when context limits are approached.
-2. Use transient pruning at prompt time to reduce tool output noise without rewriting stored history.
+See `docs/product_requirements/memory.md` for the authoritative defaults.
 
-## Best-Practice Defaults (External Guidance)
-1. `memory_crud` list endpoints use cursor-based pagination; return `next_cursor` (or next link) and `has_more`, set a reasonable default page size, and enforce a maximum page size to protect performance.
-2. Treat cursors as opaque values and do not decode, modify, or construct them manually.
-3. Audit logs should include who/what/when/where for each event, capture authorization failures, and avoid logging secrets, tokens, or sensitive personal data; restrict and monitor access to logs.
-4. If using ChromaDB in phase 1, configure persistence explicitly: local usage via `PersistentClient(path=...)` (defaults to `.chroma` if no path is provided) and server usage via `chroma run --path ...` (default persist dir is `./chroma`, server defaults to `localhost:8000`).
+## Memory CRUD API Contract (Phase 0 Resolution)
+### Endpoint
+`memory_crud` skill with actions: `create`, `read`, `update`, `delete`, `list`, `promote`.
+
+### Request (common fields)
+1. `action` (required)
+2. `scope` (`agent` | `team` | `global`, optional; default `agent`)
+3. `namespace` (required for team/global; optional for agent)
+4. `layer` (`working` | `session` | `long_term` | `meta`, optional; defaults by pipeline)
+5. `items` (array; for bulk operations; max 10)
+6. `filters` (for `list`/`read`)
+7. `cursor` (for `list`)
+8. `limit` (for `list`, default 25, max 100)
+9. `if_match` (optional ETag for `update`/`delete`)
+
+### Response (common fields)
+1. `items` (array)
+2. `next_cursor` (nullable string)
+3. `has_more` (boolean)
+4. `errors` (array of {`code`, `message`, `details`})
+
+### Pagination Rules
+1. Cursors are opaque tokens; clients must not parse, construct, or persist them across sessions.
+2. If `next_cursor` is missing or `null`, pagination ends.
+3. Invalid cursors return an invalid-params error.
+4. `has_more` mirrors whether additional results are available.
+
+### Error Codes
+1. `INVALID_PARAMS` (malformed cursor, invalid scope)
+2. `FORBIDDEN` (RBAC/VSM deny)
+3. `NOT_FOUND` (missing entry)
+4. `CONFLICT` (ETag mismatch or conflict flag set)
+5. `RATE_LIMITED` (request throttled)
+
+## Audit Logging Defaults
+Audit logs must capture authorization failures and avoid sensitive data; log volume should be balanced to avoid blind spots.
+
+## Backend Choice (Phase 1)
+Phase 1 uses ChromaDB via `autogen_ext.memory.chromadb.ChromaDBVectorMemory` with explicit persistence configuration.

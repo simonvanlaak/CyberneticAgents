@@ -74,6 +74,7 @@ Store memory in interpretable formats that developers can inspect, edit, and del
     3. No system can edit another team's knowledge.
     4. Only Sys4 (any team) can read and write global scope.
 12. Bulk memory CRUD is allowed with a hard limit of 10 items per request.
+13. Shared memory entries must include a `layer` field to make the layer explicit for team/global data.
 
 ### Non-Functional
 1. Keep latency acceptable for CLI usage.
@@ -111,6 +112,11 @@ Store memory in interpretable formats that developers can inspect, edit, and del
 10. `expires_at` (nullable)
 11. `source` (`reflection` | `manual` | `tool` | `import`)
 12. `confidence` (0.0 to 1.0)
+13. `layer` (`working` | `session` | `long_term` | `meta`)
+14. `version` (integer)
+15. `etag` (opaque string)
+16. `conflict` (boolean)
+17. `conflict_of` (nullable ID)
 
 ## Observability
 1. Log memory reads and writes with identifiers and timestamps.
@@ -124,7 +130,7 @@ Store memory in interpretable formats that developers can inspect, edit, and del
 3. Keep memory formats human-auditable.
 
 ## Open Questions
-None.
+None. Phase 0 preflight decisions are captured in the Decisions section.
 
 ## Decisions
 1. Conflict handling: use versioned merge. Keep both entries, mark conflict, and require review to reconcile.
@@ -135,6 +141,9 @@ None.
 6. Bulk operations: allowed with a hard limit of 10 items per request.
 7. AutoGen memory features: wrap the AutoGen `Memory` protocol and `autogen_ext.memory.chromadb.ChromaDBVectorMemory` behind scope routing, RBAC, audit logging, and the `memory_crud` skill.
 8. Scope defaults: reflections write to agent scope by default and are promoted to team/global only via explicit promotion; default write target scope is `agent` unless specified.
+9. Phase 0 API contract and pagination rules are defined in `docs/technical/memory_architecture.md`.
+10. Phase 1 backend choice: ChromaDB (via `autogen_ext.memory.chromadb.ChromaDBVectorMemory`) with explicit persistence configuration.
+11. Layer vs scope: layers describe time/horizon (working/session/long_term/meta) while scopes describe visibility (agent/team/global); they are orthogonal.
 
 ## Technical Notes
 See `docs/technical/memory_architecture.md`.
