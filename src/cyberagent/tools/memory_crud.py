@@ -24,6 +24,7 @@ from src.cyberagent.memory.crud import (
     MemoryReadRequest,
     MemoryUpdateRequest,
 )
+from src.cyberagent.memory.observability import LoggingMemoryAuditSink, MemoryMetrics
 from src.cyberagent.memory.models import (
     MemoryEntry,
     MemoryLayer,
@@ -31,9 +32,11 @@ from src.cyberagent.memory.models import (
     MemoryScope,
     MemorySource,
 )
+from src.cyberagent.services import systems as systems_service
 from src.enums import SystemType
 
 MAX_BULK_ITEMS = 10
+SKILL_NAME = "memory_crud"
 
 
 class MemoryCrudArgs(BaseModel):
@@ -107,6 +110,8 @@ class MemoryCrudTool(BaseTool):
         del cancellation_token
         action = args.action.lower().strip()
         builder = _ResponseBuilder(items=[])
+        if not self._check_permission(builder):
+            return builder.build()
         if action == "list":
             return self._handle_list(args, builder)
         if action == "create":
@@ -121,6 +126,18 @@ class MemoryCrudTool(BaseTool):
             return self._handle_promote(args, builder)
         builder.add_error("INVALID_PARAMS", f"Unknown action '{args.action}'.")
         return builder.build()
+
+    def _check_permission(self, builder: _ResponseBuilder) -> bool:
+        allowed, reason = systems_service.can_execute_skill(
+            self._actor_context.system_id, SKILL_NAME
+        )
+        if allowed:
+            return True
+        details = {"failed_rule_category": reason} if reason else None
+        builder.add_error(
+            "FORBIDDEN", f"Skill '{SKILL_NAME}' is not permitted.", details
+        )
+        return False
 
     def _handle_list(
         self, args: MemoryCrudArgs, builder: _ResponseBuilder
@@ -184,6 +201,12 @@ class MemoryCrudTool(BaseTool):
         self, args: MemoryCrudArgs, builder: _ResponseBuilder
     ) -> MemoryCrudResponse:
         items = args.items or []
+        if len(items) > MAX_BULK_ITEMS:
+            builder.add_error(
+                "INVALID_PARAMS",
+                f"bulk memory CRUD limit exceeded (max {MAX_BULK_ITEMS})",
+            )
+            return builder.build()
         if not items:
             builder.add_error("INVALID_PARAMS", "read requires items with entry_id.")
             return builder.build()
@@ -262,6 +285,8 @@ class MemoryCrudTool(BaseTool):
                     actor=self._actor_context, requests=[request]
                 )
                 builder.items.extend(_entry_to_payload(entry) for entry in updated)
+            except NotImplementedError as exc:
+                builder.add_error("NOT_IMPLEMENTED", str(exc))
             except MemoryConflictError as exc:
                 builder.add_error(
                     "CONFLICT",
@@ -315,6 +340,8 @@ class MemoryCrudTool(BaseTool):
                     actor=self._actor_context, requests=[request]
                 )
                 builder.items.append({"entry_id": entry_id, "deleted": results[0]})
+            except NotImplementedError as exc:
+                builder.add_error("NOT_IMPLEMENTED", str(exc))
             except MemoryConflictError as exc:
                 builder.add_error(
                     "CONFLICT",
@@ -336,6 +363,12 @@ class MemoryCrudTool(BaseTool):
         self, args: MemoryCrudArgs, builder: _ResponseBuilder
     ) -> MemoryCrudResponse:
         items = args.items or []
+        if len(items) > MAX_BULK_ITEMS:
+            builder.add_error(
+                "INVALID_PARAMS",
+                f"bulk memory CRUD limit exceeded (max {MAX_BULK_ITEMS})",
+            )
+            return builder.build()
         if not items:
             builder.add_error(
                 "INVALID_PARAMS",
@@ -378,7 +411,11 @@ class MemoryCrudTool(BaseTool):
 def _build_memory_service() -> MemoryCrudService:
     config = load_memory_backend_config()
     registry = build_memory_registry(config)
-    return MemoryCrudService(registry=registry)
+    return MemoryCrudService(
+        registry=registry,
+        metrics=MemoryMetrics(),
+        audit_sink=LoggingMemoryAuditSink(),
+    )
 
 
 def _build_actor_context(agent_id: AgentId) -> MemoryActorContext:

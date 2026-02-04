@@ -35,6 +35,7 @@ from src.cyberagent.services import teams as team_service
 from src.cyberagent.secrets import get_secret
 from src.enums import SystemType
 from src.cyberagent.core.state import get_last_team_id, mark_team_active
+from src.cyberagent.db.models.system import get_system_from_agent_id
 from src.cyberagent.tools.cli_executor import (
     get_agent_skill_prompt_entries,
     get_agent_skill_tools,
@@ -116,7 +117,16 @@ class SystemBase(RoutedAgent):
             get_agent_skill_tools(self.agent_id.__str__())
         )
         try:
-            self.available_tools.append(MemoryCrudTool(self.agent_id))
+            system = get_system_from_agent_id(self.agent_id.__str__())
+            if system is None:
+                raise ValueError("System record not found for memory_crud tool.")
+            allowed, _reason = system_service.can_execute_skill(
+                system.id, "memory_crud"
+            )
+            if allowed:
+                self.available_tools.append(MemoryCrudTool(self.agent_id))
+            else:
+                logger.info("memory_crud tool not enabled for system_id=%s", system.id)
         except Exception as exc:
             logger.warning("Failed to initialize memory_crud tool: %s", exc)
         self.tools = self.available_tools

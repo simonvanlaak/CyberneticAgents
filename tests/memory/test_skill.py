@@ -1,8 +1,14 @@
 import datetime
+from pathlib import Path
+from uuid import uuid4
 
 import pytest
 from autogen_core import AgentId, CancellationToken
 
+from src.cyberagent.db.db_utils import get_db
+from src.cyberagent.db.init_db import init_db
+from src.cyberagent.db.models.system import System
+from src.cyberagent.db.models.team import Team
 from src.cyberagent.memory.crud import MemoryActorContext, MemoryCrudService
 from src.cyberagent.memory.models import (
     MemoryEntry,
@@ -19,6 +25,9 @@ from src.cyberagent.tools.memory_crud import (
     MemoryCrudArgs,
     MemoryCrudTool,
 )
+from src.cyberagent.services import systems as systems_service
+from src.cyberagent.services import teams as teams_service
+from src.rbac import skill_permissions_enforcer
 from src.enums import SystemType
 
 
@@ -90,6 +99,14 @@ class InMemoryCursorStore(MemoryStore):
         return MemoryListResult(items=items, next_cursor=next_cursor, has_more=has_more)
 
 
+class NotImplementedStore(InMemoryCursorStore):
+    def update(self, entry: MemoryEntry) -> MemoryEntry:
+        raise NotImplementedError("Updates are not supported.")
+
+    def delete(self, entry_id: str, scope: MemoryScope, namespace: str) -> bool:
+        raise NotImplementedError("Deletes are not supported.")
+
+
 def _actor() -> MemoryActorContext:
     return MemoryActorContext(
         agent_id="root_sys1",
@@ -107,6 +124,40 @@ def _tool(store: MemoryStore) -> MemoryCrudTool:
         service=service,
         actor_context=_actor(),
     )
+
+
+def _create_team_and_system(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> tuple[int, int, str]:
+    monkeypatch.chdir(tmp_path)
+    init_db()
+    skill_permissions_enforcer._global_enforcer = None
+    enforcer = skill_permissions_enforcer.get_enforcer()
+    enforcer.clear_policy()
+    session = next(get_db())
+    try:
+        team = Team(name=f"team_{uuid4().hex}")
+        session.add(team)
+        session.commit()
+        system = System(
+            team_id=team.id,
+            name=f"system_{uuid4().hex}",
+            type=SystemType.OPERATION,
+            agent_id_str=f"System1/{uuid4().hex}",
+        )
+        session.add(system)
+        session.commit()
+        return system.team_id, system.id, system.agent_id_str
+    finally:
+        session.close()
+
+
+@pytest.fixture()
+def allow_memory_crud(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _allow(system_id: int, skill_name: str) -> tuple[bool, str | None]:
+        return True, None
+
+    monkeypatch.setattr(systems_service, "can_execute_skill", _allow)
 
 
 def _entry(entry_id: str, content: str) -> MemoryEntry:
@@ -131,7 +182,7 @@ def _entry(entry_id: str, content: str) -> MemoryEntry:
 
 
 @pytest.mark.asyncio
-async def test_list_returns_cursor_and_has_more() -> None:
+async def test_list_returns_cursor_and_has_more(allow_memory_crud) -> None:
     store = InMemoryCursorStore()
     store.add(_entry("mem-1", "first"))
     store.add(_entry("mem-2", "second"))
@@ -148,7 +199,7 @@ async def test_list_returns_cursor_and_has_more() -> None:
 
 
 @pytest.mark.asyncio
-async def test_list_invalid_cursor_returns_invalid_params() -> None:
+async def test_list_invalid_cursor_returns_invalid_params(allow_memory_crud) -> None:
     store = InMemoryCursorStore()
     tool = _tool(store)
     response = await tool.run(
@@ -163,7 +214,9 @@ async def test_list_invalid_cursor_returns_invalid_params() -> None:
 
 
 @pytest.mark.asyncio
-async def test_update_if_match_mismatch_creates_conflict() -> None:
+async def test_update_if_match_mismatch_creates_conflict(
+    allow_memory_crud,
+) -> None:
     store = InMemoryCursorStore()
     store.add(_entry("mem-1", "original"))
     tool = _tool(store)
@@ -193,7 +246,7 @@ async def test_update_if_match_mismatch_creates_conflict() -> None:
 
 
 @pytest.mark.asyncio
-async def test_bulk_limit_exceeded_returns_invalid_params() -> None:
+async def test_bulk_limit_exceeded_returns_invalid_params(allow_memory_crud) -> None:
     store = InMemoryCursorStore()
     tool = _tool(store)
     response = await tool.run(
@@ -215,3 +268,140 @@ async def test_bulk_limit_exceeded_returns_invalid_params() -> None:
     assert response.errors
     assert response.errors[0].code == "INVALID_PARAMS"
     assert store.entries == []
+
+
+@pytest.mark.asyncio
+async def test_read_bulk_limit_exceeded_returns_invalid_params(
+    allow_memory_crud,
+) -> None:
+    store = InMemoryCursorStore()
+    tool = _tool(store)
+    response = await tool.run(
+        MemoryCrudArgs(
+            action="read",
+            namespace="root",
+            items=[{"entry_id": f"mem-{idx}"} for idx in range(11)],
+        ),
+        CancellationToken(),
+    )
+    assert response.errors
+    assert response.errors[0].code == "INVALID_PARAMS"
+
+
+@pytest.mark.asyncio
+async def test_promote_bulk_limit_exceeded_returns_invalid_params(
+    allow_memory_crud,
+) -> None:
+    store = InMemoryCursorStore()
+    tool = _tool(store)
+    response = await tool.run(
+        MemoryCrudArgs(
+            action="promote",
+            namespace="root",
+            items=[
+                {
+                    "entry_id": f"mem-{idx}",
+                    "target_scope": "team",
+                }
+                for idx in range(11)
+            ],
+        ),
+        CancellationToken(),
+    )
+    assert response.errors
+    assert response.errors[0].code == "INVALID_PARAMS"
+
+
+@pytest.mark.asyncio
+async def test_update_not_implemented_returns_error(allow_memory_crud) -> None:
+    store = NotImplementedStore()
+    store.add(_entry("mem-1", "original"))
+    tool = _tool(store)
+    response = await tool.run(
+        MemoryCrudArgs(
+            action="update",
+            namespace="root",
+            items=[{"entry_id": "mem-1", "content": "new"}],
+        ),
+        CancellationToken(),
+    )
+    assert response.errors
+    assert response.errors[0].code == "NOT_IMPLEMENTED"
+
+
+@pytest.mark.asyncio
+async def test_delete_not_implemented_returns_error(allow_memory_crud) -> None:
+    store = NotImplementedStore()
+    store.add(_entry("mem-1", "original"))
+    tool = _tool(store)
+    response = await tool.run(
+        MemoryCrudArgs(
+            action="delete",
+            namespace="root",
+            items=[{"entry_id": "mem-1"}],
+        ),
+        CancellationToken(),
+    )
+    assert response.errors
+    assert response.errors[0].code == "NOT_IMPLEMENTED"
+
+
+@pytest.mark.asyncio
+async def test_permission_denied_returns_forbidden(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    team_id, system_id, agent_id_str = _create_team_and_system(tmp_path, monkeypatch)
+    actor = MemoryActorContext(
+        agent_id=agent_id_str,
+        system_id=system_id,
+        team_id=team_id,
+        system_type=SystemType.OPERATION,
+    )
+    store = InMemoryCursorStore()
+    service = MemoryCrudService(registry=StaticScopeRegistry(store, store, store))
+    tool = MemoryCrudTool(
+        agent_id=AgentId.from_str(agent_id_str),
+        service=service,
+        actor_context=actor,
+    )
+    response = await tool.run(
+        MemoryCrudArgs(action="list", namespace=agent_id_str),
+        CancellationToken(),
+    )
+    assert response.errors
+    assert response.errors[0].code == "FORBIDDEN"
+
+
+@pytest.mark.asyncio
+async def test_permission_allowed_returns_results(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    team_id, system_id, agent_id_str = _create_team_and_system(tmp_path, monkeypatch)
+    teams_service.add_allowed_skill(
+        team_id=team_id,
+        skill_name="memory_crud",
+        actor_id="system5/root",
+    )
+    systems_service.add_skill_grant(
+        system_id=system_id,
+        skill_name="memory_crud",
+        actor_id="system5/root",
+    )
+    actor = MemoryActorContext(
+        agent_id=agent_id_str,
+        system_id=system_id,
+        team_id=team_id,
+        system_type=SystemType.OPERATION,
+    )
+    store = InMemoryCursorStore()
+    service = MemoryCrudService(registry=StaticScopeRegistry(store, store, store))
+    tool = MemoryCrudTool(
+        agent_id=AgentId.from_str(agent_id_str),
+        service=service,
+        actor_context=actor,
+    )
+    response = await tool.run(
+        MemoryCrudArgs(action="list", namespace=agent_id_str),
+        CancellationToken(),
+    )
+    assert response.errors == []
