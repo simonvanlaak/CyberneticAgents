@@ -220,12 +220,9 @@ def _sync_obsidian_repo(
     )
     stop_event.set()
     if not result.get("success"):
-        error = (
-            result.get("error")
-            or result.get("stderr")
-            or result.get("raw_output")
-            or "Unknown error"
-        )
+        error = result.get("error") or result.get("stderr") or result.get("raw_output")
+        if not error:
+            error = f"Unknown error (result={result})" if result else "Unknown error"
         print(get_message("onboarding_discovery", "failed_sync_repo", error=error))
         return dest, False
     return dest, True

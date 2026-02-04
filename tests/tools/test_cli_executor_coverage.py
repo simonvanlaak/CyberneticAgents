@@ -21,6 +21,7 @@ from src.cyberagent.tools.cli_executor import (
 )
 from src.cyberagent.tools.cli_executor.cli_tool import CliTool
 from src.cyberagent.tools.cli_executor.cli_tool import _set_executor_timeout
+from src.cyberagent.tools.cli_executor import docker_env_executor
 from src.cyberagent.tools.cli_executor.docker_env_executor import (
     EnvDockerCommandLineCodeExecutor,
 )
@@ -210,6 +211,23 @@ def test_create_cli_executor_default_image(monkeypatch: pytest.MonkeyPatch) -> N
 
     assert executor is not None
     assert executor.image == "ghcr.io/simonvanlaak/cyberneticagents-cli-tools:latest"
+
+
+def test_env_executor_stop_ignores_missing_container(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executor = _make_env_executor()
+
+    async def _raise_not_found(*_args: object, **_kwargs: object) -> None:
+        raise Exception("No such container: abc")
+
+    monkeypatch.setattr(
+        docker_env_executor.DockerCommandLineCodeExecutor,
+        "stop",
+        _raise_not_found,
+    )
+
+    asyncio.run(executor.stop())
 
 
 def test_create_cli_executor_handles_failure(monkeypatch: pytest.MonkeyPatch) -> None:

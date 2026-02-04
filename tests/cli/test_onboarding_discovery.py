@@ -312,6 +312,26 @@ def test_sync_repo_reports_stderr_when_error_missing(
     assert "boom" in captured
 
 
+def test_sync_repo_reports_unknown_error_when_missing_details(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    def _fake_run_cli_tool(*_args: object, **_kwargs: object) -> dict[str, object]:
+        return {"success": False}
+
+    monkeypatch.setattr(onboarding_discovery, "_run_cli_tool", _fake_run_cli_tool)
+
+    onboarding_discovery._sync_obsidian_repo(
+        cli_tool=cast(CliTool, object()),
+        repo_url="https://github.com/example/repo",
+        branch="main",
+        token_env="TOKEN",
+        token_username="x-access-token",
+    )
+
+    captured = capsys.readouterr().out
+    assert "Unknown error" in captured
+
+
 def test_sync_repo_passes_timeout_to_cli_tool(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -3,6 +3,7 @@ Docker code executor with explicit environment injection per exec.
 """
 
 import asyncio
+import inspect
 import logging
 from typing import Dict, List, Optional, Tuple
 
@@ -85,6 +86,23 @@ class EnvDockerCommandLineCodeExecutor(DockerCommandLineCodeExecutor):
                     logger.exception("Failed to schedule kill command on loop: %s", e)
             return "Code execution was cancelled.", 1
 
+    async def stop(self) -> None:
+        """
+        Stop the Docker container, ignoring missing-container errors.
+        """
+        try:
+            result = super().stop()
+            if inspect.isawaitable(result):
+                await result
+        except Exception as exc:
+            if _is_missing_container_error(exc):
+                logger.warning(
+                    "Docker container already gone during stop: %s",
+                    exc,
+                )
+                return
+            raise
+
 
 def _decode_exec_output(output: object) -> tuple[str, str]:
     if isinstance(output, tuple):
@@ -95,3 +113,15 @@ def _decode_exec_output(output: object) -> tuple[str, str]:
     if isinstance(output, bytes):
         return output.decode("utf-8"), ""
     return str(output), ""
+
+
+def _is_missing_container_error(exc: Exception) -> bool:
+    try:
+        from docker import errors as docker_errors
+
+        if isinstance(exc, docker_errors.NotFound):
+            return True
+    except Exception:
+        pass
+    message = str(exc).lower()
+    return "no such container" in message or "404 client error" in message
