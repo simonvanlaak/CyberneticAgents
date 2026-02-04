@@ -28,6 +28,7 @@ ENV/
 *.swo
 *~
 .DS_Store
+.zed/
 
 # Testing
 .pytest_cache/
@@ -38,6 +39,7 @@ htmlcov/
 coverage.xml
 *.cover
 logs/*.log
+tmp/
 
 # Type checking
 .mypy_cache/
