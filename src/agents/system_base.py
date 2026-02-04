@@ -56,6 +56,17 @@ SYSTEM_TYPES = {
 logger = logging.getLogger(__name__)
 
 
+def _infer_system_type(agent_type: str) -> SystemType | None:
+    mapping = {
+        "System1": SystemType.OPERATION,
+        "System2": SystemType.COORDINATION_2,
+        "System3": SystemType.CONTROL,
+        "System4": SystemType.INTELLIGENCE,
+        "System5": SystemType.POLICY,
+    }
+    return mapping.get(agent_type)
+
+
 def get_model_client(
     agent_id: AgentId, structured_output: bool
 ) -> OpenAIChatCompletionClient:
@@ -336,6 +347,8 @@ class SystemBase(RoutedAgent):
         )
         messages.append("# RESPONSIBILITIES")
         messages.extend(self.responsibility_prompts)
+        messages.append("# MEMORY")
+        messages.extend(self._memory_prompt_entries())
         messages.append("# SKILLS")
         skill_entries = get_agent_skill_prompt_entries(self.agent_id.__str__())
         if skill_entries:
@@ -356,6 +369,29 @@ class SystemBase(RoutedAgent):
         self._agent._system_messages = [
             SystemMessage(content=message) for message in messages
         ]
+
+    def _memory_prompt_entries(self) -> list[str]:
+        system_type = _infer_system_type(self.agent_id.type)
+        entries = [
+            "Use memory_crud to store durable facts, preferences, and constraints.",
+            "Do not store secrets, credentials, or volatile tool output.",
+            "Default scope is agent; team/global scopes require explicit namespace.",
+            "Use if_match on update/delete to avoid overwriting concurrent changes.",
+            "Treat cursors as opaque tokens; use list pagination as provided.",
+        ]
+        if system_type == SystemType.INTELLIGENCE:
+            entries.append(
+                "Permission override: you may read/write team and global scopes; follow namespace rules."
+            )
+        elif system_type in {SystemType.CONTROL, SystemType.POLICY}:
+            entries.append(
+                "Permission override: you may read/write team scope; do not write global."
+            )
+        elif system_type in {SystemType.OPERATION, SystemType.COORDINATION_2}:
+            entries.append(
+                "Permission override: you may read team scope but must not write team/global."
+            )
+        return entries
 
     def _was_tool_called(self, response: TaskResult | Response, tool_name: str) -> bool:
         def _iter_events() -> list[BaseAgentEvent]:
