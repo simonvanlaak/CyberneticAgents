@@ -19,3 +19,9 @@ def test_get_message_formats_placeholders() -> None:
 def test_get_message_unknown_key_raises() -> None:
     with pytest.raises(KeyError):
         get_message("onboarding", "unknown_key")
+
+
+def test_get_message_joins_array_lines() -> None:
+    message = get_message("onboarding", "op_signin_hint")
+
+    assert message == "Line one\nLine two\n"

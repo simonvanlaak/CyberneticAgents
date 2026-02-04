@@ -7,6 +7,14 @@ from typing import Any
 _MESSAGES: dict[str, dict[str, str]] | None = None
 
 
+def _normalize_message(value: object) -> str:
+    if isinstance(value, str):
+        return value
+    if isinstance(value, list) and all(isinstance(item, str) for item in value):
+        return "\n".join(value) + "\n"
+    raise ValueError("CLI message values must be strings or arrays of strings.")
+
+
 def _load_messages() -> dict[str, dict[str, str]]:
     catalog_path = Path(__file__).with_name("messages.json")
     data = json.loads(catalog_path.read_text(encoding="utf-8"))
@@ -18,9 +26,9 @@ def _load_messages() -> dict[str, dict[str, str]]:
             raise ValueError("CLI messages JSON must map group names to objects.")
         group_map: dict[str, str] = {}
         for key, value in payload.items():
-            if not isinstance(key, str) or not isinstance(value, str):
-                raise ValueError("CLI message keys and values must be strings.")
-            group_map[key] = value
+            if not isinstance(key, str):
+                raise ValueError("CLI message keys must be strings.")
+            group_map[key] = _normalize_message(value)
         messages[group] = group_map
     return messages
 

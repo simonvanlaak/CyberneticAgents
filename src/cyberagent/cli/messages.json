@@ -36,6 +36,7 @@
     "missing_onepassword_auth_hint": "Export OP_SERVICE_ACCOUNT_TOKEN (or set it in .env) or OP_SESSION_* and re-run onboarding.",
     "op_install_hint": "Install the 1Password CLI (`op`) and re-run onboarding.",
     "op_docs_cli": "Docs: https://developer.1password.com/docs/cli/",
+    "op_signin_hint": ["Line one", "Line two"],
     "op_service_account_hint": "Set OP_SERVICE_ACCOUNT_TOKEN for a 1Password service account, then re-run onboarding.",
     "op_service_docs": "Docs: https://developer.1password.com/docs/cli/service-accounts/",
     "missing_tool_secret": "Missing {env_name} for required tools: {skills_list}.",
