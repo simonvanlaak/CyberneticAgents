@@ -37,7 +37,7 @@ class MemoryActorContext:
 @dataclass(slots=True)
 class MemoryCreateRequest:
     content: str
-    namespace: str
+    namespace: str | None
     scope: MemoryScope | None
     tags: list[str] | None
     priority: MemoryPriority
@@ -53,7 +53,7 @@ class MemoryCreateRequest:
 class MemoryReadRequest:
     entry_id: str
     scope: MemoryScope | None
-    namespace: str
+    namespace: str | None
     target_team_id: int | None = None
 
 
@@ -61,7 +61,7 @@ class MemoryReadRequest:
 class MemoryUpdateRequest:
     entry_id: str
     scope: MemoryScope | None
-    namespace: str
+    namespace: str | None
     content: str | None = None
     tags: list[str] | None = None
     priority: MemoryPriority | None = None
@@ -74,7 +74,7 @@ class MemoryUpdateRequest:
 class MemoryDeleteRequest:
     entry_id: str
     scope: MemoryScope | None
-    namespace: str
+    namespace: str | None
     target_team_id: int | None = None
 
 
@@ -107,6 +107,7 @@ class MemoryCrudService:
         created: list[MemoryEntry] = []
         for request in requests:
             scope = request.scope or self._default_scope
+            namespace = self._resolve_namespace(scope, request.namespace, actor)
             target_team_id = self._resolve_target_team_id(
                 actor, scope, request.target_team_id
             )
@@ -122,7 +123,7 @@ class MemoryCrudService:
             entry = MemoryEntry(
                 id=request.entry_id or uuid4().hex,
                 scope=scope,
-                namespace=request.namespace,
+                namespace=namespace,
                 owner_agent_id=owner_agent_id,
                 content=request.content,
                 tags=list(request.tags or []),
@@ -140,7 +141,7 @@ class MemoryCrudService:
             self._record_audit(
                 actor=actor,
                 scope=scope,
-                namespace=request.namespace,
+                namespace=namespace,
                 resource_id=created_entry.id,
                 action="memory_create",
                 success=True,
@@ -152,6 +153,7 @@ class MemoryCrudService:
         self, *, actor: MemoryActorContext, request: MemoryReadRequest
     ) -> MemoryEntry | None:
         scope = request.scope or self._default_scope
+        namespace = self._resolve_namespace(scope, request.namespace, actor)
         target_team_id = self._resolve_target_team_id(
             actor, scope, request.target_team_id
         )
@@ -163,14 +165,14 @@ class MemoryCrudService:
         )
         store = self._registry.resolve(scope)
         start = time.perf_counter()
-        entry = store.get(request.entry_id, scope, request.namespace)
+        entry = store.get(request.entry_id, scope, namespace)
         self._record_read_latency((time.perf_counter() - start) * 1000)
         if entry is None:
             self._record_read(hit=False)
             self._record_audit(
                 actor=actor,
                 scope=scope,
-                namespace=request.namespace,
+                namespace=namespace,
                 resource_id=request.entry_id,
                 action="memory_read",
                 success=False,
@@ -182,7 +184,7 @@ class MemoryCrudService:
         self._record_audit(
             actor=actor,
             scope=scope,
-            namespace=request.namespace,
+            namespace=namespace,
             resource_id=entry.id,
             action="memory_read",
             success=True,
@@ -197,6 +199,7 @@ class MemoryCrudService:
         updated: list[MemoryEntry] = []
         for request in requests:
             scope = request.scope or self._default_scope
+            namespace = self._resolve_namespace(scope, request.namespace, actor)
             target_team_id = self._resolve_target_team_id(
                 actor, scope, request.target_team_id
             )
@@ -207,7 +210,7 @@ class MemoryCrudService:
                 target_team_id=target_team_id,
             )
             store = self._registry.resolve(scope)
-            entry = store.get(request.entry_id, scope, request.namespace)
+            entry = store.get(request.entry_id, scope, namespace)
             if entry is None:
                 raise ValueError(f"memory entry not found: {request.entry_id}")
             self._require_owner_match(scope, actor.agent_id, entry.owner_agent_id)
@@ -225,7 +228,7 @@ class MemoryCrudService:
             self._record_audit(
                 actor=actor,
                 scope=scope,
-                namespace=request.namespace,
+                namespace=namespace,
                 resource_id=entry.id,
                 action="memory_update",
                 success=True,
@@ -240,6 +243,7 @@ class MemoryCrudService:
         results: list[bool] = []
         for request in requests:
             scope = request.scope or self._default_scope
+            namespace = self._resolve_namespace(scope, request.namespace, actor)
             target_team_id = self._resolve_target_team_id(
                 actor, scope, request.target_team_id
             )
@@ -250,16 +254,16 @@ class MemoryCrudService:
                 target_team_id=target_team_id,
             )
             store = self._registry.resolve(scope)
-            entry = store.get(request.entry_id, scope, request.namespace)
+            entry = store.get(request.entry_id, scope, namespace)
             if entry is not None:
                 self._require_owner_match(scope, actor.agent_id, entry.owner_agent_id)
-            success = store.delete(request.entry_id, scope, request.namespace)
+            success = store.delete(request.entry_id, scope, namespace)
             results.append(success)
             self._record_write(count=1)
             self._record_audit(
                 actor=actor,
                 scope=scope,
-                namespace=request.namespace,
+                namespace=namespace,
                 resource_id=request.entry_id,
                 action="memory_delete",
                 success=success,
@@ -272,12 +276,13 @@ class MemoryCrudService:
         *,
         actor: MemoryActorContext,
         scope: MemoryScope | None,
-        namespace: str,
+        namespace: str | None,
         limit: int | None,
         cursor: str | None,
         target_team_id: int | None = None,
     ) -> MemoryListResult:
         resolved_scope = scope or self._default_scope
+        resolved_namespace = self._resolve_namespace(resolved_scope, namespace, actor)
         target_team = self._resolve_target_team_id(
             actor, resolved_scope, target_team_id
         )
@@ -292,14 +297,14 @@ class MemoryCrudService:
         owner_agent_id = actor.agent_id if resolved_scope == MemoryScope.AGENT else None
         start = time.perf_counter()
         result = store.list(
-            resolved_scope, namespace, page_limit, cursor, owner_agent_id
+            resolved_scope, resolved_namespace, page_limit, cursor, owner_agent_id
         )
         self._record_list_latency((time.perf_counter() - start) * 1000)
         self._record_list()
         self._record_audit(
             actor=actor,
             scope=resolved_scope,
-            namespace=namespace,
+            namespace=resolved_namespace,
             resource_id="list",
             action="memory_list",
             success=True,
@@ -314,10 +319,11 @@ class MemoryCrudService:
         entry_id: str,
         source_scope: MemoryScope | None,
         target_scope: MemoryScope,
-        namespace: str,
+        namespace: str | None,
         target_team_id: int | None = None,
     ) -> MemoryEntry:
         source = source_scope or self._default_scope
+        source_namespace = self._resolve_namespace(source, namespace, actor)
         source_team_id = self._resolve_target_team_id(actor, source, target_team_id)
         self._require_permission(
             actor=actor,
@@ -326,11 +332,12 @@ class MemoryCrudService:
             target_team_id=source_team_id,
         )
         source_store = self._registry.resolve(source)
-        entry = source_store.get(entry_id, source, namespace)
+        entry = source_store.get(entry_id, source, source_namespace)
         if entry is None:
             raise ValueError(f"memory entry not found: {entry_id}")
         self._require_owner_match(source, actor.agent_id, entry.owner_agent_id)
 
+        target_namespace = self._resolve_namespace(target_scope, namespace, actor)
         target_team = self._resolve_target_team_id(actor, target_scope, target_team_id)
         self._require_permission(
             actor=actor,
@@ -339,12 +346,12 @@ class MemoryCrudService:
             target_team_id=target_team,
         )
         target_store = self._registry.resolve(target_scope)
-        existing = target_store.get(entry_id, target_scope, namespace)
+        existing = target_store.get(entry_id, target_scope, target_namespace)
         if existing and existing.content != entry.content:
             conflict_entry = MemoryEntry(
                 id=uuid4().hex,
                 scope=target_scope,
-                namespace=namespace,
+                namespace=target_namespace,
                 owner_agent_id=entry.owner_agent_id,
                 content=entry.content,
                 tags=list(entry.tags) + [f"conflict_with:{existing.id}"],
@@ -354,14 +361,16 @@ class MemoryCrudService:
                 expires_at=entry.expires_at,
                 source=entry.source,
                 confidence=entry.confidence,
-                is_conflict=True,
+                layer=entry.layer,
+                conflict=True,
+                conflict_of=existing.id,
             )
             created_conflict = target_store.add(conflict_entry)
             self._record_write(count=1)
             self._record_audit(
                 actor=actor,
                 scope=target_scope,
-                namespace=namespace,
+                namespace=target_namespace,
                 resource_id=created_conflict.id,
                 action="memory_promote_conflict",
                 success=True,
@@ -372,7 +381,7 @@ class MemoryCrudService:
         promoted = MemoryEntry(
             id=entry.id,
             scope=target_scope,
-            namespace=namespace,
+            namespace=target_namespace,
             owner_agent_id=entry.owner_agent_id,
             content=entry.content,
             tags=list(entry.tags),
@@ -382,13 +391,14 @@ class MemoryCrudService:
             expires_at=entry.expires_at,
             source=entry.source,
             confidence=entry.confidence,
+            layer=entry.layer,
         )
         created = target_store.add(promoted)
         self._record_write(count=1)
         self._record_audit(
             actor=actor,
             scope=target_scope,
-            namespace=namespace,
+            namespace=target_namespace,
             resource_id=created.id,
             action="memory_promote",
             success=True,
@@ -490,3 +500,15 @@ class MemoryCrudService:
         if scope == MemoryScope.GLOBAL:
             return None
         return target_team_id or actor.team_id
+
+    @staticmethod
+    def _resolve_namespace(
+        scope: MemoryScope, namespace: str | None, actor: MemoryActorContext
+    ) -> str:
+        if scope == MemoryScope.AGENT:
+            if namespace and namespace.strip():
+                return namespace
+            return actor.agent_id
+        if not namespace or not namespace.strip():
+            raise ValueError("namespace is required for team/global scope")
+        return namespace

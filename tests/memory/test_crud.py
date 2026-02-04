@@ -67,6 +67,24 @@ def _actor() -> MemoryActorContext:
     )
 
 
+def _control_actor() -> MemoryActorContext:
+    return MemoryActorContext(
+        agent_id="root_sys3",
+        system_id=3,
+        team_id=1,
+        system_type=SystemType.CONTROL,
+    )
+
+
+def _intelligence_actor() -> MemoryActorContext:
+    return MemoryActorContext(
+        agent_id="root_sys4",
+        system_id=4,
+        team_id=1,
+        system_type=SystemType.INTELLIGENCE,
+    )
+
+
 def test_create_defaults_to_agent_scope_and_owner() -> None:
     store = InMemoryStore()
     service = MemoryCrudService(
@@ -89,6 +107,70 @@ def test_create_defaults_to_agent_scope_and_owner() -> None:
     )
     assert created[0].scope == MemoryScope.AGENT
     assert created[0].owner_agent_id == "root_sys1"
+
+
+def test_agent_scope_defaults_namespace_when_missing() -> None:
+    store = InMemoryStore()
+    service = MemoryCrudService(registry=StaticScopeRegistry(store, store, store))
+    created = service.create_entries(
+        actor=_actor(),
+        requests=[
+            MemoryCreateRequest(
+                content="hello",
+                namespace=None,
+                scope=MemoryScope.AGENT,
+                tags=None,
+                priority=MemoryPriority.MEDIUM,
+                source=MemorySource.MANUAL,
+                confidence=0.9,
+                expires_at=None,
+            )
+        ],
+    )
+    assert created[0].namespace == "root_sys1"
+
+
+def test_team_scope_requires_namespace() -> None:
+    store = InMemoryStore()
+    service = MemoryCrudService(registry=StaticScopeRegistry(store, store, store))
+    with pytest.raises(ValueError):
+        service.create_entries(
+            actor=_control_actor(),
+            requests=[
+                MemoryCreateRequest(
+                    content="team",
+                    namespace=None,
+                    scope=MemoryScope.TEAM,
+                    tags=None,
+                    priority=MemoryPriority.MEDIUM,
+                    source=MemorySource.MANUAL,
+                    confidence=0.9,
+                    expires_at=None,
+                    target_team_id=1,
+                )
+            ],
+        )
+
+
+def test_global_scope_requires_namespace() -> None:
+    store = InMemoryStore()
+    service = MemoryCrudService(registry=StaticScopeRegistry(store, store, store))
+    with pytest.raises(ValueError):
+        service.create_entries(
+            actor=_intelligence_actor(),
+            requests=[
+                MemoryCreateRequest(
+                    content="global",
+                    namespace=None,
+                    scope=MemoryScope.GLOBAL,
+                    tags=None,
+                    priority=MemoryPriority.MEDIUM,
+                    source=MemorySource.MANUAL,
+                    confidence=0.9,
+                    expires_at=None,
+                )
+            ],
+        )
 
 
 def test_create_enforces_bulk_limit() -> None:
