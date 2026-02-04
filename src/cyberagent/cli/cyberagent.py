@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import getpass
 import json
 import os
 import shutil
@@ -35,7 +34,9 @@ from src.cli_session import list_inbox_entries
 from src.cyberagent.channels.telegram.parser import build_session_id
 from src.cyberagent.cli import dev as dev_cli
 from src.cyberagent.cli.env_loader import load_op_service_account_token
+from src.cyberagent.cli import log_filters
 from src.cyberagent.cli import onboarding as onboarding_cli
+from src.cyberagent.cli.cyberagent_helpers import handle_help, handle_login
 from src.cyberagent.cli.headless import run_headless_session
 from src.cyberagent.cli.status import main as status_main
 from src.cyberagent.cli.suggestion_queue import enqueue_suggestion
@@ -227,6 +228,16 @@ def build_parser() -> argparse.ArgumentParser:
     login_parser = subparsers.add_parser("login", help="Authenticate with the VSM.")
     login_parser.add_argument(
         "--token", "-t", type=str, help="Authentication token. Prompts if omitted."
+    )
+
+    reset_parser = subparsers.add_parser(
+        "reset",
+        help="Delete all persisted CyberneticAgents data (keeps .env).",
+    )
+    reset_parser.add_argument(
+        "--yes",
+        action="store_true",
+        help="Skip confirmation prompt.",
     )
 
     dev_parser = subparsers.add_parser("dev", help="Developer utilities.")
@@ -540,11 +551,11 @@ def _handle_logs(args: argparse.Namespace) -> int:
         return 0
     target = log_files[-1]
     lines = target.read_text(encoding="utf-8", errors="ignore").splitlines()
-    levels = _resolve_log_levels(args.level, args.errors)
+    levels = log_filters.resolve_log_levels(args.level, args.errors)
     if levels is None:
         print("Invalid log level. Use: DEBUG, INFO, WARNING, ERROR, CRITICAL.")
         return 2
-    filtered = _filter_logs(lines, args.filter, args.limit, levels)
+    filtered = log_filters.filter_logs(lines, args.filter, args.limit, levels)
     for line in filtered:
         print(line)
     if args.follow:
@@ -554,7 +565,7 @@ def _handle_logs(args: argparse.Namespace) -> int:
                 while True:
                     line = handle.readline()
                     if line:
-                        if _matches_filter(line, args.filter, levels):
+                        if log_filters.filter_logs([line], args.filter, 1, levels):
                             print(line.rstrip("\n"))
                     else:
                         time.sleep(0.3)
@@ -588,19 +599,38 @@ def _handle_config(args: argparse.Namespace) -> int:
 
 
 def _handle_login(args: argparse.Namespace) -> int:
-    token = args.token
-    if not token:
-        token = getpass.getpass("Authentication token: ")
-    if KEYRING_AVAILABLE and keyring is not None:
-        keyring.set_password(KEYRING_SERVICE, "cli", token)
-        print("Token stored securely in the OS keyring.")
-    else:
-        fallback = Path.home() / ".cyberagent_token"
-        fallback.write_text(token, encoding="utf-8")
-        print(
-            f"Keyring unavailable; token saved to {fallback} (read/write permissions only)."
-        )
+    return handle_login(
+        args.token,
+        keyring_available=KEYRING_AVAILABLE,
+        keyring_module=keyring,
+        keyring_service=KEYRING_SERVICE,
+    )
+
+
+async def _handle_reset(args: argparse.Namespace) -> int:
+    if not args.yes:
+        response = input(
+            "This will delete all data under ./data and ./logs. Continue? [y/N] "
+        ).strip()
+        if response.lower() not in {"y", "yes"}:
+            print("Reset canceled.")
+            return 0
+
+    if _runtime_pid_is_running():
+        await _handle_stop(args)
+
+    _remove_dir(Path("data"))
+    _remove_dir(Path("logs"))
+    print("Reset complete. Run 'cyberagent onboarding' to start again.")
     return 0
+
+
+def _remove_dir(path: Path) -> None:
+    if not path.exists():
+        return
+    if not path.is_dir():
+        raise ValueError(f"Expected directory at {path}")
+    shutil.rmtree(path)
 
 
 async def _handle_dev(args: argparse.Namespace) -> int:
@@ -730,88 +760,7 @@ async def _handle_serve(args: argparse.Namespace) -> int:
 
 
 def _handle_help(args: argparse.Namespace) -> int:
-    parser = build_parser()
-    if not args.topic:
-        parser.print_help()
-        return 0
-    subparser = _lookup_subparser(parser, args.topic)
-    if subparser is None:
-        print(f"Unknown help topic: {args.topic}", file=sys.stderr)
-        return 1
-    subparser.print_help()
-    return 0
-
-
-def _lookup_subparser(
-    parser: argparse.ArgumentParser, name: str
-) -> argparse.ArgumentParser | None:
-    subparsers_action = next(
-        (
-            action
-            for action in parser._actions
-            if isinstance(action, argparse._SubParsersAction)
-        ),
-        None,
-    )
-    if subparsers_action is None:
-        return None
-    return subparsers_action.choices.get(name)
-
-
-def _filter_logs(
-    lines: Sequence[str],
-    pattern: str | None,
-    limit: int,
-    levels: set[str] | None,
-) -> Sequence[str]:
-    filtered = [line for line in lines if _matches_filter(line, pattern, levels)]
-    return filtered[-limit:]
-
-
-def _matches_filter(line: str, pattern: str | None, levels: set[str] | None) -> bool:
-    if pattern is None:
-        text_match = True
-    else:
-        text_match = pattern.lower() in line.lower()
-    if not text_match:
-        return False
-    if levels is None:
-        return True
-    level = _extract_log_level(line)
-    if level is None:
-        return False
-    return level.upper() in levels
-
-
-def _normalize_log_levels(level_args: Sequence[str] | None) -> set[str] | None:
-    if not level_args:
-        return None
-    allowed = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
-    normalized: set[str] = set()
-    for arg in level_args:
-        for raw in arg.split(","):
-            token = raw.strip().upper()
-            if not token:
-                continue
-            if token not in allowed:
-                raise ValueError(f"Unknown log level: {token}")
-            normalized.add(token)
-    return normalized
-
-
-def _resolve_log_levels(
-    level_args: Sequence[str] | None, errors_only: bool
-) -> set[str] | None:
-    try:
-        levels = _normalize_log_levels(level_args)
-    except ValueError:
-        return None
-    if errors_only:
-        error_levels = {"ERROR", "CRITICAL"}
-        if levels is None:
-            return error_levels
-        return levels | error_levels
-    return levels
+    return handle_help(build_parser, args.topic)
 
 
 def _check_recent_runtime_errors(command: str | None) -> None:
@@ -837,7 +786,7 @@ def _check_recent_runtime_errors(command: str | None) -> None:
         if new_bytes:
             text = new_bytes.decode("utf-8", errors="ignore")
             for line in text.splitlines():
-                level = _extract_log_level(line)
+                level = log_filters.extract_log_level(line)
                 if level == "WARNING":
                     warnings += 1
                 elif level == "ERROR":
@@ -852,14 +801,6 @@ def _check_recent_runtime_errors(command: str | None) -> None:
             f"{errors} errors, {warnings} warnings. "
             "Run 'cyberagent logs' to view."
         )
-
-
-def _extract_log_level(line: str) -> str | None:
-    parts = line.split(" ", 3)
-    if len(parts) < 3:
-        return None
-    level = parts[2].strip()
-    return level if level else None
 
 
 def _load_cli_log_state() -> dict[str, object] | None:
@@ -985,6 +926,7 @@ _HANDLERS = {
     "transcribe": handle_transcribe,
     "config": _handle_config,
     "login": _handle_login,
+    "reset": _handle_reset,
     SERVE_COMMAND: _handle_serve,
 }
 
