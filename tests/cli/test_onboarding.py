@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 
 import pytest
 
@@ -303,3 +304,21 @@ def test_print_db_write_error_attempts_recovery(
 
     captured = capsys.readouterr().out
     assert "Recovered backup.db" in captured
+
+
+def test_offer_optional_telegram_setup_sets_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(onboarding_cli.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(
+        onboarding_cli, "_load_secret_from_1password", lambda **_: "tok"
+    )
+    monkeypatch.setattr(
+        onboarding_cli, "_offer_optional_telegram_webhook_setup", lambda: None
+    )
+    monkeypatch.setattr(onboarding_cli, "_print_feature_ready", lambda *_: None)
+    monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
+
+    onboarding_cli._offer_optional_telegram_setup()
+
+    assert os.environ.get("TELEGRAM_BOT_TOKEN") == "tok"

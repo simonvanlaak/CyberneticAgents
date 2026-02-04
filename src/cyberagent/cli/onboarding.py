@@ -58,6 +58,7 @@ from src.cyberagent.cli.onboarding_secrets import (
     load_secret_from_1password,
     load_secret_from_1password_with_error,
 )
+from src.cyberagent.secrets import get_secret
 from src.cyberagent.cli.onboarding_vault import (
     prompt_store_secret_in_1password,
     prompt_yes_no,
@@ -203,6 +204,9 @@ def _start_runtime_after_onboarding(team_id: int) -> int | None:
     env = os.environ.copy()
     env["CYBERAGENT_ACTIVE_TEAM_ID"] = str(team_id)
     env["CYBERAGENT_DB_URL"] = _resolve_runtime_db_url()
+    telegram_token = get_secret("TELEGRAM_BOT_TOKEN")
+    if telegram_token:
+        env["TELEGRAM_BOT_TOKEN"] = telegram_token
     proc = subprocess.Popen(
         cmd,
         env=env,
@@ -937,6 +941,7 @@ def _offer_optional_telegram_setup() -> None:
         field_label="credential",
     )
     if loaded:
+        os.environ["TELEGRAM_BOT_TOKEN"] = loaded
         _print_feature_ready("TELEGRAM_BOT_TOKEN")
         _offer_optional_telegram_webhook_setup()
         return
@@ -948,6 +953,13 @@ def _offer_optional_telegram_setup() -> None:
         vault_name=VAULT_NAME,
     ):
         return
+    loaded = _load_secret_from_1password(
+        vault_name=VAULT_NAME,
+        item_name="TELEGRAM_BOT_TOKEN",
+        field_label="credential",
+    )
+    if loaded:
+        os.environ["TELEGRAM_BOT_TOKEN"] = loaded
     _offer_optional_telegram_webhook_setup()
 
 
