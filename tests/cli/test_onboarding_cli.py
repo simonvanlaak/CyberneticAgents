@@ -19,6 +19,9 @@ from src.cyberagent.cli import agent_message_queue
 from src.cyberagent.services import systems as systems_service
 from src.cyberagent.services import teams as teams_service
 from src.cyberagent.tools.cli_executor.skill_loader import SkillDefinition
+from src.cyberagent.cli import onboarding_memory
+from src.cyberagent.memory.crud import MemoryActorContext, MemoryCreateRequest
+from src.cyberagent.memory.models import MemoryScope
 from src.enums import ProcedureStatus
 from src.enums import SystemType
 
@@ -153,6 +156,77 @@ def test_handle_onboarding_requires_technical_checks(
     assert exit_code == 1
     assert "technical onboarding" in captured.lower()
     assert start_calls == []
+
+
+def test_validate_onboarding_inputs_prompts_for_missing() -> None:
+    args = argparse.Namespace(
+        user_name=None,
+        repo_url=None,
+        profile_links=[],
+        token_env="GITHUB_READONLY_TOKEN",
+        token_username="x-access-token",
+    )
+    inputs = iter(
+        [
+            "Ada Lovelace",
+            "https://github.com/example/repo",
+            "https://example.com/profile",
+        ]
+    )
+
+    def _fake_input(_: str) -> str:
+        return next(inputs)
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr("builtins.input", _fake_input)
+    try:
+        assert onboarding_cli._validate_onboarding_inputs(args) is True
+    finally:
+        monkeypatch.undo()
+
+    assert args.user_name == "Ada Lovelace"
+    assert args.repo_url == "https://github.com/example/repo"
+    assert args.profile_links == ["https://example.com/profile"]
+
+
+def test_store_onboarding_memory_writes_global_entry(
+    tmp_path: Path,
+) -> None:
+    summary_path = tmp_path / "summary.md"
+    summary_path.write_text("User onboarding summary.", encoding="utf-8")
+    created: list[tuple[MemoryActorContext, list[MemoryCreateRequest]]] = []
+
+    class _FakeService:
+        def create_entries(
+            self, actor: MemoryActorContext, requests: list[MemoryCreateRequest]
+        ) -> list[MemoryCreateRequest]:
+            created.append((actor, requests))
+            return []
+
+    fake_system = System(
+        id=10,
+        team_id=1,
+        name="System4/root",
+        type=SystemType.INTELLIGENCE,
+        agent_id_str="System4/root",
+    )
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(onboarding_memory, "get_system_by_type", lambda *_: fake_system)
+    monkeypatch.setattr(
+        onboarding_memory, "_build_memory_service", lambda: _FakeService()
+    )
+    try:
+        onboarding_memory.store_onboarding_memory(1, summary_path)
+    finally:
+        monkeypatch.undo()
+
+    assert created
+    _, requests = created[0]
+    assert len(requests) == 1
+    request = requests[0]
+    assert request.scope == MemoryScope.GLOBAL
+    assert request.namespace == "user"
 
 
 def test_handle_onboarding_seeds_default_sops(

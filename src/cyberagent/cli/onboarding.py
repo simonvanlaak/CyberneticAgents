@@ -43,6 +43,7 @@ from src.cyberagent.cli.onboarding_secrets import (
     has_onepassword_auth,
     load_secret_from_1password,
 )
+from src.cyberagent.cli.onboarding_memory import store_onboarding_memory
 from src.enums import SystemType
 
 LOGS_DIR = Path("logs")
@@ -83,7 +84,8 @@ def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
     _seed_default_team_envelope(team.id, team_defaults)
     _ensure_team_systems(team.id, team_defaults)
     _seed_default_procedures(team.id, procedures)
-    _run_discovery_onboarding(args, team.id)
+    summary_path = _run_discovery_onboarding(args, team.id)
+    store_onboarding_memory(team.id, summary_path)
     if auto_execute:
         _trigger_onboarding_initiative(
             team.id,
@@ -97,15 +99,49 @@ def handle_onboarding(args: argparse.Namespace, suggest_command: str) -> int:
 
 
 def _validate_onboarding_inputs(args: argparse.Namespace) -> bool:
+    _prompt_for_missing_inputs(args)
     user_name = getattr(args, "user_name", None)
     repo_url = getattr(args, "repo_url", None)
     if not user_name:
-        print("Missing required --name for onboarding.")
+        print("Onboarding needs your name to get started.")
         return False
     if not repo_url:
-        print("Missing required --repo for onboarding.")
+        print("Onboarding needs your Obsidian vault repo URL to continue.")
         return False
     return True
+
+
+def _prompt_for_missing_inputs(args: argparse.Namespace) -> None:
+    user_name = str(getattr(args, "user_name", "") or "").strip()
+    if not user_name:
+        print("Welcome to CyberneticAgents onboarding.")
+        user_name = _prompt_required_value("What should we call you?")
+        setattr(args, "user_name", user_name)
+
+    repo_url = str(getattr(args, "repo_url", "") or "").strip()
+    if not repo_url:
+        repo_url = _prompt_required_value(
+            "Paste the private GitHub repo URL for your Obsidian vault"
+        )
+        setattr(args, "repo_url", repo_url)
+
+    profile_links = list(getattr(args, "profile_links", []) or [])
+    if not profile_links:
+        raw_links = input(
+            "Any profile links to reference? (optional, comma-separated): "
+        ).strip()
+        if raw_links:
+            links = [link.strip() for link in raw_links.split(",") if link.strip()]
+            if links:
+                setattr(args, "profile_links", links)
+
+
+def _prompt_required_value(prompt: str) -> str:
+    while True:
+        value = input(f"{prompt}: ").strip()
+        if value:
+            return value
+        print("Please enter a value to continue.")
 
 
 def _start_runtime_after_onboarding(team_id: int) -> int | None:
