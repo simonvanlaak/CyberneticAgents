@@ -166,3 +166,7 @@ After manual testing I also need to do another architecture & docs review, to en
 ### 2026-02-03
 Updated shared inbox behavior and documentation. Unified shared inbox entries across CLI and inbox channel, and enforced routing warnings with related test coverage. Refined telegram integration docs with updated verification steps and setup guidance.
 Manually tested telegram feature.
+
+### 2026-02-04
+Implemented memory. Created config dir with default team & procedures defined. Created onboarding procedure. Continued working on onboarding experience, including technical check, feature activation check and providing basic user infos to prepare onboarding interview. Implemented reset command, to test onboarding more easily.
+Test command: cyberagent onboarding --name Simon --repo https://github.com/simonvanlaak/maya-obsidian-vault --profile-link simonvanlaak.de
