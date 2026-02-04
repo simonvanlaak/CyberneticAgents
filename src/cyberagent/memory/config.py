@@ -30,8 +30,8 @@ class MemoryBackendConfig:
 def load_memory_backend_config() -> MemoryBackendConfig:
     backend = os.environ.get("MEMORY_BACKEND", "list").lower()
     chroma_collection = os.environ.get("MEMORY_CHROMA_COLLECTION", "memory_store")
-    chroma_persistence_path = os.environ.get("MEMORY_CHROMA_PATH", "./chroma_db")
-    chroma_host = os.environ.get("MEMORY_CHROMA_HOST", "localhost")
+    chroma_persistence_path = os.environ.get("MEMORY_CHROMA_PATH", "data/chroma_db")
+    chroma_host = os.environ.get("MEMORY_CHROMA_HOST", "")
     chroma_port_raw = os.environ.get("MEMORY_CHROMA_PORT", "8000")
     try:
         chroma_port = int(chroma_port_raw)

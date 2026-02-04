@@ -18,12 +18,13 @@
 ## Audit Cadence (Recurring)
 1. Frequency: monthly.
 2. Triggered audits: before any major release or security-sensitive refactor.
-3. Evidence retention: do not retain audit artifacts or outputs after the audit completes.
+3. Evidence retention: temporary artifacts may be created during the audit but must be deleted after completion and never committed. Only a redacted summary may be retained in the audit report.
 
 ## Phase 0: Prep
 1. Define threat model and assets (PII, tokens, memory artifacts, audit logs).
 2. Enumerate entry points (CLI, tools, agent skill APIs).
 3. Establish audit evidence checklist and report template.
+4. Confirm audit is manual-only; no automated security scanning requirements beyond explicit steps below.
 
 ### Threat Model (Project-Specific)
 1. Assets:
@@ -60,11 +61,11 @@
 7. Data persistence initialization: `src/cyberagent/db/` and `src/rbac/enforcer.py`.
 
 ### Static Invariants (Must Hold)
-1. RBAC checks occur before any tool execution in CLI executor.
+1. Skill invocations enforce RBAC before executing any CLI tool command.
 2. Memory CRUD enforces scope defaults and permission checks before any store access.
 3. Namespace is required for team/global scope; agent scope defaults to actor ID.
 4. No secrets are logged in audit or observability logs.
-5. All data stores persist under `data/` (requirement).
+5. All persistent data stores reside under `data/` (requirement).
 
 ## Phase 2: Dependency & Supply Chain
 1. Review `pyproject.toml` dependencies for known CVEs.
@@ -99,18 +100,27 @@
 3. Verify backup/retention posture for DBs and logs.
 4. Confirm `security_logs.db` is stored under `data/`.
 5. Confirm no persistent DBs or logs exist outside `data/`.
+6. Allowed exceptions (must be ephemeral and removed after audit):
+7. `/tmp` or OS temp directories for transient files.
+8. `.pytest_cache` and local test caches during execution.
+9. Docker volumes or containers used by CLI tools (must be pruned/removed after audit).
+10. Tool execution work dirs created during the audit (must be deleted after completion).
 
 ## Phase 5: Deployment & Ops
 1. Review docker-compose and runtime env configuration.
 2. Validate least-privilege for runtime execution.
 3. Confirm monitoring and alerting for security events.
 4. Confirm secrets are injected only at runtime and not persisted.
+5. Document the CLI tools image provenance (source repo, tag, and digest when used in production).
 
 ## Deliverables
 1. Findings report with severity, impact, and remediation.
 2. Patch plan with owners and timelines.
 3. Verification tests for fixed issues.
 4. Evidence summary only (no stored logs, command outputs, or artifacts).
+5. Audit summary markdown file saved under `docs/technical/security/` named with the current date (YYYY-MM-DD) that includes:
+6. A concise audit summary (scope, dates, tools run).
+7. A clear, enumerated list of vulnerabilities with severity, impact, and status.
 
 ## Exit Criteria
 1. High/critical findings remediated or accepted with documented risk.
@@ -124,3 +134,12 @@
 4. Summary of RBAC/VSM matrix test results.
 5. Dependency CVE review notes with remediation decisions.
 6. Confirmation that `data/` contains all persisted DBs and logs.
+7. Confirmation that ephemeral audit artifacts were deleted post-audit (list of removed paths).
+
+## Gap Closures (Required Actions)
+1. Deny-by-default tool execution:
+2. Manual step: attempt to invoke an unknown skill/tool via CLI executor; verify explicit deny/error.
+3. Log output must show a permission denial or "unknown tool" error without executing a command.
+4. Secrets redaction verification:
+5. Manual step: force a controlled failure containing a dummy secret token and verify logs do not include it.
+6. Document redaction behavior and add a checklist item in the audit report.
