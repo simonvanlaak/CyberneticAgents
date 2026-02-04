@@ -4,9 +4,9 @@ import argparse
 from datetime import datetime
 import getpass
 import json
+import shutil
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import time
@@ -30,6 +30,11 @@ from src.cyberagent.services import teams as teams_service
 from src.cyberagent.tools.cli_executor.skill_loader import (
     SkillDefinition,
     load_skill_definitions,
+)
+from src.cyberagent.cli.onboarding_docker import (
+    check_cli_tools_image_available,
+    check_docker_available,
+    check_docker_socket_access,
 )
 from src.cyberagent.tools.cli_executor.skill_runtime import DEFAULT_SKILLS_ROOT
 from src.cyberagent.cli.onboarding_defaults import (
@@ -443,9 +448,9 @@ def run_technical_onboarding_checks() -> bool:
         _check_db_writable,
         _check_logs_writable,
         _check_llm_credentials,
-        _check_docker_socket_access,
-        _check_docker_available,
-        _check_cli_tools_image_available,
+        check_docker_socket_access,
+        check_docker_available,
+        check_cli_tools_image_available,
         _check_onepassword_auth,
         _check_required_tool_secrets,
         _check_skill_root_access,
@@ -583,70 +588,6 @@ def _check_llm_credentials() -> bool:
     return True
 
 
-def _get_docker_socket_path() -> Path | None:
-    docker_host = os.environ.get("DOCKER_HOST", "")
-    if docker_host.startswith("unix://"):
-        socket_path = docker_host[len("unix://") :]
-        if socket_path:
-            return Path(socket_path)
-        return None
-    if docker_host:
-        return None
-    return Path("/var/run/docker.sock")
-
-
-def _check_docker_socket_access() -> bool:
-    if not _skills_require_docker():
-        return True
-    if not shutil.which("docker"):
-        return False
-    socket_path = _get_docker_socket_path()
-    if socket_path is None:
-        return True
-    if not socket_path.exists():
-        return True
-    if os.access(socket_path, os.R_OK | os.W_OK):
-        return True
-    print(f"Docker socket is not accessible: {socket_path}")
-    print("Fix Docker socket permissions and re-run onboarding.")
-    return False
-
-
-def _check_docker_available() -> bool:
-    docker_path = shutil.which("docker")
-    if not docker_path:
-        if not _skills_require_docker():
-            print(
-                "Docker not found, but no Docker-based skills are configured. "
-                "Continuing without tool execution."
-            )
-            return True
-        print("Docker is required for tool execution but was not found in PATH.")
-        return False
-    try:
-        result = subprocess.run(
-            [docker_path, "info"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        print("Docker is installed but not reachable. Is the daemon running?")
-        return False
-    if result.returncode != 0:
-        if not _skills_require_docker():
-            print(
-                "Docker is installed but not reachable. "
-                "Continuing without tool execution because no Docker-based "
-                "skills are configured."
-            )
-            return True
-        print("Docker is installed but not reachable. Is the daemon running?")
-        return False
-    return True
-
-
 def _has_onepassword_auth() -> bool:
     return has_onepassword_auth()
 
@@ -663,42 +604,6 @@ def _check_onepassword_auth() -> bool:
         "Export OP_SERVICE_ACCOUNT_TOKEN (or set it in .env) or OP_SESSION_* and "
         "re-run onboarding."
     )
-    return False
-
-
-def _skills_require_docker() -> bool:
-    skills = load_skill_definitions(DEFAULT_SKILLS_ROOT)
-    return len(skills) > 0
-
-
-def _check_cli_tools_image_available() -> bool:
-    if not _skills_require_docker():
-        return True
-    docker_path = shutil.which("docker")
-    if not docker_path:
-        return False
-    image = os.getenv(
-        "CLI_TOOLS_IMAGE",
-        "ghcr.io/simonvanlaak/cyberneticagents-cli-tools:latest",
-    )
-    try:
-        result = subprocess.run(
-            [docker_path, "image", "inspect", image],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        print("Unable to verify the CLI tools image. Is Docker running?")
-        return False
-    if result.returncode == 0:
-        return True
-    print(
-        "CLI tools image is not available. Build or pull the image, then re-run "
-        "onboarding."
-    )
-    print(f"Expected image: {image}")
     return False
 
 

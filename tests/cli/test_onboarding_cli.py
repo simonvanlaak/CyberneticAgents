@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from src.cyberagent.cli import onboarding as onboarding_cli
+from src.cyberagent.cli import onboarding_docker
 from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.models.procedure import Procedure
 from src.cyberagent.db.models.procedure_run import ProcedureRun
@@ -396,11 +397,9 @@ def test_technical_onboarding_requires_groq_key(
     monkeypatch.setenv("LLM_PROVIDER", "groq")
     monkeypatch.setattr(onboarding_cli, "_is_path_writable", lambda *_: True)
     monkeypatch.setattr(onboarding_cli, "_check_path_writable", lambda *_: True)
-    monkeypatch.setattr(onboarding_cli, "_check_docker_socket_access", lambda: True)
-    monkeypatch.setattr(onboarding_cli, "_check_docker_available", lambda: True)
-    monkeypatch.setattr(
-        onboarding_cli, "_check_cli_tools_image_available", lambda: True
-    )
+    monkeypatch.setattr(onboarding_cli, "check_docker_socket_access", lambda: True)
+    monkeypatch.setattr(onboarding_cli, "check_docker_available", lambda: True)
+    monkeypatch.setattr(onboarding_cli, "check_cli_tools_image_available", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_check_skill_root_access", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_check_network_access", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_check_required_tool_secrets", lambda: True)
@@ -425,11 +424,9 @@ def test_technical_onboarding_requires_onepassword_auth(
     monkeypatch.setenv("LLM_PROVIDER", "groq")
     monkeypatch.setattr(onboarding_cli, "_is_path_writable", lambda *_: True)
     monkeypatch.setattr(onboarding_cli, "_check_path_writable", lambda *_: True)
-    monkeypatch.setattr(onboarding_cli, "_check_docker_socket_access", lambda: True)
-    monkeypatch.setattr(onboarding_cli, "_check_docker_available", lambda: True)
-    monkeypatch.setattr(
-        onboarding_cli, "_check_cli_tools_image_available", lambda: True
-    )
+    monkeypatch.setattr(onboarding_cli, "check_docker_socket_access", lambda: True)
+    monkeypatch.setattr(onboarding_cli, "check_docker_available", lambda: True)
+    monkeypatch.setattr(onboarding_cli, "check_cli_tools_image_available", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_check_skill_root_access", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_check_network_access", lambda: True)
     monkeypatch.setattr(onboarding_cli, "_check_required_tool_secrets", lambda: True)
@@ -583,10 +580,10 @@ def test_check_docker_socket_access_denied(
     socket_path.write_text("", encoding="utf-8")
     socket_path.chmod(0)
     monkeypatch.setenv("DOCKER_HOST", f"unix://{socket_path}")
-    monkeypatch.setattr(onboarding_cli, "_skills_require_docker", lambda: True)
-    monkeypatch.setattr(onboarding_cli.shutil, "which", lambda *_: "/usr/bin/docker")
+    monkeypatch.setattr(onboarding_docker, "skills_require_docker", lambda: True)
+    monkeypatch.setattr(onboarding_docker.shutil, "which", lambda *_: "/usr/bin/docker")
 
-    assert onboarding_cli._check_docker_socket_access() is False
+    assert onboarding_docker.check_docker_socket_access() is False
     captured = capsys.readouterr().out
     assert "Docker socket is not accessible" in captured
 
@@ -595,10 +592,10 @@ def test_check_docker_socket_access_remote_host(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("DOCKER_HOST", "tcp://127.0.0.1:2375")
-    monkeypatch.setattr(onboarding_cli, "_skills_require_docker", lambda: True)
-    monkeypatch.setattr(onboarding_cli.shutil, "which", lambda *_: "/usr/bin/docker")
+    monkeypatch.setattr(onboarding_docker, "skills_require_docker", lambda: True)
+    monkeypatch.setattr(onboarding_docker.shutil, "which", lambda *_: "/usr/bin/docker")
 
-    assert onboarding_cli._check_docker_socket_access() is True
+    assert onboarding_docker.check_docker_socket_access() is True
 
 
 def test_prompt_store_secret_requires_write_access(
@@ -709,10 +706,10 @@ def test_check_network_access_skips_without_network_skills(
 def test_check_docker_optional_when_no_skills(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setattr(onboarding_cli, "load_skill_definitions", lambda *_: [])
-    monkeypatch.setattr(onboarding_cli.shutil, "which", lambda *_: None)
+    monkeypatch.setattr(onboarding_docker, "skills_require_docker", lambda: False)
+    monkeypatch.setattr(onboarding_docker.shutil, "which", lambda *_: None)
 
-    assert onboarding_cli._check_docker_available() is True
+    assert onboarding_docker.check_docker_available() is True
     captured = capsys.readouterr().out
     assert "Continuing without tool execution" in captured
 
@@ -720,22 +717,8 @@ def test_check_docker_optional_when_no_skills(
 def test_check_cli_tools_image_available_missing(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    skill = SkillDefinition(
-        name="web-search",
-        description="Search the web",
-        location=Path("src/tools/skills/web-search"),
-        tool_name="web_search",
-        subcommand=None,
-        required_env=("BRAVE_API_KEY",),
-        timeout_class="short",
-        timeout_seconds=30,
-        input_schema={},
-        output_schema={},
-        skill_file=Path("src/tools/skills/web-search/SKILL.md"),
-        instructions="",
-    )
-    monkeypatch.setattr(onboarding_cli, "load_skill_definitions", lambda *_: [skill])
-    monkeypatch.setattr(onboarding_cli.shutil, "which", lambda *_: "/usr/bin/docker")
+    monkeypatch.setattr(onboarding_docker, "skills_require_docker", lambda: True)
+    monkeypatch.setattr(onboarding_docker.shutil, "which", lambda *_: "/usr/bin/docker")
 
     class DummyResult:
         def __init__(self, returncode: int) -> None:
@@ -746,11 +729,63 @@ def test_check_cli_tools_image_available_missing(
     def fake_run(*_args: object, **_kwargs: object) -> DummyResult:
         return DummyResult(returncode=1)
 
-    monkeypatch.setattr(onboarding_cli.subprocess, "run", fake_run)
+    monkeypatch.setattr(onboarding_docker.subprocess, "run", fake_run)
 
-    assert onboarding_cli._check_cli_tools_image_available() is False
+    assert onboarding_docker.check_cli_tools_image_available() is False
     captured = capsys.readouterr().out
     assert "CLI tools image is not available" in captured
+
+
+def test_check_cli_tools_image_available_permission_denied(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(onboarding_docker, "skills_require_docker", lambda: True)
+    monkeypatch.setattr(onboarding_docker.shutil, "which", lambda *_: "/usr/bin/docker")
+
+    class DummyResult:
+        def __init__(self, returncode: int, stderr: str) -> None:
+            self.returncode = returncode
+            self.stdout = ""
+            self.stderr = stderr
+
+    def fake_run(*_args: object, **_kwargs: object) -> DummyResult:
+        return DummyResult(
+            returncode=1,
+            stderr="permission denied while trying to connect",
+        )
+
+    monkeypatch.setattr(onboarding_docker.subprocess, "run", fake_run)
+
+    assert onboarding_docker.check_cli_tools_image_available() is False
+    captured = capsys.readouterr().out.lower()
+    assert "permission denied" in captured
+    assert "docker group" in captured
+
+
+def test_check_docker_available_permission_denied(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setattr(onboarding_docker.shutil, "which", lambda *_: "/usr/bin/docker")
+    monkeypatch.setattr(onboarding_docker, "skills_require_docker", lambda: True)
+
+    class DummyResult:
+        def __init__(self, returncode: int, stderr: str) -> None:
+            self.returncode = returncode
+            self.stdout = ""
+            self.stderr = stderr
+
+    def fake_run(*_args: object, **_kwargs: object) -> DummyResult:
+        return DummyResult(
+            returncode=1,
+            stderr="Permission denied while trying to connect to the Docker API",
+        )
+
+    monkeypatch.setattr(onboarding_docker.subprocess, "run", fake_run)
+
+    assert onboarding_docker.check_docker_available() is False
+    captured = capsys.readouterr().out.lower()
+    assert "cannot access the daemon" in captured
+    assert "docker group" in captured
 
 
 def test_warn_optional_api_keys_reads_onepassword(
