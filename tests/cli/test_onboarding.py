@@ -328,6 +328,9 @@ def test_offer_optional_telegram_setup_sets_env(
         onboarding_telegram, "_load_secret_from_1password", lambda *_: "tok"
     )
     monkeypatch.setattr(
+        onboarding_telegram, "_fetch_bot_username_from_token", lambda *_: None
+    )
+    monkeypatch.setattr(
         onboarding_telegram, "_offer_optional_telegram_webhook_setup", lambda: None
     )
     monkeypatch.setattr(onboarding_cli, "_print_feature_ready", lambda *_: None)
@@ -336,3 +339,31 @@ def test_offer_optional_telegram_setup_sets_env(
     onboarding_telegram.offer_optional_telegram_setup()
 
     assert os.environ.get("TELEGRAM_BOT_TOKEN") == "tok"
+
+
+def test_offer_optional_telegram_setup_autofills_username_from_token(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(onboarding_telegram.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(
+        onboarding_telegram, "_load_secret_from_1password", lambda *_: None
+    )
+    monkeypatch.setattr(
+        onboarding_telegram, "_fetch_bot_username_from_token", lambda *_: "mybot"
+    )
+    monkeypatch.setattr(
+        onboarding_telegram, "_offer_optional_telegram_webhook_setup", lambda: None
+    )
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "token")
+    monkeypatch.delenv("TELEGRAM_BOT_USERNAME", raising=False)
+
+    def _fail_store(*_args: object, **_kwargs: object) -> bool:
+        raise AssertionError("Should not prompt for username when fetched via API.")
+
+    monkeypatch.setattr(
+        onboarding_telegram, "prompt_store_secret_in_1password", _fail_store
+    )
+
+    onboarding_telegram.offer_optional_telegram_setup()
+
+    assert os.environ.get("TELEGRAM_BOT_USERNAME") == "mybot"

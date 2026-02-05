@@ -19,8 +19,7 @@ from src.cyberagent.db.models.initiative import Initiative
 from src.cyberagent.db.models.purpose import Purpose
 from src.cyberagent.db.models.strategy import Strategy
 from src.cyberagent.cli import agent_message_queue
-from src.cyberagent.services import systems as systems_service
-from src.cyberagent.services import teams as teams_service
+from src.cyberagent.services import systems as systems_service, teams as teams_service
 from src.cyberagent.tools.cli_executor.skill_loader import SkillDefinition
 from src.cyberagent.cli import onboarding_memory
 from src.cyberagent.memory.models import MemoryScope
@@ -694,6 +693,9 @@ def test_optional_telegram_setup_prompts_when_missing(
 
     monkeypatch.setattr(onboarding_vault, "create_onepassword_item", fake_create)
     monkeypatch.setattr(onboarding_vault, "ensure_onepassword_vault", lambda *_: True)
+    monkeypatch.setattr(
+        onboarding_telegram, "_fetch_bot_username_from_token", lambda *_: None
+    )
 
     onboarding_telegram.offer_optional_telegram_setup()
     captured = capsys.readouterr().out
