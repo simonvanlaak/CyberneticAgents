@@ -5,8 +5,6 @@ metadata:
   cyberagent:
     tool: notion
     timeout_class: standard
-    required_env:
-      - NOTION_API_KEY
 input_schema:
   type: object
   properties:
@@ -42,7 +40,7 @@ output_schema:
 Use this skill to access the Notion API for read/write operations.
 
 Notes:
-1. Requires `NOTION_API_KEY` stored in 1Password (do not put it in `.env`).
+1. `NOTION_API_KEY` is optional; without it the Notion API requests will fail.
 2. Default Notion API version is `2025-09-03` unless overridden.
 3. The CLI outputs JSON with `status_code`, `ok`, and `response`.
 
