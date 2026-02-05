@@ -153,7 +153,28 @@ def _resolve_system_target(system_id_value: Any) -> list[str]:
         system = systems_service.get_system_by_agent_id(system_id_value)
     if system is None:
         return []
-    return [system.agent_id_str]
+    return [_normalize_agent_id_str(system)]
+
+
+def _normalize_agent_id_str(system: Any) -> str:
+    agent_id_str = system.agent_id_str
+    if "/" in agent_id_str:
+        return agent_id_str
+    fallback_name = getattr(system, "name", "")
+    if isinstance(fallback_name, str) and "/" in fallback_name:
+        return fallback_name
+    system_type = getattr(system, "type", None)
+    if system_type == SystemType.OPERATION:
+        agent_type = "System1"
+    elif system_type == SystemType.CONTROL:
+        agent_type = "System3"
+    elif system_type == SystemType.INTELLIGENCE:
+        agent_type = "System4"
+    elif system_type == SystemType.POLICY:
+        agent_type = "System5"
+    else:
+        agent_type = "System1"
+    return f"{agent_type}/root"
 
 
 def _resolve_team_target(

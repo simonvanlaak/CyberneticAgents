@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, cast
 
 from autogen_core.memory import ListMemory
 
 from src.cyberagent.memory.backends.autogen import AutoGenMemoryStore
-from src.cyberagent.memory.backends.chromadb import ChromaDBMemoryFactory
-from src.cyberagent.memory.models import MemoryScope
+from src.cyberagent.memory.backends.hybrid import HybridMemoryStore
+from src.cyberagent.memory.backends.vector_index import MemoryVectorIndex
+from src.cyberagent.memory.backends.sqlite import SqliteMemoryStore
+from src.cyberagent.memory.backends.vector_index import NoopVectorIndex
 from src.cyberagent.memory.registry import StaticScopeRegistry
 
 if TYPE_CHECKING:
@@ -25,10 +28,13 @@ class MemoryBackendConfig:
     chroma_host: str
     chroma_port: int
     chroma_ssl: bool
+    sqlite_path: str
+    vector_backend: str
+    vector_collection: str
 
 
 def load_memory_backend_config() -> MemoryBackendConfig:
-    backend = os.environ.get("MEMORY_BACKEND", "list").lower()
+    backend = os.environ.get("MEMORY_BACKEND", "chromadb").lower()
     chroma_collection = os.environ.get("MEMORY_CHROMA_COLLECTION", "memory_store")
     chroma_persistence_path = os.environ.get("MEMORY_CHROMA_PATH", "data/chroma_db")
     chroma_host = os.environ.get("MEMORY_CHROMA_HOST", "")
@@ -46,6 +52,9 @@ def load_memory_backend_config() -> MemoryBackendConfig:
         chroma_host=chroma_host,
         chroma_port=chroma_port,
         chroma_ssl=chroma_ssl,
+        sqlite_path=os.environ.get("MEMORY_SQLITE_PATH", "data/memory.db"),
+        vector_backend=os.environ.get("MEMORY_VECTOR_BACKEND", "none").lower(),
+        vector_collection=os.environ.get("MEMORY_VECTOR_COLLECTION", "memory_vectors"),
     )
 
 
@@ -58,23 +67,32 @@ def build_memory_registry(config: MemoryBackendConfig) -> StaticScopeRegistry:
         )
 
     if config.backend == "chromadb":
-        factory = ChromaDBMemoryFactory()
-        agent_store = factory.create_store(
-            config=_build_chroma_config(config, suffix=MemoryScope.AGENT.value)
-        )
-        team_store = factory.create_store(
-            config=_build_chroma_config(config, suffix=MemoryScope.TEAM.value)
-        )
-        global_store = factory.create_store(
-            config=_build_chroma_config(config, suffix=MemoryScope.GLOBAL.value)
-        )
+        sqlite_store = SqliteMemoryStore(Path(config.sqlite_path))
+        vector_index = _build_vector_index(config)
         return StaticScopeRegistry(
-            agent_store=agent_store,
-            team_store=team_store,
-            global_store=global_store,
+            agent_store=HybridMemoryStore(sqlite_store, vector_index),
+            team_store=HybridMemoryStore(sqlite_store, vector_index),
+            global_store=HybridMemoryStore(sqlite_store, vector_index),
         )
 
     raise ValueError(f"Unsupported memory backend '{config.backend}'.")
+
+
+def _build_vector_index(config: MemoryBackendConfig) -> MemoryVectorIndex:
+    if config.vector_backend != "chromadb":
+        return NoopVectorIndex()
+    try:
+        from src.cyberagent.memory.backends.chromadb_vector import ChromaDBVectorIndex
+    except ImportError:
+        return NoopVectorIndex()
+    try:
+        vector_config = _build_chroma_vector_config(config)
+    except ImportError:
+        return NoopVectorIndex()
+    try:
+        return ChromaDBVectorIndex(config=vector_config)
+    except ImportError:
+        return NoopVectorIndex()
 
 
 def _build_chroma_config(
@@ -106,6 +124,39 @@ def _build_chroma_config(
         "ChromaDBVectorMemoryConfig",
         PersistentChromaDBVectorMemoryConfig(
             collection_name=collection_name,
+            persistence_path=config.chroma_persistence_path,
+        ),
+    )
+
+
+def _build_chroma_vector_config(
+    config: MemoryBackendConfig,
+) -> "ChromaDBVectorMemoryConfig":
+    try:
+        from autogen_ext.memory.chromadb._chroma_configs import (
+            HttpChromaDBVectorMemoryConfig,
+            PersistentChromaDBVectorMemoryConfig,
+        )
+    except ImportError as exc:
+        raise ImportError(
+            "ChromaDB configuration requires the chromadb extra. "
+            "Install with `pip install autogen-ext[chromadb]`."
+        ) from exc
+
+    if config.chroma_host:
+        return cast(
+            "ChromaDBVectorMemoryConfig",
+            HttpChromaDBVectorMemoryConfig(
+                collection_name=config.vector_collection,
+                host=config.chroma_host,
+                port=config.chroma_port,
+                ssl=config.chroma_ssl,
+            ),
+        )
+    return cast(
+        "ChromaDBVectorMemoryConfig",
+        PersistentChromaDBVectorMemoryConfig(
+            collection_name=config.vector_collection,
             persistence_path=config.chroma_persistence_path,
         ),
     )
