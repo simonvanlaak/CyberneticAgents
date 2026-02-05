@@ -45,6 +45,7 @@ from src.cyberagent.cli.suggestion_queue import enqueue_suggestion
 from src.cyberagent.cli.transcribe import add_transcribe_parser, handle_transcribe
 from src.cyberagent.core.runtime import get_runtime, stop_runtime
 from src.cyberagent.cli.onboarding_args import add_onboarding_args
+from src.cyberagent.cli.pairing import add_pairing_parser, handle_pairing
 from src.cyberagent.core.state import get_last_team_id, mark_team_active
 from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.init_db import init_db
@@ -115,6 +116,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="Send an initial message after startup.",
     )
     add_onboarding_args(subparsers)
+    add_pairing_parser(subparsers)
 
     status_parser = subparsers.add_parser(
         "status", help="Show current team/strategy/task hierarchy."
@@ -955,6 +957,7 @@ _HANDLERS = {
     "suggest": _handle_suggest,
     "inbox": _handle_inbox,
     "watch": _handle_watch,
+    "pairing": handle_pairing,
     "dev": _handle_dev,
     "logs": _handle_logs,
     "transcribe": handle_transcribe,

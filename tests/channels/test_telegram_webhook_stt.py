@@ -24,6 +24,12 @@ class _Runtime:
         return {}
 
 
+@pytest.fixture(autouse=True)
+def _disable_pairing(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("TELEGRAM_PAIRING_ENABLED", "0")
+    monkeypatch.delenv("TELEGRAM_PAIRING_ADMIN_CHAT_IDS", raising=False)
+
+
 def test_webhook_transcribes_voice_message(monkeypatch: pytest.MonkeyPatch) -> None:
     runtime = _Runtime()
     server = TelegramWebhookServer(

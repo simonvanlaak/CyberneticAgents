@@ -1,22 +1,28 @@
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Coroutine
 from pathlib import Path
+from typing import Any, TypeVar
+
+from autogen_core import AgentId, CancellationToken
 
 from src.cyberagent.db.models.system import get_system_by_type
 from src.cyberagent.memory.config import (
     build_memory_registry,
     load_memory_backend_config,
 )
-from src.cyberagent.memory.crud import (
-    MemoryActorContext,
-    MemoryCreateRequest,
-    MemoryCrudService,
-)
+from src.cyberagent.memory.crud import MemoryActorContext, MemoryCrudService
 from src.cyberagent.memory.models import (
     MemoryLayer,
     MemoryPriority,
     MemoryScope,
     MemorySource,
+)
+from src.cyberagent.tools.memory_crud import (
+    MemoryCrudArgs,
+    MemoryCrudResponse,
+    MemoryCrudTool,
 )
 from src.cyberagent.cli.message_catalog import get_message
 from src.enums import SystemType
@@ -35,22 +41,26 @@ def store_onboarding_memory(team_id: int, summary_path: Path | None) -> None:
     actor = _build_system4_actor(team_id)
     if actor is None:
         return
-    service = _build_memory_service()
-    request = MemoryCreateRequest(
-        content=summary_text,
+    tool = _build_memory_tool(actor)
+    args = MemoryCrudArgs(
+        action="create",
+        scope=MemoryScope.GLOBAL.value,
         namespace="user",
-        scope=MemoryScope.GLOBAL,
-        tags=["onboarding", "user_profile"],
-        priority=MemoryPriority.HIGH,
-        source=MemorySource.IMPORT,
-        confidence=0.7,
-        expires_at=None,
-        layer=MemoryLayer.LONG_TERM,
-        owner_agent_id=actor.agent_id,
+        items=[
+            {
+                "content": summary_text,
+                "tags": ["onboarding", "user_profile"],
+                "priority": MemoryPriority.HIGH.value,
+                "source": MemorySource.IMPORT.value,
+                "confidence": 0.7,
+                "expires_at": None,
+                "layer": MemoryLayer.LONG_TERM.value,
+                "owner_agent_id": actor.agent_id,
+            }
+        ],
     )
-    try:
-        service.create_entries(actor=actor, requests=[request])
-    except (PermissionError, ValueError):
+    response = _run_memory_tool(tool, args)
+    if response.errors:
         print(get_message("onboarding_memory", "unable_store_summary"))
 
 
@@ -83,22 +93,26 @@ def store_onboarding_memory_entry(
     actor = _build_system4_actor(team_id)
     if actor is None:
         return
-    service = _build_memory_service()
-    request = MemoryCreateRequest(
-        content=content.strip(),
+    tool = _build_memory_tool(actor)
+    args = MemoryCrudArgs(
+        action="create",
+        scope=MemoryScope.GLOBAL.value,
         namespace=namespace,
-        scope=MemoryScope.GLOBAL,
-        tags=tags,
-        priority=priority,
-        source=source,
-        confidence=confidence,
-        expires_at=None,
-        layer=layer,
-        owner_agent_id=actor.agent_id,
+        items=[
+            {
+                "content": content.strip(),
+                "tags": tags,
+                "priority": priority.value,
+                "source": source.value,
+                "confidence": confidence,
+                "expires_at": None,
+                "layer": layer.value,
+                "owner_agent_id": actor.agent_id,
+            }
+        ],
     )
-    try:
-        service.create_entries(actor=actor, requests=[request])
-    except (PermissionError, ValueError):
+    response = _run_memory_tool(tool, args)
+    if response.errors:
         print(get_message("onboarding_memory", "unable_store_summary"))
 
 
@@ -121,3 +135,25 @@ def _build_memory_service() -> MemoryCrudService:
     config = load_memory_backend_config()
     registry = build_memory_registry(config)
     return MemoryCrudService(registry=registry)
+
+
+def _build_memory_tool(actor: MemoryActorContext) -> MemoryCrudTool:
+    agent_id = AgentId.from_str(actor.agent_id)
+    return MemoryCrudTool(
+        agent_id, actor_context=actor, service=_build_memory_service()
+    )
+
+
+def _run_memory_tool(tool: MemoryCrudTool, args: MemoryCrudArgs) -> MemoryCrudResponse:
+    return _run_async(tool.run(args, CancellationToken()))
+
+
+_T = TypeVar("_T")
+
+
+def _run_async(coro: Coroutine[Any, Any, _T]) -> _T:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    raise RuntimeError("Cannot run memory_crud tool inside an active event loop.")

@@ -62,7 +62,8 @@ async def test_cli_tool_command_execution() -> None:
     executor.execute_code_blocks = mock_execute
 
     tool = CliTool(executor)
-    result = await tool.execute("git", subcommand="--version")
+    tool._check_permission = lambda *_args, **_kwargs: True
+    result = await tool.execute("git", subcommand="--version", agent_id="System4/root")
 
     assert result["success"] is True
     assert "result" in result["output"]
@@ -129,7 +130,9 @@ async def test_real_cli_tool_execution() -> None:
 
     await executor.start()
     try:
-        result = await tool.execute("git", subcommand="--version")
+        result = await tool.execute(
+            "git", subcommand="--version", agent_id="System4/root"
+        )
     finally:
         await executor.stop()
 

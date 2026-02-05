@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import json
+import logging
 from typing import Any
 
 from autogen_core import AgentId, CancellationToken
@@ -24,7 +26,10 @@ from src.cyberagent.memory.crud import (
     MemoryReadRequest,
     MemoryUpdateRequest,
 )
-from src.cyberagent.memory.observability import LoggingMemoryAuditSink, MemoryMetrics
+from src.cyberagent.memory.observability import (
+    LoggingMemoryAuditSink,
+    build_memory_metrics,
+)
 from src.cyberagent.memory.models import (
     MemoryEntry,
     MemoryLayer,
@@ -37,6 +42,8 @@ from src.enums import SystemType
 
 MAX_BULK_ITEMS = 10
 SKILL_NAME = "memory_crud"
+
+logger = logging.getLogger(__name__)
 
 
 class MemoryCrudArgs(BaseModel):
@@ -109,6 +116,7 @@ class MemoryCrudTool(BaseTool):
         self, args: MemoryCrudArgs, cancellation_token: CancellationToken
     ) -> MemoryCrudResponse:
         del cancellation_token
+        self._log_invocation(args)
         action = args.action.lower().strip()
         builder = _ResponseBuilder(items=[])
         if not self._check_permission(builder):
@@ -127,6 +135,17 @@ class MemoryCrudTool(BaseTool):
             return self._handle_promote(args, builder)
         builder.add_error("INVALID_PARAMS", f"Unknown action '{args.action}'.")
         return builder.build()
+
+    def _log_invocation(self, args: MemoryCrudArgs) -> None:
+        payload = json.dumps(
+            {
+                "caller_agent_id": self._actor_context.agent_id,
+                "scope": args.scope,
+                "namespace": args.namespace,
+                "action": args.action,
+            }
+        )
+        logger.info("memory_crud_invocation %s", payload)
 
     def _check_permission(self, builder: _ResponseBuilder) -> bool:
         allowed, reason = systems_service.can_execute_skill(
@@ -416,7 +435,7 @@ def _build_memory_service() -> MemoryCrudService:
     registry = build_memory_registry(config)
     return MemoryCrudService(
         registry=registry,
-        metrics=MemoryMetrics(),
+        metrics=build_memory_metrics(),
         audit_sink=LoggingMemoryAuditSink(),
     )
 

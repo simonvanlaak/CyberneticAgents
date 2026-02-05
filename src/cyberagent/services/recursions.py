@@ -23,7 +23,8 @@ def create_recursion(
     sub_team_id: int,
     origin_system_id: int,
     parent_team_id: int,
-    actor_id: str,
+    actor_id: str | None = None,
+    created_by: str | None = None,
 ) -> Recursion:
     """
     Create a recursion linkage record.
@@ -33,10 +34,16 @@ def create_recursion(
         origin_system_id: The System1 id in the parent team.
         parent_team_id: The parent team id.
         actor_id: Actor performing the mutation (audit only).
+        created_by: Legacy alias for actor_id.
 
     Raises:
         ValueError: If linkage already exists or ids are invalid.
     """
+    if actor_id is None:
+        actor_id = created_by
+    if actor_id is None:
+        raise ValueError("actor_id is required to create recursion links.")
+
     session = next(get_db())
     try:
         if (

@@ -173,6 +173,51 @@ def test_global_scope_requires_namespace() -> None:
         )
 
 
+def test_team_scope_requires_layer() -> None:
+    store = InMemoryStore()
+    service = MemoryCrudService(registry=StaticScopeRegistry(store, store, store))
+    with pytest.raises(ValueError):
+        service.create_entries(
+            actor=_control_actor(),
+            requests=[
+                MemoryCreateRequest(
+                    content="team",
+                    namespace="team",
+                    scope=MemoryScope.TEAM,
+                    tags=None,
+                    priority=MemoryPriority.MEDIUM,
+                    source=MemorySource.MANUAL,
+                    confidence=0.9,
+                    expires_at=None,
+                    target_team_id=1,
+                    layer=None,
+                )
+            ],
+        )
+
+
+def test_global_scope_requires_layer() -> None:
+    store = InMemoryStore()
+    service = MemoryCrudService(registry=StaticScopeRegistry(store, store, store))
+    with pytest.raises(ValueError):
+        service.create_entries(
+            actor=_intelligence_actor(),
+            requests=[
+                MemoryCreateRequest(
+                    content="global",
+                    namespace="user",
+                    scope=MemoryScope.GLOBAL,
+                    tags=None,
+                    priority=MemoryPriority.MEDIUM,
+                    source=MemorySource.MANUAL,
+                    confidence=0.9,
+                    expires_at=None,
+                    layer=None,
+                )
+            ],
+        )
+
+
 def test_create_enforces_bulk_limit() -> None:
     store = InMemoryStore()
     service = MemoryCrudService(registry=StaticScopeRegistry(store, store, store))

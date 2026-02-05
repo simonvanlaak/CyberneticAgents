@@ -13,7 +13,14 @@ from src.cyberagent.memory.models import (
     MemoryScope,
     MemorySource,
 )
-from src.cyberagent.memory.observability import MemoryAuditSink, MemoryMetrics
+import json
+import logging
+
+from src.cyberagent.memory.observability import (
+    MemoryAuditSink,
+    MemoryMetrics,
+    MemoryMetricsReporter,
+)
 from src.cyberagent.memory.registry import StaticScopeRegistry
 from src.cyberagent.memory.store import MemoryStore
 from src.enums import SystemType
@@ -108,3 +115,19 @@ def test_metrics_and_audit_events() -> None:
     assert metrics.hit_rate == 1.0
     assert metrics.read_latency_ms_total >= 0.0
     assert len(audit_sink.events) >= 2
+
+
+def test_metrics_reporter_logs_summary(caplog) -> None:
+    reporter = MemoryMetricsReporter(interval_seconds=0.0)
+    metrics = MemoryMetrics(reporter=reporter)
+    with caplog.at_level(logging.INFO, logger="src.cyberagent.memory.observability"):
+        metrics.record_read(hit=True)
+        metrics.record_read_latency(12.5)
+        metrics.record_query()
+        metrics.record_query_latency(24.0)
+        metrics.record_injection_size(120)
+    record = [rec for rec in caplog.records if "memory_metrics" in rec.getMessage()][-1]
+    payload = json.loads(record.getMessage().split(" ", 1)[1])
+    assert payload["hit_rate"] == 1.0
+    assert payload["injection_size_total"] == 120
+    assert payload["query_latency_ms_total"] == 24.0

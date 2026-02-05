@@ -132,6 +132,11 @@ class MemoryCrudService:
                 action=MemoryAction.WRITE,
                 target_team_id=target_team_id,
             )
+            if (
+                scope in {MemoryScope.TEAM, MemoryScope.GLOBAL}
+                and request.layer is None
+            ):
+                raise ValueError("layer is required for team/global memory entries.")
             owner_agent_id = request.owner_agent_id or actor.agent_id
             self._require_owner_match(scope, actor.agent_id, owner_agent_id)
             now = _utc_now()

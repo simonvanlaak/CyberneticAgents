@@ -1,4 +1,6 @@
 import datetime
+import json
+import logging
 from pathlib import Path
 from uuid import uuid4
 
@@ -201,6 +203,22 @@ def _entry(
         version=1,
         etag="etag-1",
     )
+
+
+@pytest.mark.asyncio
+async def test_memory_crud_logs_invocation(allow_memory_crud, caplog) -> None:
+    tool = _tool(InMemoryCursorStore())
+    with caplog.at_level(logging.INFO, logger="src.cyberagent.tools.memory_crud"):
+        await tool.run(
+            MemoryCrudArgs(action="list", namespace="root", scope="agent"),
+            CancellationToken(),
+        )
+    record = next(
+        rec for rec in caplog.records if "memory_crud_invocation" in rec.getMessage()
+    )
+    payload = json.loads(record.getMessage().split(" ", 1)[1])
+    assert payload["caller_agent_id"] == "root_sys1"
+    assert payload["scope"] == "agent"
 
 
 @pytest.mark.asyncio

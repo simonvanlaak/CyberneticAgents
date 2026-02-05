@@ -6,11 +6,11 @@ from typing import Any, cast
 import pytest
 
 from src.cyberagent.cli import onboarding_memory
-from src.cyberagent.memory.models import (
-    MemoryLayer,
-    MemoryPriority,
-    MemoryScope,
-    MemorySource,
+from src.cyberagent.memory.models import MemoryLayer, MemoryPriority, MemorySource
+from src.cyberagent.tools.memory_crud import (
+    MemoryCrudArgs,
+    MemoryCrudError,
+    MemoryCrudResponse,
 )
 from src.enums import SystemType
 
@@ -57,28 +57,30 @@ def test_store_onboarding_memory_success(
 
     recorded: dict[str, Any] = {}
 
-    class FakeService:
-        def create_entries(self, *, actor, requests) -> None:  # type: ignore[no-untyped-def]
-            recorded["actor"] = actor
-            recorded["requests"] = requests
+    class FakeTool:
+        async def run(self, args: MemoryCrudArgs, _token) -> MemoryCrudResponse:  # type: ignore[no-untyped-def]
+            recorded["args"] = args
+            return MemoryCrudResponse(
+                items=[], next_cursor=None, has_more=False, errors=[]
+            )
 
     monkeypatch.setattr(
         onboarding_memory, "get_system_by_type", lambda *_: FakeSystem()
     )
-    monkeypatch.setattr(
-        onboarding_memory, "_build_memory_service", lambda: FakeService()
-    )
+    monkeypatch.setattr(onboarding_memory, "_build_memory_tool", lambda *_: FakeTool())
 
     onboarding_memory.store_onboarding_memory(1, summary_path)
 
-    assert "actor" in recorded
-    requests = cast(list, recorded["requests"])
-    request = requests[0]
-    assert request.content == "Profile details"
-    assert request.scope == MemoryScope.GLOBAL
-    assert request.priority == MemoryPriority.HIGH
-    assert request.layer == MemoryLayer.LONG_TERM
-    assert request.owner_agent_id == "System4/root"
+    args = cast(MemoryCrudArgs, recorded["args"])
+    assert args.action == "create"
+    assert args.scope == "global"
+    assert args.namespace == "user"
+    items = cast(list, args.items)
+    item = items[0]
+    assert item["content"] == "Profile details"
+    assert item["priority"] == MemoryPriority.HIGH.value
+    assert item["layer"] == MemoryLayer.LONG_TERM.value
+    assert item["owner_agent_id"] == "System4/root"
 
 
 def test_store_onboarding_memory_warns_on_failure(
@@ -94,16 +96,25 @@ def test_store_onboarding_memory_warns_on_failure(
         type = SystemType.INTELLIGENCE
         agent_id_str = "System4/root"
 
-    class FakeService:
-        def create_entries(self, *, actor, requests) -> None:  # type: ignore[no-untyped-def]
-            raise PermissionError("nope")
+    class FakeTool:
+        async def run(self, args: MemoryCrudArgs, _token) -> MemoryCrudResponse:  # type: ignore[no-untyped-def]
+            return MemoryCrudResponse(
+                items=[],
+                next_cursor=None,
+                has_more=False,
+                errors=[
+                    MemoryCrudError(
+                        code="FORBIDDEN",
+                        message="nope",
+                        details=None,
+                    )
+                ],
+            )
 
     monkeypatch.setattr(
         onboarding_memory, "get_system_by_type", lambda *_: FakeSystem()
     )
-    monkeypatch.setattr(
-        onboarding_memory, "_build_memory_service", lambda: FakeService()
-    )
+    monkeypatch.setattr(onboarding_memory, "_build_memory_tool", lambda *_: FakeTool())
 
     onboarding_memory.store_onboarding_memory(1, summary_path)
     captured = capsys.readouterr()
@@ -120,17 +131,17 @@ def test_store_onboarding_memory_entry_success(
 
     recorded: dict[str, Any] = {}
 
-    class FakeService:
-        def create_entries(self, *, actor, requests) -> None:  # type: ignore[no-untyped-def]
-            recorded["actor"] = actor
-            recorded["requests"] = requests
+    class FakeTool:
+        async def run(self, args: MemoryCrudArgs, _token) -> MemoryCrudResponse:  # type: ignore[no-untyped-def]
+            recorded["args"] = args
+            return MemoryCrudResponse(
+                items=[], next_cursor=None, has_more=False, errors=[]
+            )
 
     monkeypatch.setattr(
         onboarding_memory, "get_system_by_type", lambda *_: FakeSystem()
     )
-    monkeypatch.setattr(
-        onboarding_memory, "_build_memory_service", lambda: FakeService()
-    )
+    monkeypatch.setattr(onboarding_memory, "_build_memory_tool", lambda *_: FakeTool())
 
     onboarding_memory.store_onboarding_memory_entry(
         team_id=1,
@@ -141,10 +152,13 @@ def test_store_onboarding_memory_entry_success(
         layer=MemoryLayer.SESSION,
     )
 
-    requests = cast(list, recorded["requests"])
-    request = requests[0]
-    assert request.content == "Profile details"
-    assert request.scope == MemoryScope.GLOBAL
-    assert request.source == MemorySource.TOOL
-    assert request.priority == MemoryPriority.MEDIUM
-    assert request.layer == MemoryLayer.SESSION
+    args = cast(MemoryCrudArgs, recorded["args"])
+    assert args.action == "create"
+    assert args.scope == "global"
+    assert args.namespace == "user"
+    items = cast(list, args.items)
+    item = items[0]
+    assert item["content"] == "Profile details"
+    assert item["source"] == MemorySource.TOOL.value
+    assert item["priority"] == MemoryPriority.MEDIUM.value
+    assert item["layer"] == MemoryLayer.SESSION.value

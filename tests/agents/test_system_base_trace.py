@@ -30,10 +30,13 @@ async def test_run_propagates_traceparent(monkeypatch: pytest.MonkeyPatch) -> No
     system = DummySystem()
     trace.set_tracer_provider(TracerProvider())
 
-    async def fake_set_system_prompt(_prompts: List[str]) -> None:
+    async def fake_set_system_prompt(
+        _prompts: List[str], _memory_context: List[str] | None = None
+    ) -> None:
         return None
 
     monkeypatch.setattr(system, "_set_system_prompt", fake_set_system_prompt)
+    monkeypatch.setattr(system, "_build_memory_context", lambda *_args: [])
     monkeypatch.setattr(
         "src.agents.system_base.mark_team_active", lambda *_args, **_kwargs: None
     )

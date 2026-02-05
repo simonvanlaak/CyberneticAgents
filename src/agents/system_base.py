@@ -43,7 +43,10 @@ from src.cyberagent.memory.config import (
 from src.cyberagent.memory.crud import MemoryActorContext
 from src.cyberagent.memory.models import MemoryScope
 from src.cyberagent.memory.memengine import MemEngine
-from src.cyberagent.memory.observability import MemoryMetrics
+from src.cyberagent.memory.observability import (
+    LoggingMemoryAuditSink,
+    build_memory_metrics,
+)
 from src.cyberagent.memory.retrieval import (
     MemoryInjectionConfig,
     MemoryInjector,
@@ -427,10 +430,13 @@ class SystemBase(RoutedAgent):
         query_text = last_message.to_text()
         config = load_memory_backend_config()
         registry = build_memory_registry(config)
-        metrics = MemoryMetrics()
+        metrics = build_memory_metrics()
         engine = MemEngine(registry=registry, metrics=metrics)
         retrieval = MemoryRetrievalService(
-            registry=registry, metrics=metrics, engine=engine
+            registry=registry,
+            metrics=metrics,
+            engine=engine,
+            audit_sink=LoggingMemoryAuditSink(),
         )
         injector = MemoryInjector(
             config=MemoryInjectionConfig(
