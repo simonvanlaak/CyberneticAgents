@@ -11,7 +11,7 @@ A VSM-inspired multi-agent system built on AutoGen Core + AgentChat with Casbin 
 - **CLI-first interaction** for working with the system
 - **Optional tracing** with Langfuse via OpenTelemetry
 
-## Quick Start
+## Quick Start (Onboarding First)
 
 ### 1) Install
 
@@ -21,7 +21,7 @@ source venv/bin/activate
 pip install -e .
 ```
 
-### 2) Configure
+### 2) Configure Secrets
 
 CyberneticAgents expects secrets to live in 1Password and be injected at runtime.
 Create a vault named `CyberneticAgents` and add items named after the env vars
@@ -31,6 +31,7 @@ with a `credential` field:
 - `BRAVE_API_KEY` (required for web search tools)
 - `MISTRAL_API_KEY` (only if `LLM_PROVIDER=mistral`)
 - Optional: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGSMITH_API_KEY`
+- Optional: `TELEGRAM_BOT_TOKEN` (enables Telegram messaging)
 
 Sign in to 1Password in the same shell:
 
@@ -38,10 +39,10 @@ Sign in to 1Password in the same shell:
 eval "$(op signin --account <shorthand>)"
 ```
 
-Copy `.env.example` to `.env` if you want explicit local defaults:
+Copy `.env.example` to `.env` to provide your 1Password service account token:
 
 ```bash
-GROQ_API_KEY=your_groq_api_key_here
+OP_SERVICE_ACCOUNT_TOKEN=your_op_service_account_token_here
 ```
 
 Optional (for tracing):
@@ -52,30 +53,33 @@ LANGFUSE_SECRET_KEY=
 LANGFUSE_BASE_URL=https://cloud.langfuse.com
 ```
 
-### 3) Run
-
-```bash
-# Interactive CLI session
-python main.py
-
-# Send an initial message
-python main.py --message "hello"
-```
-
-## CLI (primary)
-
+### 3) Run Onboarding
 - Install the CLI entrypoint (uv):
 ```bash
 uv tool install -e .
 ```
+```bash
+cyberagent onboarding
+```
+
+What onboarding does:
+- Verifies Docker, 1Password access, and required keys.
+- Activates available features (AI model access, web search, Telegram messaging).
+- Creates the default team and starts PKM sync + profile discovery.
+- Starts the runtime in the background.
+- Prompts you to check your inbox next.
+
+If `TELEGRAM_BOT_TOKEN` is set, the onboarding interview runs on Telegram instead of the CLI.
+
+## CLI (primary)
+
 - Run the CLI:
 ```bash
 cyberagent onboarding
 cyberagent start
 ```
 
-- `cyberagent onboarding` runs technical checks (Docker, 1Password access, required keys).
-- If a required key is missing, onboarding can prompt you to paste it and store it in 1Password (requires write access to the vault).
+- `cyberagent onboarding` runs technical checks and activates features; it may prompt to store missing keys in 1Password (requires write access).
 - Use `cyberagent start` to boot the VSM runtime in the background for CLI workflows.
 - Use `cyberagent restart` to stop/start the runtime when config changes.
 - `cyberagent status` shows the active strategy/task hierarchy, while `cyberagent suggest` lets you pipe JSON/YAML payloads into System 4.
@@ -144,12 +148,6 @@ python3 -m pytest tests/ -v
 pre-commit install
 pre-commit run --all-files
 ```
-
-## Roadmap (Short)
-
-- Implement System 2 (coordination) agent
-- Expand tool coverage and RBAC policies
-- Improve CLI workflow and observability
 
 ## License
 
