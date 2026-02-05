@@ -46,6 +46,7 @@ class MemoryCrudArgs(BaseModel):
     items: list[dict[str, Any]] | None = None
     cursor: str | None = None
     limit: int | None = None
+    layer: str | None = None
 
 
 class MemoryCrudError(BaseModel):
@@ -144,12 +145,14 @@ class MemoryCrudTool(BaseTool):
     ) -> MemoryCrudResponse:
         try:
             scope = _parse_scope(args.scope)
+            layer = _parse_layer(args.layer) if args.layer else None
             result = self._service.list_entries(
                 actor=self._actor_context,
                 scope=scope,
                 namespace=args.namespace,
                 limit=args.limit,
                 cursor=args.cursor,
+                layer=layer,
             )
             builder.items = [_entry_to_payload(entry) for entry in result.items]
             builder.next_cursor = result.next_cursor

@@ -70,7 +70,27 @@ class InMemoryCursorStore(MemoryStore):
         return False
 
     def query(self, query: MemoryQuery) -> MemoryListResult:
-        raise NotImplementedError
+        filtered = [
+            entry
+            for entry in self.entries
+            if entry.scope == query.scope
+            and entry.namespace == query.namespace
+            and (
+                query.owner_agent_id is None
+                or entry.owner_agent_id == query.owner_agent_id
+            )
+            and (query.layer is None or entry.layer == query.layer)
+        ]
+        offset = 0
+        if query.cursor:
+            if not query.cursor.startswith("offset:"):
+                raise ValueError("Invalid cursor format.")
+            offset = int(query.cursor[len("offset:") :])
+        end = offset + query.limit
+        items = filtered[offset:end]
+        has_more = end < len(filtered)
+        next_cursor = f"offset:{end}" if has_more else None
+        return MemoryListResult(items=items, next_cursor=next_cursor, has_more=has_more)
 
     def list(
         self,
@@ -160,7 +180,9 @@ def allow_memory_crud(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(systems_service, "can_execute_skill", _allow)
 
 
-def _entry(entry_id: str, content: str) -> MemoryEntry:
+def _entry(
+    entry_id: str, content: str, *, layer: MemoryLayer = MemoryLayer.WORKING
+) -> MemoryEntry:
     now = datetime.datetime.now(datetime.timezone.utc)
     return MemoryEntry(
         id=entry_id,
@@ -175,7 +197,7 @@ def _entry(entry_id: str, content: str) -> MemoryEntry:
         expires_at=None,
         source=MemorySource.MANUAL,
         confidence=0.9,
-        layer=MemoryLayer.WORKING,
+        layer=layer,
         version=1,
         etag="etag-1",
     )
@@ -211,6 +233,20 @@ async def test_list_invalid_cursor_returns_invalid_params(allow_memory_crud) -> 
     assert response.next_cursor is None
     assert response.errors
     assert response.errors[0].code == "INVALID_PARAMS"
+
+
+@pytest.mark.asyncio
+async def test_list_filters_by_layer(allow_memory_crud) -> None:
+    store = InMemoryCursorStore()
+    store.add(_entry("mem-1", "first", layer=MemoryLayer.SESSION))
+    store.add(_entry("mem-2", "second", layer=MemoryLayer.LONG_TERM))
+    tool = _tool(store)
+    response = await tool.run(
+        MemoryCrudArgs(action="list", namespace="root", layer="long_term"),
+        CancellationToken(),
+    )
+    assert response.errors == []
+    assert [item["id"] for item in response.items] == ["mem-2"]
 
 
 @pytest.mark.asyncio

@@ -14,6 +14,7 @@ from src.cyberagent.memory.models import (
     MemoryLayer,
     MemoryListResult,
     MemoryPriority,
+    MemoryQuery,
     MemoryScope,
     MemorySource,
 )
@@ -361,6 +362,7 @@ class MemoryCrudService:
         namespace: str | None,
         limit: int | None,
         cursor: str | None,
+        layer: MemoryLayer | None = None,
         target_team_id: int | None = None,
     ) -> MemoryListResult:
         resolved_scope = scope or self._default_scope
@@ -378,9 +380,21 @@ class MemoryCrudService:
         store = self._registry.resolve(resolved_scope)
         owner_agent_id = actor.agent_id if resolved_scope == MemoryScope.AGENT else None
         start = time.perf_counter()
-        result = store.list(
-            resolved_scope, resolved_namespace, page_limit, cursor, owner_agent_id
-        )
+        if layer is None:
+            result = store.list(
+                resolved_scope, resolved_namespace, page_limit, cursor, owner_agent_id
+            )
+        else:
+            query = MemoryQuery(
+                text=None,
+                scope=resolved_scope,
+                namespace=resolved_namespace,
+                limit=page_limit,
+                cursor=cursor,
+                layer=layer,
+                owner_agent_id=owner_agent_id,
+            )
+            result = store.query(query)
         self._record_list_latency((time.perf_counter() - start) * 1000)
         self._record_list()
         self._record_audit(

@@ -36,6 +36,21 @@ from src.cyberagent.secrets import get_secret
 from src.enums import SystemType
 from src.cyberagent.core.state import get_last_team_id, mark_team_active
 from src.cyberagent.db.models.system import get_system_from_agent_id
+from src.cyberagent.memory.config import (
+    build_memory_registry,
+    load_memory_backend_config,
+)
+from src.cyberagent.memory.crud import MemoryActorContext
+from src.cyberagent.memory.models import MemoryScope
+from src.cyberagent.memory.memengine import MemEngine
+from src.cyberagent.memory.observability import MemoryMetrics
+from src.cyberagent.memory.retrieval import (
+    MemoryInjectionConfig,
+    MemoryInjector,
+    MemoryRetrievalService,
+)
+from src.cyberagent.memory.session import MemorySessionConfig, MemorySessionRecorder
+from src.cyberagent.memory.reflection import MemoryReflectionService
 from src.cyberagent.tools.cli_executor import (
     get_agent_skill_prompt_entries,
     get_agent_skill_tools,
@@ -65,6 +80,29 @@ def _infer_system_type(agent_type: str) -> SystemType | None:
         "System5": SystemType.POLICY,
     }
     return mapping.get(agent_type)
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
+
+def _resolve_memory_scopes(
+    actor: MemoryActorContext,
+) -> list[tuple[MemoryScope, str]]:
+    scopes = [(MemoryScope.AGENT, actor.agent_id)]
+    team_namespace = os.environ.get("MEMORY_TEAM_NAMESPACE", f"team_{actor.team_id}")
+    global_namespace = os.environ.get("MEMORY_GLOBAL_NAMESPACE", "user")
+    if team_namespace:
+        scopes.append((MemoryScope.TEAM, team_namespace))
+    if global_namespace:
+        scopes.append((MemoryScope.GLOBAL, global_namespace))
+    return scopes
 
 
 def get_model_client(
@@ -124,6 +162,7 @@ class SystemBase(RoutedAgent):
         self.trace_context = trace_context or {}
         self.identity_prompt = identity_prompt
         self.responsibility_prompts = responsibility_prompts
+        self._session_recorder: MemorySessionRecorder | None = None
         self.available_tools: list[BaseTool[Any, Any]] = list(
             get_agent_skill_tools(self.agent_id.__str__())
         )
@@ -169,10 +208,11 @@ class SystemBase(RoutedAgent):
             self._agent._model_client = get_model_client(self.agent_id, True)
             self._agent._workbench = []
 
-        await self._set_system_prompt(message_specific_prompts)
-        self._agent._output_content_type = output_content_type
         # get trace context from message or use agent's stored trace context
         last_message = chat_messages[-1]
+        memory_context = self._build_memory_context(last_message)
+        await self._set_system_prompt(message_specific_prompts, memory_context)
+        self._agent._output_content_type = output_content_type
         message_trace_context_raw = (
             last_message.metadata.get("trace_context", {})
             if last_message.metadata
@@ -240,6 +280,7 @@ class SystemBase(RoutedAgent):
             task_result: TaskResult = await self._agent.run(
                 task=chat_messages, cancellation_token=ctx.cancellation_token
             )
+        self._record_session_logs(chat_messages, task_result)
         for message in task_result.messages:
             if isinstance(message, ToolCallRequestEvent):
                 for func_call in message.content:
@@ -329,6 +370,7 @@ class SystemBase(RoutedAgent):
     async def _set_system_prompt(
         self,
         message_specific_prompts: List[str] = [],
+        memory_context: list[str] | None = None,
     ):
         messages = []
         messages.append("# IDENTITY")
@@ -348,6 +390,9 @@ class SystemBase(RoutedAgent):
         messages.extend(self.responsibility_prompts)
         messages.append("# MEMORY")
         messages.extend(self._memory_prompt_entries())
+        if memory_context:
+            messages.append("# MEMORY CONTEXT")
+            messages.extend(memory_context)
         messages.append("# SKILLS")
         skill_entries = get_agent_skill_prompt_entries(self.agent_id.__str__())
         if skill_entries:
@@ -368,6 +413,120 @@ class SystemBase(RoutedAgent):
         self._agent._system_messages = [
             SystemMessage(content=message) for message in messages
         ]
+
+    def _build_memory_context(self, last_message: BaseTextChatMessage) -> list[str]:
+        system = get_system_from_agent_id(self.agent_id.__str__())
+        if system is None:
+            return []
+        actor = MemoryActorContext(
+            agent_id=system.agent_id_str,
+            system_id=system.id,
+            team_id=system.team_id,
+            system_type=system.type,
+        )
+        query_text = last_message.to_text()
+        config = load_memory_backend_config()
+        registry = build_memory_registry(config)
+        metrics = MemoryMetrics()
+        engine = MemEngine(registry=registry, metrics=metrics)
+        retrieval = MemoryRetrievalService(
+            registry=registry, metrics=metrics, engine=engine
+        )
+        injector = MemoryInjector(
+            config=MemoryInjectionConfig(
+                max_chars=_env_int("MEMORY_INJECTION_MAX_CHARS", 1200),
+                per_entry_max_chars=_env_int(
+                    "MEMORY_INJECTION_PER_ENTRY_MAX_CHARS", 400
+                ),
+            ),
+            metrics=metrics,
+        )
+        entries = []
+        for scope, namespace in _resolve_memory_scopes(actor):
+            try:
+                result = retrieval.search_entries(
+                    actor=actor,
+                    scope=scope,
+                    namespace=namespace,
+                    query_text=query_text,
+                    limit=_env_int("MEMORY_RETRIEVAL_LIMIT", 6),
+                )
+            except PermissionError:
+                continue
+            entries.extend(result.items)
+        deduped = []
+        seen: set[str] = set()
+        for entry in entries:
+            if entry.id in seen:
+                continue
+            seen.add(entry.id)
+            deduped.append(entry)
+        return injector.build_prompt_entries(deduped)
+
+    def _record_session_logs(
+        self,
+        chat_messages: list[BaseTextChatMessage],
+        task_result: TaskResult,
+    ) -> None:
+        if os.environ.get("MEMORY_SESSION_LOGGING", "true").lower() in {
+            "0",
+            "false",
+            "no",
+        }:
+            return
+        system = get_system_from_agent_id(self.agent_id.__str__())
+        if system is None:
+            return
+        actor = MemoryActorContext(
+            agent_id=system.agent_id_str,
+            system_id=system.id,
+            team_id=system.team_id,
+            system_type=system.type,
+        )
+        user_message = chat_messages[-1].to_text() if chat_messages else ""
+        response_text = ""
+        if task_result.messages:
+            response_text = task_result.messages[-1].to_text()
+        logs = []
+        if user_message:
+            logs.append(f"user: {user_message}")
+        if response_text:
+            logs.append(f"assistant: {response_text}")
+        if not logs:
+            return
+        recorder = self._get_session_recorder()
+        recorder.record(
+            actor=actor,
+            scope=MemoryScope.AGENT,
+            namespace=actor.agent_id,
+            logs=logs,
+        )
+
+    def _get_session_recorder(self) -> MemorySessionRecorder:
+        if self._session_recorder is not None:
+            return self._session_recorder
+        config = load_memory_backend_config()
+        registry = build_memory_registry(config)
+        engine = MemEngine(registry=registry)
+        reflection = MemoryReflectionService(registry=registry, engine=engine)
+        session_config = MemorySessionConfig(
+            max_log_chars=_env_int("MEMORY_SESSION_LOG_MAX_CHARS", 2000),
+            compaction_threshold_chars=_env_int(
+                "MEMORY_COMPACTION_THRESHOLD_CHARS", 8000
+            ),
+            reflection_interval_seconds=_env_int(
+                "MEMORY_REFLECTION_INTERVAL_SECONDS", 3600
+            ),
+            max_entries_per_namespace=_env_int(
+                "MEMORY_MAX_ENTRIES_PER_NAMESPACE", 1000
+            ),
+        )
+        self._session_recorder = MemorySessionRecorder(
+            registry=registry,
+            reflection_service=reflection,
+            config=session_config,
+        )
+        return self._session_recorder
 
     def _memory_prompt_entries(self) -> list[str]:
         system_type = _infer_system_type(self.agent_id.type)
