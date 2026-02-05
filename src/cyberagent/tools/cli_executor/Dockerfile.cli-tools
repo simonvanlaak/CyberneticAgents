@@ -47,6 +47,10 @@ RUN chmod +x /usr/local/bin/speech-to-text
 COPY src/tools/skills/message-routing/message_routing.py /usr/local/bin/message-routing
 RUN chmod +x /usr/local/bin/message-routing
 
+# Notion API helper exposed as a CLI.
+COPY src/tools/skills/notion/notion_cli.py /usr/local/bin/notion
+RUN chmod +x /usr/local/bin/notion
+
 RUN git --version && rg --version
 
 CMD ["bash"]

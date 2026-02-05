@@ -21,6 +21,12 @@ Depends on docs/product_requirements/communication_channels.md
 2. Obsidian via local folder ingestion.
 3. Google Drive / Docs ingestion (read-only).
 
+## Existing Notion Skills (Research)
+- clawdbot/notion skill (AgentSkills, Claude Skills). CRUD for pages, databases/data sources, and blocks. Setup uses a Notion integration key. Sources: https://agentskills.to/clawdbot/clawdbot/notion and https://claudeskills.club/skills/notion-by-clawdbot
+- BLTGV/agent-skills `notion-api` skill (AgentSkillsIndex). Notion search/read/create/update flows aimed at agent usage. Source: https://agentskillsindex.com/ja/skills/BLTGV/agent-skills
+- openai/skills `notion-spec-to-implementation` (AgentSkillsIndex). Uses Notion tools to turn specs into implementation plans and tasks. Source: https://agentskillsindex.com/en/skills/openai/skills
+- LangChain Notion Tools (PyPI). Not an agent skill repo, but provides Notion read/write tools for agents. Source: https://pypi.org/project/langchain-notion-tools/
+
 ## Requirements
 1. Read-only access with explicit user consent.
 2. Token storage via 1Password and environment variables.
