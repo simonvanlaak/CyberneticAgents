@@ -4,6 +4,7 @@ from typing import Any, Dict
 
 import pytest
 
+from src.cyberagent.tools.cli_executor import cli_tool as cli_tool_module
 from src.cyberagent.tools.cli_executor.cli_tool import CliTool
 
 
@@ -158,3 +159,12 @@ def test_parse_result_error() -> None:
 
     assert result["success"] is False
     assert result["error"] == "boom"
+
+
+def test_check_permission_denies_when_rbac_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    tool = CliTool(NoEnvExecutor())
+    monkeypatch.setattr(cli_tool_module, "_get_check_tool_permission", lambda: None)
+
+    assert tool._check_permission("agent-1", "web_search") is False
