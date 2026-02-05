@@ -130,3 +130,47 @@ def test_dlq_when_no_route() -> None:
     assert resolved == [system4.agent_id_str]
     dlq_entries = routing_service.list_dead_letters(team_id=team.id, status="pending")
     assert len(dlq_entries) == 1
+
+
+def test_route_fanout_to_system_and_subteam() -> None:
+    parent = _create_team("routing_fanout_parent")
+    child = _create_team("routing_fanout_child")
+    parent_system5 = systems_service.get_system_by_type(parent.id, SystemType.POLICY)
+    assert parent_system5 is not None
+    recursions_service.create_recursion(
+        sub_team_id=child.id,
+        parent_team_id=parent.id,
+        origin_system_id=parent_system5.id,
+        created_by="tests",
+    )
+    parent_system4 = systems_service.get_system_by_type(
+        parent.id, SystemType.INTELLIGENCE
+    )
+    assert parent_system4 is not None
+    routing_service.create_routing_rule(
+        team_id=parent.id,
+        name="fanout",
+        channel="telegram",
+        filters={"telegram_user_id": "7"},
+        targets=[{"system_id": parent_system4.id}, {"team_id": child.id}],
+        priority=10,
+    )
+    child_systems1 = systems_service.get_systems_by_type(child.id, SystemType.OPERATION)
+    assert child_systems1
+    routing_service.create_routing_rule(
+        team_id=child.id,
+        name="child_route",
+        channel="telegram",
+        filters={"telegram_user_id": "7"},
+        targets=[{"system_id": child_systems1[0].id}],
+        priority=5,
+    )
+
+    targets = routing_service.resolve_message_targets(
+        team_id=parent.id,
+        channel="telegram",
+        metadata={"telegram_user_id": "7"},
+    )
+
+    assert parent_system4.agent_id_str in targets
+    assert child_systems1[0].agent_id_str in targets
