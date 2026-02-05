@@ -29,6 +29,7 @@ from src.cyberagent.db.models.system import get_system_by_type
 from src.cyberagent.db.models.team import Team
 from src.cyberagent.services import procedures as procedures_service
 from src.cyberagent.services import purposes as purposes_service
+from src.cyberagent.cli.onboarding_routing import seed_default_routing_rules
 from src.cyberagent.services import strategies as strategies_service
 from src.cyberagent.services import systems as systems_service
 from src.cyberagent.services import teams as teams_service
@@ -122,6 +123,7 @@ def handle_onboarding(
     _seed_default_team_envelope(team.id, team_defaults)
     _ensure_team_systems(team.id, team_defaults)
     _seed_default_procedures(team.id, procedures)
+    seed_default_routing_rules(team.id, team_defaults)
     print(get_message("onboarding", "discovery_starting"))
     start_onboarding_interview(
         user_name=str(getattr(args, "user_name", "")).strip(),
