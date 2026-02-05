@@ -174,3 +174,10 @@ Wrote down plan to have agents to research in the background in web and on the p
 The user interview is happening while the CyberneticAgents are getting setup and research is happening. The interview is being enriched by the research results in the background, by writing research results into global memory. 
 Cleaned up onboarding more, and integrated telegram messaging in onborading experience. Issue now is that telegram voice not could not be
 transcribed.
+
+### 2026-02-5
+Completed memory implementation, still needs to be manually tested. Fixed & manually verified telegram messaging and that STT works via telegram voice notes.
+Implemented Notion as Agent Skill, but still needs to be integrated into onboarding.
+Implemented message-routing agent skill that allows for the directing of user messages from different channels to specific systems.
+I changed the telegram onboarding to include setting up the telegram bot with the telegram botfather.
+I need to manually go through the onboarding again, now I got a lot of duplicate telegram messages.
