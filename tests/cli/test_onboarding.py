@@ -85,7 +85,6 @@ def test_handle_onboarding_creates_default_team(
     assert exit_code == 0
     assert "Created default team" in captured
     assert "Starting PKM sync and profile discovery" in captured
-    assert "cyberagent inbox" in captured
     assert called.get("background") is True
     assert called.get("interview") is True
 
@@ -134,7 +133,6 @@ def test_handle_onboarding_skips_when_team_exists(
     assert exit_code == 0
     assert "Team already exists" in captured
     assert "Starting PKM sync and profile discovery" in captured
-    assert "cyberagent inbox" in captured
     assert called.get("background") is True
     assert called.get("interview") is True
 
@@ -260,6 +258,63 @@ def test_start_onboarding_interview_prints_telegram_session_hint(
     )
     monkeypatch.setattr(
         onboarding_interview, "build_bot_link", lambda: "https://t.me/mybot"
+    )
+    monkeypatch.setattr(onboarding_interview, "render_telegram_qr", lambda *_: "QR")
+
+    onboarding_interview.start_onboarding_interview(
+        user_name="Simon",
+        repo_url="https://example.com/repo",
+        profile_links=[],
+    )
+
+    captured = capsys.readouterr().out
+    assert "Send message to bot." in captured
+    assert "t.me/mybot" in captured
+    assert "QR" in captured
+
+
+def test_start_onboarding_interview_fetches_bot_username_when_missing(
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _fake_secret(name: str) -> str | None:
+        if name == "TELEGRAM_BOT_TOKEN":
+            return "token"
+        if name == "TELEGRAM_BOT_USERNAME":
+            return None
+        return None
+
+    monkeypatch.setattr(onboarding_interview, "get_secret", _fake_secret)
+    monkeypatch.setattr(
+        onboarding_interview,
+        "send_onboarding_intro_messages",
+        lambda **_kwargs: (True, True),
+    )
+    monkeypatch.setattr(
+        onboarding_interview,
+        "get_message",
+        lambda *_args, **_kwargs: "Send message to bot.",
+    )
+    monkeypatch.setattr(onboarding_interview, "enqueue_suggestion", lambda *_: None)
+    monkeypatch.setattr(
+        onboarding_interview,
+        "build_onboarding_interview_prompt",
+        lambda **_kwargs: "prompt",
+    )
+    build_calls = 0
+
+    def _fake_build_bot_link() -> str | None:
+        nonlocal build_calls
+        build_calls += 1
+        if build_calls == 1:
+            return None
+        return "https://t.me/mybot"
+
+    monkeypatch.setattr(onboarding_interview, "build_bot_link", _fake_build_bot_link)
+    monkeypatch.setattr(
+        onboarding_interview.onboarding_telegram,
+        "_fetch_bot_username_from_token",
+        lambda *_: "mybot",
     )
     monkeypatch.setattr(onboarding_interview, "render_telegram_qr", lambda *_: "QR")
 

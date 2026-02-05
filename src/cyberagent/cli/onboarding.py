@@ -144,7 +144,6 @@ def handle_onboarding(
         ):
             return 1
     _start_runtime_after_onboarding(team.id)
-    print(get_message("onboarding", "next_inbox", inbox_command=inbox_command))
     return 0
 
 

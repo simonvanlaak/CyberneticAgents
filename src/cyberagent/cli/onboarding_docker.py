@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import shutil
 import subprocess
+from pathlib import Path
+from typing import Sequence
 
 from src.cyberagent.tools.cli_executor.skill_loader import load_skill_definitions
 from src.cyberagent.tools.cli_executor.skill_runtime import DEFAULT_SKILLS_ROOT
@@ -46,28 +47,16 @@ def check_docker_available() -> bool:
             return True
         print(get_message("onboarding_docker", "docker_required_missing"))
         return False
-    try:
-        result = subprocess.run(
-            [docker_path, "info"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-    except (OSError, subprocess.TimeoutExpired):
-        print(get_message("onboarding_docker", "docker_unreachable"))
-        return False
+    result = _run_docker_info(docker_path)
+    if result is None:
+        return _handle_docker_unreachable(docker_path)
     if result.returncode != 0:
         stderr = (result.stderr or "").lower()
         if "permission denied" in stderr:
             print(get_message("onboarding_docker", "docker_permission_denied"))
             print(get_message("onboarding_docker", "docker_permission_fix"))
             return False
-        if not skills_require_docker():
-            print(get_message("onboarding_docker", "docker_unreachable_no_skills"))
-            return True
-        print(get_message("onboarding_docker", "docker_unreachable"))
-        return False
+        return _handle_docker_unreachable(docker_path)
     return True
 
 
@@ -114,3 +103,53 @@ def _get_docker_socket_path() -> Path | None:
     if docker_host:
         return None
     return Path("/var/run/docker.sock")
+
+
+def _run_docker_info(docker_path: str) -> subprocess.CompletedProcess[str] | None:
+    try:
+        return subprocess.run(
+            [docker_path, "info"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
+def _handle_docker_unreachable(docker_path: str) -> bool:
+    if not skills_require_docker():
+        print(get_message("onboarding_docker", "docker_unreachable_no_skills"))
+        return True
+    print(get_message("onboarding_docker", "docker_starting"))
+    if _try_start_docker_daemon():
+        result = _run_docker_info(docker_path)
+        if result and result.returncode == 0:
+            return True
+    print(get_message("onboarding_docker", "docker_start_failed"))
+    print(get_message("onboarding_docker", "docker_unreachable"))
+    return False
+
+
+def _try_start_docker_daemon() -> bool:
+    systemctl_path = shutil.which("systemctl")
+    if not systemctl_path:
+        return False
+    if _run_systemctl([systemctl_path, "start", "docker"]):
+        return True
+    return _run_systemctl([systemctl_path, "--user", "start", "docker"])
+
+
+def _run_systemctl(command: Sequence[str]) -> bool:
+    try:
+        result = subprocess.run(
+            list(command),
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return result.returncode == 0

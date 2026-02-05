@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 
 from src.cyberagent.channels.telegram import session_store
 from src.cyberagent.channels.telegram.outbound import (
@@ -9,6 +10,7 @@ from src.cyberagent.channels.telegram.outbound import (
 from src.cyberagent.cli.message_catalog import get_message
 from src.cyberagent.cli.onboarding_discovery import build_onboarding_interview_prompt
 from src.cyberagent.cli.suggestion_queue import enqueue_suggestion
+from src.cyberagent.cli import onboarding_telegram
 from src.cyberagent.cli.telegram_qr import build_bot_link, render_telegram_qr
 from src.cyberagent.secrets import get_secret
 
@@ -40,9 +42,15 @@ def start_onboarding_interview(
     if not sent:
         print(welcome_message)
         print(first_question)
-    if get_secret("TELEGRAM_BOT_TOKEN"):
+    token = get_secret("TELEGRAM_BOT_TOKEN")
+    if token:
         print(get_message("onboarding", "telegram_session_required"))
         bot_link = build_bot_link()
+        if not bot_link:
+            fetched = onboarding_telegram._fetch_bot_username_from_token(token)
+            if fetched:
+                os.environ.setdefault("TELEGRAM_BOT_USERNAME", fetched)
+                bot_link = build_bot_link()
         if bot_link:
             print(f"Open: {bot_link}")
             qr = render_telegram_qr(bot_link)
