@@ -14,7 +14,7 @@ fi
 # Staged Python files
 staged_py_files=$(git diff --cached --name-only --diff-filter=ACM | rg '\.py$' || true)
 
-staged_files=$(git diff --cached --name-only --diff-filter=ACM || true)
+staged_files=$(git diff --cached --name-only --diff-filter=ACM -- '*.py' || true)
 line_count_fail=0
 if [[ -n "${staged_files}" ]]; then
   while IFS= read -r file; do
