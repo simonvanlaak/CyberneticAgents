@@ -139,7 +139,8 @@ def _transcribe_provider(
     endpoint = GROQ_ENDPOINT if provider == "groq" else OPENAI_ENDPOINT
     api_key = _require_key(provider)
     with file_path.open("rb") as handle:
-        files = {"file": (file_path.name, handle)}
+        upload_name = _resolve_upload_name(file_path)
+        files = {"file": (upload_name, handle)}
         data: dict[str, object] = {"model": model, "response_format": "verbose_json"}
         if language:
             data["language"] = language
@@ -150,7 +151,11 @@ def _transcribe_provider(
             data=data,
             timeout=60,
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            detail = _format_transcription_error(response)
+            raise RuntimeError(detail) from exc
         payload = _parse_payload(response)
         text = (
             str(payload.get("text", "")) if isinstance(payload, dict) else response.text
@@ -196,6 +201,27 @@ def _parse_payload(response: requests.Response) -> dict[str, object]:
     except ValueError:
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _resolve_upload_name(file_path: Path) -> str:
+    suffix = file_path.suffix.lower()
+    if suffix in {".oga", ".opus"}:
+        return f"{file_path.stem}.ogg"
+    return file_path.name
+
+
+def _format_transcription_error(response: requests.Response) -> str:
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = {}
+    if isinstance(payload, dict):
+        error = payload.get("error")
+        if isinstance(error, dict):
+            message = error.get("message")
+            if isinstance(message, str) and message:
+                return message
+    return response.text.strip() or "Transcription request failed."
 
 
 def _parse_segments(raw: object) -> list[dict[str, object]]:

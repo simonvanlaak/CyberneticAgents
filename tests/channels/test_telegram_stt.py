@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from src.cyberagent.channels.telegram import stt
@@ -69,3 +71,10 @@ def test_describe_transcription_error_for_missing_groq_key() -> None:
     message = stt.describe_transcription_error(error)
 
     assert "GROQ_API_KEY" in message
+
+
+def test_resolve_upload_name_maps_oga_to_ogg(tmp_path: Path) -> None:
+    file_path = tmp_path / "voice.oga"
+    file_path.write_text("placeholder")
+
+    assert stt._resolve_upload_name(file_path) == "voice.ogg"
