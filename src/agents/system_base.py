@@ -196,50 +196,50 @@ class SystemBase(RoutedAgent):
         )
 
         # Set up proper trace context propagation using W3C format
+        parent_context = None
+        carrier: dict[str, str] = {}
         if trace_context and isinstance(trace_context, dict):
-            # Convert our trace context to proper W3C format if needed
-            carrier = {}
             if "traceparent" in trace_context and "tracestate" in trace_context:
-                # Already in proper format, use directly
                 carrier["traceparent"] = trace_context["traceparent"]
                 carrier["tracestate"] = trace_context["tracestate"]
             elif "trace_id" in trace_context and "span_id" in trace_context:
-                # Convert from our custom format to W3C traceparent format
-                # traceparent format: version-flag-trace_id-span_id
                 trace_id_hex = trace_context["trace_id"]
                 span_id_hex = trace_context["span_id"]
                 traceparent = f"00-{trace_id_hex}-{span_id_hex}-01"
                 carrier["traceparent"] = traceparent
-                carrier["tracestate"] = ""  # Empty tracestate for now
+                carrier["tracestate"] = ""
 
-            # Set the carrier in the message metadata for proper propagation
-            if last_message.metadata is None:
-                last_message.metadata = {}
-            last_message.metadata.update(carrier)
+            if carrier:
+                if last_message.metadata is None:
+                    last_message.metadata = {}
+                last_message.metadata.update(carrier)
 
-            # Create a new span with the parent context for proper trace continuity
-            from opentelemetry.trace.propagation.tracecontext import (
-                TraceContextTextMapPropagator,
-            )
+                from opentelemetry.trace.propagation.tracecontext import (
+                    TraceContextTextMapPropagator,
+                )
 
-            propagator = TraceContextTextMapPropagator()
+                propagator = TraceContextTextMapPropagator()
+                parent_context = propagator.extract(carrier)
 
-            # Extract the parent context from the carrier
-            parent_context = propagator.extract(carrier)
-
-            # Create a new span with the parent context
-            tracer = trace.get_tracer(__name__)
-            with tracer.start_as_current_span(
+        tracer = trace.get_tracer(__name__)
+        if parent_context is not None:
+            span_context = tracer.start_as_current_span(
                 f"{self.agent_id.key}_processing",
                 context=parent_context,
-            ) as processing_span:
-                processing_span.set_attribute("agent", str(self.agent_id))
-                processing_span.set_attribute("message_type", "processing")
+            )
+        else:
+            span_context = tracer.start_as_current_span(
+                f"{self.agent_id.key}_processing"
+            )
 
-        # get response
-        task_result: TaskResult = await self._agent.run(
-            task=chat_messages, cancellation_token=ctx.cancellation_token
-        )
+        with span_context as processing_span:
+            processing_span.set_attribute("agent", str(self.agent_id))
+            processing_span.set_attribute("message_type", "processing")
+
+            # get response
+            task_result: TaskResult = await self._agent.run(
+                task=chat_messages, cancellation_token=ctx.cancellation_token
+            )
         for message in task_result.messages:
             if isinstance(message, ToolCallRequestEvent):
                 for func_call in message.content:
@@ -261,14 +261,13 @@ class SystemBase(RoutedAgent):
         if task_result.messages[-1].metadata is None:
             task_result.messages[-1].metadata = {}
 
-        # Get current span context to propagate
-        current_span = trace.get_current_span()
-        if current_span:
-            # Create proper traceparent format for response
-            span_context = current_span.get_span_context()
-            traceparent = f"00-{format(span_context.trace_id, '032x')}-{format(span_context.span_id, '016x')}-01"
-            task_result.messages[-1].metadata["traceparent"] = traceparent
-            task_result.messages[-1].metadata["tracestate"] = ""
+        span_context = processing_span.get_span_context()
+        traceparent = (
+            f"00-{format(span_context.trace_id, '032x')}-"
+            f"{format(span_context.span_id, '016x')}-01"
+        )
+        task_result.messages[-1].metadata["traceparent"] = traceparent
+        task_result.messages[-1].metadata["tracestate"] = ""
 
         return task_result
 
