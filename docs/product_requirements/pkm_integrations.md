@@ -40,3 +40,8 @@ Depends on docs/product_requirements/communication_channels.md
 ## Success Metrics
 1. At least one additional PKM source integrated with reliable ingest.
 2. Onboarding uses PKM summaries without requiring manual curation.
+
+## Most Popular PKM Systems
+1. Microsoft OneNote
+2. Notion
+3. Evernote
