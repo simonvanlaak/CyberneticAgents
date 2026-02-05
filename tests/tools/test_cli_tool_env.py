@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Dict
 
 import pytest
@@ -168,3 +169,18 @@ def test_check_permission_denies_when_rbac_unavailable(
     monkeypatch.setattr(cli_tool_module, "_get_check_tool_permission", lambda: None)
 
     assert tool._check_permission("agent-1", "web_search") is False
+
+
+@pytest.mark.asyncio
+async def test_execute_does_not_log_arguments(
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    executor = DummyExecutor()
+    tool = CliTool(executor)
+    monkeypatch.setattr(tool, "_check_permission", lambda *_args, **_kwargs: True)
+    caplog.set_level(logging.INFO, logger=cli_tool_module.__name__)
+
+    await tool.execute("unknown_tool", agent_id="agent-1", api_key="secret-value")
+
+    assert any("unknown_tool" in record.message for record in caplog.records)
+    assert all("secret-value" not in record.message for record in caplog.records)

@@ -61,3 +61,53 @@ def test_handle_onboarding_seeds_default_routing_rules_once(tmp_path: Path) -> N
         assert rules[0].name == "Default DLQ"
     finally:
         session.close()
+
+
+def test_handle_onboarding_seeds_procedure_routing_rules(tmp_path: Path) -> None:
+    _clear_teams()
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
+    summary_path = tmp_path / "summary.md"
+    summary_path.write_text("summary", encoding="utf-8")
+    monkeypatch.setattr(
+        onboarding_cli, "_run_discovery_onboarding", lambda *_: summary_path
+    )
+    monkeypatch.setattr(
+        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: True
+    )
+    monkeypatch.setattr(
+        onboarding_cli,
+        "load_procedure_defaults",
+        lambda: [
+            {
+                "name": "SOP With Routing",
+                "description": "Test SOP.",
+                "routing_rules": [
+                    {
+                        "name": "SOP Route",
+                        "channel": "cli",
+                        "filters": {"session_id": "cli-main"},
+                        "targets": [{"system_id": "System4/root"}],
+                        "priority": 5,
+                    }
+                ],
+            }
+        ],
+    )
+
+    onboarding_cli.handle_onboarding(
+        _default_onboarding_args(),
+        'cyberagent suggest "Describe the task"',
+        "cyberagent inbox",
+    )
+    monkeypatch.undo()
+
+    session = next(get_db())
+    try:
+        team = session.query(Team).filter(Team.name == "root").first()
+        assert team is not None
+        rules = session.query(RoutingRule).filter(RoutingRule.team_id == team.id).all()
+        names = {rule.name for rule in rules}
+        assert "SOP Route" in names
+    finally:
+        session.close()

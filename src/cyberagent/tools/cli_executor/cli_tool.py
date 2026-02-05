@@ -97,7 +97,10 @@ class CliTool:
         # Create shell command
         command = f"{tool_name} {subcommand_part}{args}".strip()
 
-        logger.info(f"Executing CLI command: {command}")
+        if subcommand:
+            logger.info("Executing CLI tool: %s %s", tool_name, subcommand)
+        else:
+            logger.info("Executing CLI tool: %s", tool_name)
 
         original_timeout = _get_executor_timeout(self.executor)
         if timeout_seconds is not None:
