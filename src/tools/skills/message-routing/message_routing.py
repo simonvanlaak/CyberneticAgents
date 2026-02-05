@@ -39,10 +39,13 @@ def _get_db_path() -> str:
     if path in {"/:memory:", ":memory:"}:
         return ":memory:"
     if path.startswith("//"):
-        return path.lstrip("/")
-    if path.startswith("/"):
-        return path.lstrip("/")
-    return path or "data/CyberneticAgents.db"
+        normalized = os.path.normpath(path)
+        if normalized.startswith("//"):
+            return "/" + normalized.lstrip("/")
+        return normalized
+    if os.path.isabs(path):
+        return path
+    return path.lstrip("/") or "data/CyberneticAgents.db"
 
 
 def _connect() -> sqlite3.Connection:
@@ -103,6 +106,41 @@ def _disable_rule(args: argparse.Namespace) -> dict[str, Any]:
         )
         conn.commit()
     return {"rule_id": args.rule_id, "disabled": True}
+
+
+def _update_rule(args: argparse.Namespace) -> dict[str, Any]:
+    if args.rule_id is None:
+        raise ValueError("rule_id is required for update_rule.")
+    updates: dict[str, Any] = {}
+    if args.name is not None:
+        updates["name"] = args.name
+    if args.channel is not None:
+        updates["channel"] = args.channel
+    if args.filters is not None:
+        updates["filters_json"] = json.dumps(_json_or_default(args.filters, {}))
+    if args.targets is not None:
+        updates["targets_json"] = json.dumps(_json_or_default(args.targets, []))
+    if args.priority is not None:
+        updates["priority"] = int(args.priority)
+    if args.active:
+        updates["active"] = 1
+    if args.inactive:
+        updates["active"] = 0
+
+    if not updates:
+        return {"rule_id": args.rule_id, "updated": False}
+
+    updates["updated_at"] = datetime.utcnow().isoformat()
+    set_clause = ", ".join(f"{key} = ?" for key in updates.keys())
+    values = list(updates.values()) + [args.rule_id]
+    with _connect() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            f"UPDATE routing_rules SET {set_clause} WHERE id = ?",
+            values,
+        )
+        conn.commit()
+    return {"rule_id": args.rule_id, "updated": True}
 
 
 def _list_rules(args: argparse.Namespace) -> dict[str, Any]:
@@ -202,6 +240,7 @@ def main() -> None:
     action = args.action
     handlers = {
         "create_rule": _create_rule,
+        "update_rule": _update_rule,
         "disable_rule": _disable_rule,
         "list_rules": _list_rules,
         "list_dlq": _list_dlq,

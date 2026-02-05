@@ -18,10 +18,12 @@ from src.cyberagent.channels.inbox import (
     list_inbox_entries,
 )
 from src.cyberagent.channels.telegram import session_store
+from src.cyberagent.db.db_utils import get_db
 from src.cli_session import enqueue_pending_question, get_pending_question
 from src.cyberagent.core.state import get_last_team_id
 from src.cyberagent.services import routing as routing_service
 from src.cyberagent.services import systems as systems_service
+from src.cyberagent.db.models.routing_rule import RoutingRule
 from src.enums import SystemType
 
 
@@ -578,3 +580,37 @@ async def test_user_agent_routes_message_to_configured_system() -> None:
     topic_id = call.kwargs["topic_id"]
     assert topic_id.type == "System1:"
     assert topic_id.source == "root"
+
+
+@pytest.mark.asyncio
+async def test_user_agent_includes_dlq_metadata_on_fallback(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    clear_pending_questions()
+    user_agent = UserAgent("test_user")
+    user_agent.publish_message = AsyncMock()
+    setattr(user_agent, "_runtime", cast(AgentRuntime, object()))
+    team_id = get_last_team_id()
+    assert team_id is not None
+    monkeypatch.setenv("CYBERAGENT_ACTIVE_TEAM_ID", str(team_id))
+    session = next(get_db())
+    try:
+        session.query(RoutingRule).delete()
+        session.commit()
+    finally:
+        session.close()
+    ctx = MessageContext(
+        sender=AgentId(type="UserAgent", key="root"),
+        topic_id=TopicId(type="UserAgent", source="root"),
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="test-message",
+    )
+    message = UserMessage(content="Unroutable", source="User")
+    await user_agent.handle_user_message(message=message, ctx=ctx)  # type: ignore[call-arg]
+
+    await_args = user_agent.publish_message.await_args
+    assert await_args is not None
+    published_message = await_args.kwargs["message"]
+    assert published_message.metadata is not None
+    assert "dlq_entry_id" in published_message.metadata

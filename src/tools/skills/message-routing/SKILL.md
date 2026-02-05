@@ -11,7 +11,7 @@ input_schema:
   properties:
     action:
       type: string
-      description: create_rule, disable_rule, list_rules, list_dlq
+      description: create_rule, update_rule, disable_rule, list_rules, list_dlq
     team_id:
       type: integer
     rule_id:

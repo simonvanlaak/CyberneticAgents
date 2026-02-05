@@ -95,12 +95,21 @@ class UserAgent(RoutedAgent):
                 message, AgentId(type=System4.__name__, key="root")
             )
             return
-        targets = routing_service.resolve_message_targets(
+        decision = routing_service.resolve_message_decision(
             team_id=team_id,
             channel=channel,
             metadata=routing_metadata,
         )
-        for target in targets:
+        if decision.dlq_entry_id is not None:
+            dlq_metadata = (
+                message.metadata if isinstance(message.metadata, dict) else {}
+            )
+            dlq_metadata = dict(dlq_metadata)
+            dlq_metadata["dlq_entry_id"] = str(decision.dlq_entry_id)
+            if decision.dlq_reason:
+                dlq_metadata["dlq_reason"] = decision.dlq_reason
+            message.metadata = dlq_metadata
+        for target in decision.targets:
             await self._publish_to_agent(message, AgentId.from_str(target))
 
     @message_handler

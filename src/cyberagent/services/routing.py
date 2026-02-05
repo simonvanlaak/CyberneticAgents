@@ -12,6 +12,7 @@ from src.cyberagent.db.models.dead_letter_message import DeadLetterMessage
 from src.cyberagent.db.models.routing_rule import RoutingRule
 from src.cyberagent.services import recursions as recursions_service
 from src.cyberagent.services import systems as systems_service
+from src.cyberagent.services.audit import log_event
 from src.enums import SystemType
 
 
@@ -19,6 +20,13 @@ from src.enums import SystemType
 class RoutingContext:
     channel: str
     metadata: dict[str, str]
+
+
+@dataclass(frozen=True)
+class RoutingDecision:
+    targets: list[str]
+    dlq_entry_id: int | None
+    dlq_reason: str | None
 
 
 def create_routing_rule(
@@ -81,9 +89,9 @@ def match_routing_rules(
     return [rule for rule in candidates if _rule_matches(rule, context)]
 
 
-def resolve_message_targets(
+def resolve_message_decision(
     *, team_id: int, channel: str, metadata: dict[str, str]
-) -> list[str]:
+) -> RoutingDecision:
     """
     Resolve final target agent ids for a message, recursing into subteams.
 
@@ -93,15 +101,42 @@ def resolve_message_targets(
     context = RoutingContext(channel=channel, metadata=metadata)
     matched = match_routing_rules(team_id=team_id, channel=channel, metadata=metadata)
     if not matched:
-        return _record_dlq_and_default(team_id, context, reason="no_route")
+        targets, dlq_id, reason = _record_dlq_and_default(
+            team_id, context, reason="no_route"
+        )
+        return RoutingDecision(targets=targets, dlq_entry_id=dlq_id, dlq_reason=reason)
 
     targets: list[str] = []
     for rule in matched:
+        rule_targets: list[str] = []
         for target in rule.targets():
-            targets.extend(_resolve_target(team_id, context, target))
+            rule_targets.extend(_resolve_target(team_id, context, target))
+        if rule_targets:
+            log_event(
+                "routing_match",
+                service="routing",
+                team_id=team_id,
+                rule_id=rule.id,
+                channel=context.channel,
+                target_count=len(rule_targets),
+            )
+        targets.extend(rule_targets)
     if not targets:
-        return _record_dlq_and_default(team_id, context, reason="no_target")
-    return targets
+        targets, dlq_id, reason = _record_dlq_and_default(
+            team_id, context, reason="no_target"
+        )
+        return RoutingDecision(targets=targets, dlq_entry_id=dlq_id, dlq_reason=reason)
+    return RoutingDecision(targets=targets, dlq_entry_id=None, dlq_reason=None)
+
+
+def resolve_message_targets(
+    *, team_id: int, channel: str, metadata: dict[str, str]
+) -> list[str]:
+    return resolve_message_decision(
+        team_id=team_id,
+        channel=channel,
+        metadata=metadata,
+    ).targets
 
 
 def list_dead_letters(
@@ -192,15 +227,25 @@ def _resolve_team_target(
 
 def _record_dlq_and_default(
     team_id: int, context: RoutingContext, reason: str
-) -> list[str]:
-    _record_dead_letter(team_id=team_id, context=context, reason=reason)
+) -> tuple[list[str], int | None, str]:
+    dlq_id = _record_dead_letter(team_id=team_id, context=context, reason=reason)
+    log_event(
+        "routing_dlq",
+        service="routing",
+        team_id=team_id,
+        channel=context.channel,
+        reason=reason,
+        dlq_id=dlq_id,
+    )
     system4 = systems_service.get_system_by_type(team_id, SystemType.INTELLIGENCE)
     if system4 is None:
-        return []
-    return [system4.agent_id_str]
+        return [], dlq_id, reason
+    return [system4.agent_id_str], dlq_id, reason
 
 
-def _record_dead_letter(*, team_id: int, context: RoutingContext, reason: str) -> None:
+def _record_dead_letter(
+    *, team_id: int, context: RoutingContext, reason: str
+) -> int | None:
     payload = {
         "channel": context.channel,
         "metadata": context.metadata,
@@ -218,5 +263,7 @@ def _record_dead_letter(*, team_id: int, context: RoutingContext, reason: str) -
     try:
         session.add(dlq)
         session.commit()
+        session.refresh(dlq)
+        return dlq.id
     finally:
         session.close()
