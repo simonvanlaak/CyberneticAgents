@@ -60,6 +60,9 @@ class TestSystem3RefactoredImplementation:
             patch("src.cyberagent.db.models.task.Task.add"),
             patch("src.cyberagent.db.models.task.Task.to_prompt", return_value=["{}"]),
             patch.object(system3, "_get_systems_by_type") as mock_get_systems,
+            patch(
+                "src.cyberagent.services.tasks.has_tasks_for_initiative"
+            ) as mock_has_tasks,
         ):
             # Create mock initiative
             mock_initiative = DummyInitiative(1, "Test Initiative", "Test Description")
@@ -70,6 +73,7 @@ class TestSystem3RefactoredImplementation:
                     self.systems = []
 
             mock_get_systems.return_value = DummySystems()
+            mock_has_tasks.return_value = False
 
             # Mock the run method for both phases
             system3.run = AsyncMock()
