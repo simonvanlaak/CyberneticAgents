@@ -6,9 +6,12 @@ from src.cyberagent.db.models.procedure import Procedure
 from src.cyberagent.db.models.procedure_run import ProcedureRun
 from src.cyberagent.db.models.procedure_task import ProcedureTask
 from src.cyberagent.db.models.purpose import Purpose
+from src.cyberagent.db.models.routing_rule import RoutingRule
+from src.cyberagent.db.models.dead_letter_message import DeadLetterMessage
 from src.cyberagent.db.models.strategy import Strategy
 from src.cyberagent.db.models.system import System
 from src.cyberagent.db.models.task import Task
+from src.cyberagent.db.models.telegram_pairing import TelegramPairing
 from src.cyberagent.db.models.team import Team
 
 __all__ = [
@@ -18,8 +21,11 @@ __all__ = [
     "ProcedureRun",
     "ProcedureTask",
     "Purpose",
+    "RoutingRule",
+    "DeadLetterMessage",
     "Strategy",
     "System",
     "Task",
+    "TelegramPairing",
     "Team",
 ]

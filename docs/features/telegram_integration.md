@@ -9,6 +9,7 @@ Telegram integration provides a direct communication channel between users and C
 - **Commands**: `/start`, `/help`, `/reset` are supported.
 - **Webhook + polling**: Webhook is preferred when configured; polling is the fallback.
 - **Allowlist/blocklist**: Optional chat/user allow and block lists.
+- **Pairing approvals**: First user becomes admin; other users are blocked by default.
 - **Inline keyboards**: Callback queries are parsed and forwarded to the runtime.
 - **Shared inbox**: Telegram user prompts, system questions, and system responses are recorded in the shared inbox with `channel=telegram` and the Telegram session id.
 
@@ -29,6 +30,9 @@ Optional:
 - `TELEGRAM_ALLOWED_USER_IDS` (comma-separated)
 - `TELEGRAM_BLOCKED_CHAT_IDS` (comma-separated)
 - `TELEGRAM_BLOCKED_USER_IDS` (comma-separated)
+- `TELEGRAM_PAIRING_ENABLED` (set to `0` to disable pairing; default enabled)
+- `TELEGRAM_PAIRING_ADMIN_CHAT_IDS` (comma-separated chat IDs for pairing approvals)
+- `TELEGRAM_BOT_USERNAME` (bot username without `@`)
 
 ## Local Verification
 If you are using polling (no `TELEGRAM_WEBHOOK_URL`), inbound traffic should appear in logs:
@@ -56,6 +60,10 @@ When the user taps a button:
 - Telegram sends a `callback_query`
 - The system forwards `callback_query.data` as the user message content
 - Metadata includes `telegram_callback_id` and `telegram_callback_data`
+
+## Pairing Approvals
+The first user to message the bot becomes the admin. By default, other users are
+blocked. The pairing CLI remains available for manual inspection or future changes.
 
 ## File Map
 - `src/cyberagent/channels/telegram/client.py`

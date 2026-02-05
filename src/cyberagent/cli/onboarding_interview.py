@@ -9,6 +9,7 @@ from src.cyberagent.channels.telegram.outbound import (
 from src.cyberagent.cli.message_catalog import get_message
 from src.cyberagent.cli.onboarding_discovery import build_onboarding_interview_prompt
 from src.cyberagent.cli.suggestion_queue import enqueue_suggestion
+from src.cyberagent.cli.telegram_qr import build_bot_link, render_telegram_qr
 from src.cyberagent.secrets import get_secret
 
 logger = logging.getLogger(__name__)
@@ -41,6 +42,12 @@ def start_onboarding_interview(
         print(first_question)
     if get_secret("TELEGRAM_BOT_TOKEN"):
         print(get_message("onboarding", "telegram_session_required"))
+        bot_link = build_bot_link()
+        if bot_link:
+            print(f"Open: {bot_link}")
+            qr = render_telegram_qr(bot_link)
+            if qr:
+                print(qr)
     prompt = build_onboarding_interview_prompt(
         user_name=user_name,
         repo_url=repo_url,

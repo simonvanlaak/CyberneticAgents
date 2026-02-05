@@ -77,3 +77,50 @@ def get_secret(name: str) -> str | None:
     if loaded:
         os.environ.setdefault(name, loaded)
     return loaded
+
+
+def store_secret_in_1password(
+    item_name: str,
+    value: str,
+    *,
+    vault_name: str = VAULT_NAME,
+    field_label: str = FIELD_LABEL,
+) -> bool:
+    if not shutil.which("op"):
+        return False
+    if not has_onepassword_auth():
+        return False
+    create_result = subprocess.run(
+        [
+            "op",
+            "item",
+            "create",
+            "--category",
+            "API Credential",
+            "--vault",
+            vault_name,
+            "--title",
+            item_name,
+            f"{field_label}={value}",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if create_result.returncode == 0:
+        return True
+    edit_result = subprocess.run(
+        [
+            "op",
+            "item",
+            "edit",
+            item_name,
+            f"{field_label}={value}",
+            "--vault",
+            vault_name,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return edit_result.returncode == 0

@@ -7,6 +7,16 @@ Telegram support can run in one of two modes:
 
 ## Required Environment Variables
 - `TELEGRAM_BOT_TOKEN`: Bot token from BotFather.
+- `TELEGRAM_BOT_USERNAME`: Bot username (without `@`).
+
+## BotFather Setup (Required)
+1. Open Telegram and chat with `@BotFather`.
+2. Send `/newbot` and follow the prompts to name your bot.
+3. Copy the bot token and store it as `TELEGRAM_BOT_TOKEN` (1Password recommended).
+4. Save the bot username as `TELEGRAM_BOT_USERNAME`.
+
+If the `qrcode` dependency is installed, onboarding will display QR codes for the
+BotFather link and your bot deep link in the terminal.
 
 ## Webhook Mode (Optional)
 Webhook mode requires a public URL and a secret for validation.
@@ -23,6 +33,17 @@ Webhook mode requires a public URL and a secret for validation.
 - `TELEGRAM_BLOCKLIST_USER_IDS`: Comma-separated user IDs denied access.
 
 Blocklists take precedence over allowlists.
+
+## Pairing (OpenClaw-style)
+By default, Telegram messages require pairing approval before they are forwarded.
+
+- `TELEGRAM_PAIRING_ENABLED`: Set to `0` to disable pairing (default is enabled).
+- `TELEGRAM_PAIRING_ADMIN_CHAT_IDS`: Comma-separated chat IDs that receive pairing requests
+  with inline approve/deny buttons.
+
+When pairing is enabled, the first user to message the bot becomes the admin and is
+stored in 1Password under `TELEGRAM_PAIRING_ADMIN_CHAT_IDS`. This bot is private by
+default; other users are blocked unless you change the code or configuration.
 
 ## 1Password Integration
 During onboarding, you can store secrets in the `CyberneticAgents` vault:

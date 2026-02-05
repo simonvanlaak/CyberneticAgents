@@ -13,6 +13,7 @@ from src.agents.messages import UserMessage
 from src.cyberagent.channels.inbox import add_inbox_entry
 from src.cyberagent.stt.postprocess import format_timestamped_text
 from src.cyberagent.channels.telegram.client import TelegramClient
+from src.cyberagent.channels.telegram import pairing as pairing_store
 from src.cyberagent.channels.telegram import session_store
 from src.cyberagent.channels.telegram import stt as telegram_stt
 from src.cyberagent.channels.telegram.outbound import (
@@ -137,6 +138,15 @@ class TelegramPoller:
                         "last_name": inbound.last_name,
                     },
                 )
+                if await self._handle_pairing_guard(
+                    chat_id=inbound.chat_id,
+                    user_id=inbound.user_id,
+                    username=inbound.username,
+                    first_name=inbound.first_name,
+                    last_name=inbound.last_name,
+                ):
+                    self._offset = inbound.update_id + 1
+                    continue
                 if await self._handle_command(inbound):
                     self._offset = inbound.update_id + 1
                     continue
@@ -182,6 +192,15 @@ class TelegramPoller:
                         "last_name": voice.last_name,
                     },
                 )
+                if await self._handle_pairing_guard(
+                    chat_id=voice.chat_id,
+                    user_id=voice.user_id,
+                    username=voice.username,
+                    first_name=voice.first_name,
+                    last_name=voice.last_name,
+                ):
+                    self._offset = voice.update_id + 1
+                    continue
                 session_id = build_session_id(voice.chat_id, voice.user_id)
                 if (
                     voice.duration is not None
@@ -288,6 +307,23 @@ class TelegramPoller:
                         "last_name": callback.last_name,
                     },
                 )
+                if await self._handle_pairing_callback(callback):
+                    self._offset = callback.update_id + 1
+                    continue
+                if await self._handle_pairing_guard(
+                    chat_id=callback.chat_id,
+                    user_id=callback.user_id,
+                    username=callback.username,
+                    first_name=callback.first_name,
+                    last_name=callback.last_name,
+                ):
+                    await asyncio.to_thread(
+                        self._client.answer_callback_query,
+                        callback.callback_id,
+                        "Not authorized.",
+                    )
+                    self._offset = callback.update_id + 1
+                    continue
                 await self._handle_callback(callback)
                 self._offset = callback.update_id + 1
             await asyncio.sleep(self._poll_interval)
@@ -348,6 +384,66 @@ class TelegramPoller:
         await asyncio.to_thread(
             self._client.answer_callback_query, callback.callback_id, "Received."
         )
+
+    async def _handle_pairing_callback(self, callback: TelegramCallbackQuery) -> bool:
+        if not pairing_store.is_pairing_enabled():
+            return False
+        action = pairing_store.parse_pairing_callback(callback.data)
+        if action is None:
+            return False
+        if action.action == pairing_store.PAIRING_CALLBACK_APPROVE:
+            record = pairing_store.approve_pairing(
+                action.code, admin_chat_id=callback.chat_id
+            )
+            response = "Pairing approved." if record else "Pairing code not found."
+        else:
+            record = pairing_store.deny_pairing(
+                action.code, admin_chat_id=callback.chat_id
+            )
+            response = "Pairing denied." if record else "Pairing code not found."
+        await asyncio.to_thread(
+            self._client.answer_callback_query, callback.callback_id, response
+        )
+        if record and record.status == pairing_store.PAIRING_STATUS_APPROVED:
+            await asyncio.to_thread(pairing_store.notify_user_approved, record)
+        if record and record.status == pairing_store.PAIRING_STATUS_DENIED:
+            await asyncio.to_thread(pairing_store.notify_user_denied, record)
+        return True
+
+    async def _handle_pairing_guard(
+        self,
+        *,
+        chat_id: int,
+        user_id: int,
+        username: str | None,
+        first_name: str | None,
+        last_name: str | None,
+    ) -> bool:
+        if not pairing_store.is_pairing_enabled():
+            return False
+        admin_ids = pairing_store.load_admin_chat_ids()
+        if admin_ids:
+            if chat_id in admin_ids:
+                return False
+            await asyncio.to_thread(
+                self._client.send_message,
+                chat_id,
+                "This bot is private and only the owner can chat.",
+            )
+            return True
+        pairing_store.bootstrap_admin(
+            chat_id=chat_id,
+            user_id=user_id,
+            username=username,
+            first_name=first_name,
+            last_name=last_name,
+        )
+        await asyncio.to_thread(
+            self._client.send_message,
+            chat_id,
+            "You're connected and set as the admin for this bot.",
+        )
+        return False
 
     async def _forward_message(
         self,

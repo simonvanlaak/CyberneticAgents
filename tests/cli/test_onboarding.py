@@ -10,6 +10,7 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from src.cyberagent.cli import onboarding as onboarding_cli
 from src.cyberagent.cli import onboarding_interview
+from src.cyberagent.cli import onboarding_telegram
 from src.cyberagent.channels.telegram import session_store
 from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.models.system import System
@@ -233,7 +234,14 @@ def test_start_onboarding_interview_prints_telegram_session_hint(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(onboarding_interview, "get_secret", lambda *_args: "token")
+    def _fake_secret(name: str) -> str | None:
+        if name == "TELEGRAM_BOT_TOKEN":
+            return "token"
+        if name == "TELEGRAM_BOT_USERNAME":
+            return "mybot"
+        return None
+
+    monkeypatch.setattr(onboarding_interview, "get_secret", _fake_secret)
     monkeypatch.setattr(
         onboarding_interview,
         "send_onboarding_intro_messages",
@@ -250,6 +258,10 @@ def test_start_onboarding_interview_prints_telegram_session_hint(
         "build_onboarding_interview_prompt",
         lambda **_kwargs: "prompt",
     )
+    monkeypatch.setattr(
+        onboarding_interview, "build_bot_link", lambda: "https://t.me/mybot"
+    )
+    monkeypatch.setattr(onboarding_interview, "render_telegram_qr", lambda *_: "QR")
 
     onboarding_interview.start_onboarding_interview(
         user_name="Simon",
@@ -259,6 +271,8 @@ def test_start_onboarding_interview_prints_telegram_session_hint(
 
     captured = capsys.readouterr().out
     assert "Send message to bot." in captured
+    assert "t.me/mybot" in captured
+    assert "QR" in captured
 
 
 def test_send_onboarding_intro_messages_no_session_returns_false(
@@ -309,16 +323,16 @@ def test_print_db_write_error_attempts_recovery(
 def test_offer_optional_telegram_setup_sets_env(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(onboarding_cli.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(onboarding_telegram.sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(
-        onboarding_cli, "_load_secret_from_1password", lambda **_: "tok"
+        onboarding_telegram, "_load_secret_from_1password", lambda *_: "tok"
     )
     monkeypatch.setattr(
-        onboarding_cli, "_offer_optional_telegram_webhook_setup", lambda: None
+        onboarding_telegram, "_offer_optional_telegram_webhook_setup", lambda: None
     )
     monkeypatch.setattr(onboarding_cli, "_print_feature_ready", lambda *_: None)
     monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
 
-    onboarding_cli._offer_optional_telegram_setup()
+    onboarding_telegram.offer_optional_telegram_setup()
 
     assert os.environ.get("TELEGRAM_BOT_TOKEN") == "tok"

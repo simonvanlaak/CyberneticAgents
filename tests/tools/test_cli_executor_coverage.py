@@ -110,9 +110,15 @@ class _FakeExporter:
 
 class _FakeDockerExecutor:
     def __init__(
-        self, work_dir, image: str, container_name: str, auto_remove: bool
+        self,
+        work_dir,
+        bind_dir,
+        image: str,
+        container_name: str,
+        auto_remove: bool,
     ) -> None:
         self.work_dir = work_dir
+        self.bind_dir = bind_dir
         self.image = image
         self.container_name = container_name
         self.auto_remove = auto_remove

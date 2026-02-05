@@ -16,6 +16,7 @@ from src.agents.messages import UserMessage
 from src.cyberagent.channels.inbox import add_inbox_entry
 from src.cyberagent.stt.postprocess import format_timestamped_text
 from src.cyberagent.channels.telegram.client import TelegramClient
+from src.cyberagent.channels.telegram import pairing as pairing_store
 from src.cyberagent.channels.telegram import stt as telegram_stt
 from src.cyberagent.channels.telegram import session_store
 from src.cyberagent.channels.telegram.parser import (
@@ -182,6 +183,14 @@ class TelegramWebhookServer:
                 "last_name": inbound.last_name,
             },
         )
+        if self._handle_pairing_guard(
+            chat_id=inbound.chat_id,
+            user_id=inbound.user_id,
+            username=inbound.username,
+            first_name=inbound.first_name,
+            last_name=inbound.last_name,
+        ):
+            return
         kind, value = classify_text_message(inbound.text)
         if kind == "command":
             if value == "/start":
@@ -248,6 +257,14 @@ class TelegramWebhookServer:
                 "last_name": inbound.last_name,
             },
         )
+        if self._handle_pairing_guard(
+            chat_id=inbound.chat_id,
+            user_id=inbound.user_id,
+            username=inbound.username,
+            first_name=inbound.first_name,
+            last_name=inbound.last_name,
+        ):
+            return
         session_id = build_session_id(inbound.chat_id, inbound.user_id)
         if (
             inbound.duration is not None
@@ -337,6 +354,17 @@ class TelegramWebhookServer:
                 "last_name": callback.last_name,
             },
         )
+        if self._handle_pairing_callback(callback):
+            return
+        if self._handle_pairing_guard(
+            chat_id=callback.chat_id,
+            user_id=callback.user_id,
+            username=callback.username,
+            first_name=callback.first_name,
+            last_name=callback.last_name,
+        ):
+            self._client.answer_callback_query(callback.callback_id, "Not authorized.")
+            return
         session_id = build_session_id(callback.chat_id, callback.user_id)
         message = UserMessage(content=callback.data, source="User")
         message.metadata = {
@@ -353,6 +381,62 @@ class TelegramWebhookServer:
         )
         future.add_done_callback(self._handle_forward_result)
         self._client.answer_callback_query(callback.callback_id, "Received.")
+
+    def _handle_pairing_callback(self, callback: TelegramCallbackQuery) -> bool:
+        if not pairing_store.is_pairing_enabled():
+            return False
+        action = pairing_store.parse_pairing_callback(callback.data)
+        if action is None:
+            return False
+        if action.action == pairing_store.PAIRING_CALLBACK_APPROVE:
+            record = pairing_store.approve_pairing(
+                action.code, admin_chat_id=callback.chat_id
+            )
+            response = "Pairing approved." if record else "Pairing code not found."
+        else:
+            record = pairing_store.deny_pairing(
+                action.code, admin_chat_id=callback.chat_id
+            )
+            response = "Pairing denied." if record else "Pairing code not found."
+        self._client.answer_callback_query(callback.callback_id, response)
+        if record and record.status == pairing_store.PAIRING_STATUS_APPROVED:
+            pairing_store.notify_user_approved(record)
+        if record and record.status == pairing_store.PAIRING_STATUS_DENIED:
+            pairing_store.notify_user_denied(record)
+        return True
+
+    def _handle_pairing_guard(
+        self,
+        *,
+        chat_id: int,
+        user_id: int,
+        username: str | None,
+        first_name: str | None,
+        last_name: str | None,
+    ) -> bool:
+        if not pairing_store.is_pairing_enabled():
+            return False
+        admin_ids = pairing_store.load_admin_chat_ids()
+        if admin_ids:
+            if chat_id in admin_ids:
+                return False
+            self._client.send_message(
+                chat_id,
+                "This bot is private and only the owner can chat.",
+            )
+            return True
+        pairing_store.bootstrap_admin(
+            chat_id=chat_id,
+            user_id=user_id,
+            username=username,
+            first_name=first_name,
+            last_name=last_name,
+        )
+        self._client.send_message(
+            chat_id,
+            "You're connected and set as the admin for this bot.",
+        )
+        return False
 
     def _forward_message(
         self,

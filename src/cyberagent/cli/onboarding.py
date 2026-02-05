@@ -50,6 +50,7 @@ from src.cyberagent.cli.onboarding_discovery import run_discovery_onboarding
 from src.cyberagent.cli.onboarding_discovery import start_discovery_background
 from src.cyberagent.cli.onboarding_interview import start_onboarding_interview
 from src.cyberagent.cli.message_catalog import get_message
+from src.cyberagent.cli import onboarding_telegram
 from src.cyberagent.cli.onboarding_constants import DEFAULT_GIT_TOKEN_ENV
 from src.cyberagent.cli.onboarding_secrets import (
     VAULT_NAME,
@@ -59,10 +60,7 @@ from src.cyberagent.cli.onboarding_secrets import (
     load_secret_from_1password_with_error,
 )
 from src.cyberagent.secrets import get_secret
-from src.cyberagent.cli.onboarding_vault import (
-    prompt_store_secret_in_1password,
-    prompt_yes_no,
-)
+from src.cyberagent.cli.onboarding_vault import prompt_store_secret_in_1password
 from src.enums import SystemType
 
 LOGS_DIR = Path("logs")
@@ -72,7 +70,6 @@ NETWORK_SKILL_NAMES = {"web-fetch", "web-search", "git-readonly-sync"}
 TOOL_SECRET_DOC_HINTS = {
     "BRAVE_API_KEY": "src/tools/skills/web-search/SKILL.md",
 }
-TELEGRAM_DOC_HINT = "docs/technical/telegram_setup.md"
 FEATURE_READY_MESSAGE_KEYS = {
     "BRAVE_API_KEY": "feature_web_search",
     "GROQ_API_KEY": "feature_ai_ready",
@@ -929,53 +926,43 @@ def _warn_optional_api_keys() -> None:
 
 
 def _offer_optional_telegram_setup() -> None:
-    if not sys.stdin.isatty():
+    if not onboarding_telegram.sys.stdin.isatty():
         return
     if os.environ.get("TELEGRAM_BOT_TOKEN"):
-        _print_feature_ready("TELEGRAM_BOT_TOKEN")
+        onboarding_telegram._offer_optional_telegram_username_setup()
         _offer_optional_telegram_webhook_setup()
         return
-    loaded = _load_secret_from_1password(
-        vault_name=VAULT_NAME,
-        item_name="TELEGRAM_BOT_TOKEN",
-        field_label="credential",
-    )
+    loaded = onboarding_telegram._load_secret_from_1password("TELEGRAM_BOT_TOKEN")
     if loaded:
         os.environ["TELEGRAM_BOT_TOKEN"] = loaded
-        _print_feature_ready("TELEGRAM_BOT_TOKEN")
+        onboarding_telegram._offer_optional_telegram_username_setup()
         _offer_optional_telegram_webhook_setup()
         return
+    print(get_message("onboarding", "telegram_botfather_instructions"))
+    botfather = onboarding_telegram.botfather_link()
+    print(f"Open: {botfather}")
+    qr = onboarding_telegram.render_telegram_qr(botfather)
+    if qr:
+        print(qr)
     print(get_message("onboarding", "telegram_not_configured"))
-    if not prompt_store_secret_in_1password(
+    if not onboarding_telegram.prompt_store_secret_in_1password(
         env_name="TELEGRAM_BOT_TOKEN",
         description="Telegram bot token",
-        doc_hint=TELEGRAM_DOC_HINT,
-        vault_name=VAULT_NAME,
+        doc_hint=onboarding_telegram.TELEGRAM_DOC_HINT,
+        vault_name="CyberneticAgents",
     ):
         return
-    loaded = _load_secret_from_1password(
-        vault_name=VAULT_NAME,
-        item_name="TELEGRAM_BOT_TOKEN",
-        field_label="credential",
-    )
+    loaded = onboarding_telegram._load_secret_from_1password("TELEGRAM_BOT_TOKEN")
     if loaded:
         os.environ["TELEGRAM_BOT_TOKEN"] = loaded
+    onboarding_telegram._offer_optional_telegram_username_setup()
     _offer_optional_telegram_webhook_setup()
 
 
 def _offer_optional_telegram_webhook_setup() -> None:
-    if os.environ.get("TELEGRAM_WEBHOOK_SECRET"):
-        return
-    print(get_message("onboarding", "webhook_mode_optional"))
-    if not prompt_yes_no(get_message("onboarding", "webhook_secret_prompt")):
-        print(get_message("onboarding", "setup_guide_hint", doc_hint=TELEGRAM_DOC_HINT))
-        return
-    prompt_store_secret_in_1password(
-        env_name="TELEGRAM_WEBHOOK_SECRET",
-        description="Telegram webhook secret",
-        doc_hint=TELEGRAM_DOC_HINT,
-        vault_name=VAULT_NAME,
-    )
+    onboarding_telegram._offer_optional_telegram_webhook_setup()
+    if os.environ.get("TELEGRAM_BOT_TOKEN"):
+        _print_feature_ready("TELEGRAM_BOT_TOKEN")
 
 
 def _load_secret_from_1password(

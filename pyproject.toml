@@ -10,7 +10,7 @@ requires-python = ">=3.10"
 dependencies = [
   "autogen-agentchat==0.7.5",
   "autogen-core==0.7.5",
-  "autogen-ext[docker]==0.7.5",
+  "autogen-ext[docker,chromadb]==0.7.5",
   "casbin==1.43.0",
   "casbin_sqlalchemy_adapter==1.4.0",
   "SQLAlchemy==2.0.45",
@@ -28,6 +28,7 @@ dependencies = [
   "keyring>=24.0",
   "pytest-asyncio",
   "requests",
+  "qrcode",
 ]
 
 [project.scripts]
