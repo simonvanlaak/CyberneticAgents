@@ -40,3 +40,10 @@ RuntimeError: SQLite disk I/O error while initializing database at
 - Verify whether concurrent processes are locking the file.
 - Consider switching test DB to `:memory:` or a temp dir to isolate issues.
 - Add explicit logging around `_ensure_db_writable()` and sqlite errors.
+
+## Resolution (Recommended)
+Use per-worker SQLite files for pytest runs to avoid cross-process contention.
+We now derive a unique worker id from `PYTEST_XDIST_WORKER` (e.g. `gw0`)
+and fall back to the current PID when xdist is not active. Test DBs live
+under `.pytest_db/<worker_id>/` (including `skill_permissions.db`), so
+parallel agents and xdist workers never share a single SQLite file.

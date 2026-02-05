@@ -90,6 +90,12 @@ This project follows strict TDD principles:
 python -m pytest tests/ -v
 ```
 
+### Parallel Test Notes
+Pytest runs use a worker-specific SQLite database under
+`.pytest_db/<worker_id>/` to avoid cross-process contention. When xdist is
+enabled, the worker id is derived from `PYTEST_XDIST_WORKER` (e.g. `gw0`),
+and otherwise falls back to the current PID.
+
 ### Run Specific Test File
 ```bash
 python -m pytest tests/rbac/test_enforcer.py -v

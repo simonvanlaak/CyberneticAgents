@@ -11,10 +11,13 @@ from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.models.system import ensure_default_systems_for_team
 from src.cyberagent.db.models.recursion import Recursion
 from src.cyberagent.db.models.team import Team
+from src.cyberagent.testing.pytest_worker import get_pytest_worker_id
 from src.rbac import skill_permissions_enforcer
 
-TEST_DB_PATH = (Path(".pytest_db") / "test.db").resolve()
-TEST_SKILL_DB_PATH = (Path(".pytest_db") / "skill_permissions.db").resolve()
+_WORKER_ID = get_pytest_worker_id(os.environ, os.getpid())
+_TEST_DB_ROOT = (Path(".pytest_db") / _WORKER_ID).resolve()
+TEST_DB_PATH = (_TEST_DB_ROOT / "test.db").resolve()
+TEST_SKILL_DB_PATH = (_TEST_DB_ROOT / "skill_permissions.db").resolve()
 
 
 def pytest_configure() -> None:
