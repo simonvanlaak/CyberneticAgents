@@ -50,28 +50,30 @@ class CliTool:
         Returns:
             Dictionary with {"success": bool, "output": ..., "error": ...}
         """
-        # Check RBAC permission if agent_id provided
-        if agent_id and not self._check_permission(agent_id, tool_name):
+        if skill_name and not agent_id:
             return {
                 "success": False,
-                "error": f"Agent {agent_id} not authorized to use {tool_name}",
+                "error": "CLI tool execution requires agent_id for skill enforcement.",
             }
-        if skill_name:
-            if not agent_id:
+
+        # Check RBAC permission if agent_id provided
+        if agent_id:
+            if not self._check_permission(agent_id, tool_name):
                 return {
                     "success": False,
-                    "error": "Skill permission check requires agent_id.",
+                    "error": f"Agent {agent_id} not authorized to use {tool_name}",
                 }
-            allowed, details = self._check_skill_permission(agent_id, skill_name)
-            if not allowed:
-                response = {
-                    "success": False,
-                    "error": "Skill permission denied.",
-                    "details": details,
-                }
-                if details:
-                    response.update(details)
-                return response
+            if skill_name:
+                allowed, details = self._check_skill_permission(agent_id, skill_name)
+                if not allowed:
+                    response = {
+                        "success": False,
+                        "error": "Skill permission denied.",
+                        "details": details,
+                    }
+                    if details:
+                        response.update(details)
+                    return response
 
         # Inject secrets into the executor environment
         if callable(getattr(type(self.executor), "set_exec_env", None)):

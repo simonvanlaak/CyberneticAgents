@@ -44,8 +44,9 @@ async def test_execute_injects_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
     executor = DummyExecutor()
     tool = CliTool(executor)
+    monkeypatch.setattr(tool, "_check_permission", lambda *_args, **_kwargs: True)
 
-    result = await tool.execute("web_search", query="test")
+    result = await tool.execute("web_search", agent_id="agent-1", query="test")
 
     assert result["success"] is True
     assert executor.exec_env == {}
@@ -62,8 +63,9 @@ async def test_execute_returns_error_on_missing_secret(
 
     executor = DummyExecutor()
     tool = CliTool(executor)
+    monkeypatch.setattr(tool, "_check_permission", lambda *_args, **_kwargs: True)
 
-    result = await tool.execute("web_search", query="test")
+    result = await tool.execute("web_search", agent_id="agent-1", query="test")
 
     assert result["success"] is False
     assert "Missing required secrets for tool" in result["error"]
@@ -76,9 +78,11 @@ async def test_execute_requires_token_env(monkeypatch: pytest.MonkeyPatch) -> No
 
     executor = DummyExecutor()
     tool = CliTool(executor)
+    monkeypatch.setattr(tool, "_check_permission", lambda *_args, **_kwargs: True)
 
     result = await tool.execute(
         "git_readonly_sync",
+        agent_id="agent-1",
         token_env="GIT_TOKEN",
         repo="https://example.com/repo.git",
         dest="repo",
@@ -95,9 +99,11 @@ async def test_execute_accepts_token_env(monkeypatch: pytest.MonkeyPatch) -> Non
 
     executor = DummyExecutor()
     tool = CliTool(executor)
+    monkeypatch.setattr(tool, "_check_permission", lambda *_args, **_kwargs: True)
 
     result = await tool.execute(
         "git_readonly_sync",
+        agent_id="agent-1",
         token_env="GIT_TOKEN",
         repo="https://example.com/repo.git",
         dest="repo",
@@ -122,12 +128,24 @@ async def test_execute_returns_error_on_rbac_denied(
 
 
 @pytest.mark.asyncio
+async def test_execute_requires_agent_id_for_skill() -> None:
+    executor = DummyExecutor()
+    tool = CliTool(executor)
+
+    result = await tool.execute("unknown_tool", skill_name="unknown-skill")
+
+    assert result["success"] is False
+    assert "agent_id" in result["error"]
+
+
+@pytest.mark.asyncio
 async def test_execute_without_env_injection(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("BRAVE_API_KEY", "brave")
     monkeypatch.setenv("OP_SERVICE_ACCOUNT_TOKEN", "token")
 
     tool = CliTool(NoEnvExecutor())
-    result = await tool.execute("web_search", query="test")
+    monkeypatch.setattr(tool, "_check_permission", lambda *_args, **_kwargs: True)
+    result = await tool.execute("web_search", agent_id="agent-1", query="test")
 
     assert result["success"] is True
 

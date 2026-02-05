@@ -29,7 +29,9 @@ from src.cyberagent.cli.onboarding_memory import (
     store_onboarding_memory,
     store_onboarding_memory_entry,
 )
+from src.cyberagent.db.models.system import get_system_by_type
 from src.cyberagent.memory.models import MemoryLayer, MemoryPriority, MemorySource
+from src.enums import SystemType
 
 from src.cyberagent.tools.cli_executor.cli_tool import CliTool
 from src.cyberagent.tools.cli_executor.factory import create_cli_executor
@@ -37,10 +39,10 @@ from src.cyberagent.tools.cli_executor.factory import create_cli_executor
 logger = logging.getLogger(__name__)
 
 
-def run_discovery_onboarding(args: object) -> Path | None:
+def run_discovery_onboarding(args: object, team_id: int | None = None) -> Path | None:
     return _run_discovery_pipeline(
         args,
-        team_id=None,
+        team_id=team_id,
         allow_prompt=True,
         enqueue_prompt=True,
     )
@@ -77,6 +79,9 @@ def _run_discovery_pipeline(
     token_username = str(
         getattr(args, "token_username", DEFAULT_TOKEN_USERNAME)
     ).strip()
+    agent_id = _resolve_agent_id(team_id)
+    if agent_id is None:
+        logger.warning("Unable to resolve agent_id for onboarding discovery.")
 
     repo_sync_allowed = True
     if not _ensure_onboarding_token(token_env):
@@ -104,6 +109,7 @@ def _run_discovery_pipeline(
     profile_summary = _fetch_profile_links(
         cli_tool,
         profile_links,
+        agent_id=agent_id,
         on_entry=(
             _build_profile_link_entry_writer(team_id) if team_id is not None else None
         ),
@@ -124,6 +130,7 @@ def _run_discovery_pipeline(
         branch = _resolve_default_branch(repo_url, token_env, token_username)
         repo_path, success = _sync_obsidian_repo(
             cli_tool=cli_tool,
+            agent_id=agent_id,
             repo_url=repo_url,
             branch=branch,
             token_env=token_env,
@@ -262,6 +269,7 @@ def _repo_name_from_url(repo_url: str) -> str:
 def _sync_obsidian_repo(
     *,
     cli_tool: CliTool,
+    agent_id: str | None,
     repo_url: str,
     branch: str,
     token_env: str,
@@ -274,6 +282,7 @@ def _sync_obsidian_repo(
     result = _run_cli_tool(
         cli_tool,
         "git-readonly-sync",
+        agent_id=agent_id,
         repo=repo_url,
         dest=str(dest),
         branch=branch,
@@ -326,13 +335,14 @@ def _summarize_markdown_repo(repo_path: Path) -> str:
 def _fetch_profile_links(
     cli_tool: CliTool,
     links: list[str],
+    agent_id: str | None,
     on_entry: Callable[[str, str], None] | None = None,
 ) -> str:
     if not links:
         return "No profile links provided."
     sections = []
     for link in links:
-        result = _run_cli_tool(cli_tool, "web-fetch", url=link)
+        result = _run_cli_tool(cli_tool, "web-fetch", agent_id=agent_id, url=link)
         if not result.get("success"):
             sections.append(f"## {link}\nFailed to fetch.")
             continue
@@ -405,6 +415,15 @@ def _prompt_continue_without_pkm(reason: str) -> bool:
     return response in {"y", "yes"}
 
 
+def _resolve_agent_id(team_id: int | None) -> str | None:
+    if team_id is None:
+        return None
+    system4 = get_system_by_type(team_id, SystemType.INTELLIGENCE)
+    if system4 is None:
+        return None
+    return system4.agent_id_str
+
+
 def build_onboarding_prompt(summary_path: Path, summary_text: str) -> str:
     return "\n".join(
         [
@@ -469,6 +488,7 @@ def _write_onboarding_summary(summary_text: str) -> Path | None:
 def _run_cli_tool(
     cli_tool: Any,
     tool_name: str,
+    agent_id: str | None,
     timeout_seconds: int | None = None,
     **kwargs: object,
 ) -> dict[str, object]:
@@ -488,7 +508,10 @@ def _run_cli_tool(
         try:
             try:
                 execute_task = cli_tool.execute(
-                    tool_name, timeout_seconds=timeout_seconds, **kwargs
+                    tool_name,
+                    agent_id=agent_id,
+                    timeout_seconds=timeout_seconds,
+                    **kwargs,
                 )
                 if timeout_seconds is not None:
                     return await asyncio.wait_for(execute_task, timeout=timeout_seconds)

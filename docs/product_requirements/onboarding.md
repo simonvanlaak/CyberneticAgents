@@ -54,6 +54,11 @@ Added research results in docs/research_synthesys/AI-Powered User Discovery: A F
 - Required: private GitHub repo containing Obsidian vault (PAT via 1Password).
 - Optional: profile links for web research (minimum 1 link required if web research is enabled).
 
+## Open Questions (Notion)
+- If `NOTION_API_KEY` is available, how should we include Notion content in onboarding?
+  - Options: explicit page/database selection, workspace-wide search, or a fixed allowlist.
+  - What is the acceptable sync cadence and size limit for Notion ingestion?
+
 ## Onboarding Outputs (Phase 1)
 - Onboarding SOP is loaded as the default root purpose and root initiative when the root team
   is created.
