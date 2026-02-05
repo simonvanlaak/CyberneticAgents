@@ -23,12 +23,17 @@ def test_normalize_log_levels_rejects_unknown() -> None:
 
 
 def test_resolve_log_levels_invalid_returns_none() -> None:
-    assert log_filters.resolve_log_levels(["warn"], errors_only=False) is None
+    assert log_filters.resolve_log_levels(["warn"], default_to_errors=False) is None
 
 
-def test_resolve_log_levels_adds_errors() -> None:
-    resolved = log_filters.resolve_log_levels(["info"], errors_only=True)
-    assert resolved == {"INFO", "ERROR", "CRITICAL"}
+def test_resolve_log_levels_defaults_to_errors_only() -> None:
+    resolved = log_filters.resolve_log_levels(None, default_to_errors=True)
+    assert resolved == {"ERROR", "CRITICAL"}
+
+
+def test_resolve_log_levels_keeps_requested_levels() -> None:
+    resolved = log_filters.resolve_log_levels(["info"], default_to_errors=False)
+    assert resolved == {"INFO"}
 
 
 def test_filter_logs_rejects_unknown_level_lines() -> None:

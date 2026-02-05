@@ -406,7 +406,7 @@ def test_filter_logs_with_levels() -> None:
         "2025-01-01 00:00:01.000 WARNING [x] warn",
         "2025-01-01 00:00:02.000 ERROR [x] boom",
     ]
-    levels = log_filters.resolve_log_levels(["error,warning"], False)
+    levels = log_filters.resolve_log_levels(["error,warning"], default_to_errors=False)
     assert levels == {"ERROR", "WARNING"}
     filtered = log_filters.filter_logs(lines, None, 10, levels)
     assert filtered == [
@@ -415,8 +415,8 @@ def test_filter_logs_with_levels() -> None:
     ]
 
 
-def test_resolve_log_levels_errors_only() -> None:
-    levels = log_filters.resolve_log_levels(None, True)
+def test_resolve_log_levels_defaults_to_errors() -> None:
+    levels = log_filters.resolve_log_levels(None, default_to_errors=True)
     assert levels == {"ERROR", "CRITICAL"}
 
 
@@ -426,14 +426,17 @@ def test_handle_logs_without_level_shows_output(
     log_dir = tmp_path / "logs"
     log_dir.mkdir()
     log_file = log_dir / "runtime_20250101_000000.log"
-    log_file.write_text("2025-01-01 00:00:00.000 INFO [x] ok\n", encoding="utf-8")
+    log_file.write_text(
+        "2025-01-01 00:00:00.000 INFO [x] ok\n"
+        "2025-01-01 00:00:01.000 ERROR [x] boom\n",
+        encoding="utf-8",
+    )
 
     monkeypatch.setattr(cyberagent, "LOGS_DIR", log_dir)
 
     args = argparse.Namespace(
         filter=None,
         level=None,
-        errors=False,
         follow=False,
         limit=200,
     )
@@ -441,7 +444,8 @@ def test_handle_logs_without_level_shows_output(
     assert cyberagent._handle_logs(args) == 0
     output = capsys.readouterr().out
     assert "Invalid log level" not in output
-    assert "INFO" in output
+    assert "ERROR" in output
+    assert "INFO" not in output
 
 
 def test_handle_logs_invalid_level_errors(
@@ -457,7 +461,6 @@ def test_handle_logs_invalid_level_errors(
     args = argparse.Namespace(
         filter=None,
         level=["bad"],
-        errors=False,
         follow=False,
         limit=200,
     )

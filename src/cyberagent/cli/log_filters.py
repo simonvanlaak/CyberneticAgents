@@ -16,18 +16,17 @@ def filter_logs(
 
 
 def resolve_log_levels(
-    level_args: Sequence[str] | None, errors_only: bool
+    level_args: Sequence[str] | None, default_to_errors: bool
 ) -> set[str] | None:
     try:
         levels = _normalize_log_levels(level_args)
     except ValueError:
         return None
-    if errors_only:
-        error_levels = {"ERROR", "CRITICAL"}
-        if levels is None:
-            return error_levels
-        return levels | error_levels
-    return levels
+    if levels is not None:
+        return levels
+    if default_to_errors:
+        return {"ERROR", "CRITICAL"}
+    return None
 
 
 def extract_log_level(line: str) -> str | None:

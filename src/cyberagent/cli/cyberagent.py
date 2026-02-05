@@ -208,11 +208,6 @@ def build_parser() -> argparse.ArgumentParser:
         help="Filter by log level (repeatable or comma-separated).",
     )
     logs_parser.add_argument(
-        "--errors",
-        action="store_true",
-        help="Shortcut for --level ERROR,CRITICAL.",
-    )
-    logs_parser.add_argument(
         "--follow", "-f", action="store_true", help="Tail the logs."
     )
     logs_parser.add_argument(
@@ -606,7 +601,9 @@ def _handle_logs(args: argparse.Namespace) -> int:
         return 0
     target = log_files[-1]
     lines = target.read_text(encoding="utf-8", errors="ignore").splitlines()
-    levels = log_filters.resolve_log_levels(args.level, args.errors)
+    levels = log_filters.resolve_log_levels(
+        args.level, default_to_errors=args.level is None
+    )
     if levels is None and args.level:
         print(get_message("cyberagent", "invalid_log_level"))
         return 2
