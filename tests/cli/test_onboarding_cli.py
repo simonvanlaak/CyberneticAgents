@@ -7,6 +7,7 @@ import pytest
 
 from src.cyberagent.cli import onboarding as onboarding_cli
 from src.cyberagent.cli import onboarding_docker
+from src.cyberagent.cli import onboarding_telegram
 from src.cyberagent.cli import onboarding_vault
 from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.models.procedure import Procedure
@@ -22,7 +23,6 @@ from src.cyberagent.services import systems as systems_service
 from src.cyberagent.services import teams as teams_service
 from src.cyberagent.tools.cli_executor.skill_loader import SkillDefinition
 from src.cyberagent.cli import onboarding_memory
-from src.cyberagent.memory.crud import MemoryActorContext, MemoryCreateRequest
 from src.cyberagent.memory.models import MemoryScope
 from src.enums import ProcedureStatus
 from src.enums import SystemType
@@ -276,14 +276,18 @@ def test_store_onboarding_memory_writes_global_entry(
 ) -> None:
     summary_path = tmp_path / "summary.md"
     summary_path.write_text("User onboarding summary.", encoding="utf-8")
-    created: list[tuple[MemoryActorContext, list[MemoryCreateRequest]]] = []
+    from src.cyberagent.tools.memory_crud import MemoryCrudArgs, MemoryCrudResponse
 
-    class _FakeService:
-        def create_entries(
-            self, actor: MemoryActorContext, requests: list[MemoryCreateRequest]
-        ) -> list[MemoryCreateRequest]:
-            created.append((actor, requests))
-            return []
+    recorded: dict[str, object] = {}
+
+    class _FakeTool:
+        async def run(  # type: ignore[no-untyped-def]
+            self, args: MemoryCrudArgs, _token
+        ) -> MemoryCrudResponse:
+            recorded["args"] = args
+            return MemoryCrudResponse(
+                items=[], next_cursor=None, has_more=False, errors=[]
+            )
 
     fake_system = System(
         id=10,
@@ -295,20 +299,16 @@ def test_store_onboarding_memory_writes_global_entry(
 
     monkeypatch = pytest.MonkeyPatch()
     monkeypatch.setattr(onboarding_memory, "get_system_by_type", lambda *_: fake_system)
-    monkeypatch.setattr(
-        onboarding_memory, "_build_memory_service", lambda: _FakeService()
-    )
+    monkeypatch.setattr(onboarding_memory, "_build_memory_tool", lambda *_: _FakeTool())
     try:
         onboarding_memory.store_onboarding_memory(1, summary_path)
     finally:
         monkeypatch.undo()
 
-    assert created
-    _, requests = created[0]
-    assert len(requests) == 1
-    request = requests[0]
-    assert request.scope == MemoryScope.GLOBAL
-    assert request.namespace == "user"
+    args = recorded["args"]
+    assert isinstance(args, MemoryCrudArgs)
+    assert args.scope == MemoryScope.GLOBAL.value
+    assert args.namespace == "user"
 
 
 def test_handle_onboarding_seeds_default_sops(
@@ -649,8 +649,6 @@ def test_prompt_store_secret_creates_vault_and_item(
     monkeypatch.setattr(onboarding_vault.shutil, "which", lambda *_: "/usr/bin/op")
     monkeypatch.setattr(onboarding_vault, "has_onepassword_auth", lambda: True)
     monkeypatch.setattr(onboarding_vault, "prompt_yes_no", lambda *_: True)
-    monkeypatch.setattr(onboarding_cli, "prompt_yes_no", lambda *_: True)
-    monkeypatch.setattr(onboarding_cli, "prompt_yes_no", lambda *_: True)
     monkeypatch.setattr(onboarding_vault.getpass, "getpass", lambda *_: "secret")
     monkeypatch.setattr(onboarding_vault.subprocess, "run", fake_run)
 
@@ -673,17 +671,21 @@ def test_optional_telegram_setup_prompts_when_missing(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
-    monkeypatch.setattr(onboarding_cli.sys.stdin, "isatty", lambda: True)
-    monkeypatch.setattr(onboarding_cli, "_load_secret_from_1password", lambda **_: None)
+    monkeypatch.delenv("TELEGRAM_BOT_USERNAME", raising=False)
+    monkeypatch.delenv("TELEGRAM_WEBHOOK_SECRET", raising=False)
+    monkeypatch.setattr(onboarding_telegram.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(
+        onboarding_telegram, "_load_secret_from_1password", lambda *_: None
+    )
+    monkeypatch.setattr(onboarding_telegram, "render_telegram_qr", lambda *_: "QR")
     monkeypatch.setattr(onboarding_vault.shutil, "which", lambda *_: "/usr/bin/op")
     monkeypatch.setattr(onboarding_vault, "has_onepassword_auth", lambda: True)
     monkeypatch.setattr(
         onboarding_vault, "check_onepassword_write_access", lambda *_: True
     )
     monkeypatch.setattr(onboarding_vault, "prompt_yes_no", lambda *_: True)
-    monkeypatch.setattr(onboarding_cli, "prompt_yes_no", lambda *_: True)
+    monkeypatch.setattr(onboarding_telegram, "prompt_yes_no", lambda *_: True)
     monkeypatch.setattr(onboarding_vault.getpass, "getpass", lambda *_: "secret")
-
     stored: list[dict[str, str]] = []
 
     def fake_create(vault: str, title: str, secret: str) -> bool:
@@ -693,11 +695,13 @@ def test_optional_telegram_setup_prompts_when_missing(
     monkeypatch.setattr(onboarding_vault, "create_onepassword_item", fake_create)
     monkeypatch.setattr(onboarding_vault, "ensure_onepassword_vault", lambda *_: True)
 
-    onboarding_cli._offer_optional_telegram_setup()
+    onboarding_telegram.offer_optional_telegram_setup()
     captured = capsys.readouterr().out
-    assert "Telegram" in captured
+    assert "Telegram" in captured and "t.me/BotFather" in captured
+    assert "QR" in captured
     titles = {entry["title"] for entry in stored}
     assert "TELEGRAM_BOT_TOKEN" in titles
+    assert "TELEGRAM_BOT_USERNAME" in titles
     assert "TELEGRAM_WEBHOOK_SECRET" in titles
 
 
@@ -705,9 +709,11 @@ def test_optional_telegram_setup_skips_prompt_when_found_in_1password(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     monkeypatch.delenv("TELEGRAM_BOT_TOKEN", raising=False)
-    monkeypatch.setattr(onboarding_cli.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(onboarding_telegram.sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr(
-        onboarding_cli, "_load_secret_from_1password", lambda *_args, **_kwargs: "token"
+        onboarding_telegram,
+        "_load_secret_from_1password",
+        lambda *_args, **_kwargs: "token",
     )
 
     webhook_called: list[bool] = []
@@ -721,13 +727,14 @@ def test_optional_telegram_setup_skips_prompt_when_found_in_1password(
         )
 
     monkeypatch.setattr(
-        onboarding_cli, "_offer_optional_telegram_webhook_setup", _mark_webhook_called
+        onboarding_telegram,
+        "_offer_optional_telegram_webhook_setup",
+        _mark_webhook_called,
     )
-    monkeypatch.setattr(onboarding_cli, "prompt_store_secret_in_1password", _fail_store)
-
-    onboarding_cli._offer_optional_telegram_setup()
-    captured = capsys.readouterr().out
-    assert "✓ Telegram messaging is now available." in captured
+    monkeypatch.setattr(
+        onboarding_telegram, "prompt_store_secret_in_1password", _fail_store
+    )
+    onboarding_telegram.offer_optional_telegram_setup()
     assert webhook_called
 
 
