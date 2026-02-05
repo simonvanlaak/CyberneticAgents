@@ -42,7 +42,7 @@ output_schema:
 Use this skill to access the Notion API for read/write operations.
 
 Notes:
-1. Requires `NOTION_API_KEY` stored in 1Password.
+1. Requires `NOTION_API_KEY` stored in 1Password (do not put it in `.env`).
 2. Default Notion API version is `2025-09-03` unless overridden.
 3. The CLI outputs JSON with `status_code`, `ok`, and `response`.
 
