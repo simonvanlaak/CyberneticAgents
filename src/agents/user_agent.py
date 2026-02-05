@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import os
 from dataclasses import dataclass
 
 from autogen_agentchat.messages import TextMessage
@@ -19,6 +20,8 @@ from src.cyberagent.channels.telegram import session_store
 from src.cyberagent.channels.telegram.outbound import (
     send_message as send_telegram_message,
 )
+from src.cyberagent.core.state import get_last_team_id, mark_team_active
+from src.cyberagent.services import routing as routing_service
 from src.cyberagent.secrets import get_secret
 
 logger = logging.getLogger(__name__)
@@ -81,19 +84,24 @@ class UserAgent(RoutedAgent):
                 f"Answer: {resolved.answer}"
             )
         message.source = self.id.key
-        topic_id = TopicId(f"{System4.__name__}:", "root")
-        logger.debug(
-            "%s -> %s -> %s/root",
-            self.id.__str__(),
-            message.__class__.__name__,
-            System4.__name__,
-        )
         if getattr(self, "_runtime", None) is None:
             return
-        await self.publish_message(
-            message,
-            topic_id=topic_id,
+        team_id = self._resolve_team_id()
+        routing_metadata = dict(metadata) if isinstance(metadata, dict) else {}
+        routing_metadata.setdefault("channel", channel)
+        routing_metadata.setdefault("session_id", session_id)
+        if team_id is None:
+            await self._publish_to_agent(
+                message, AgentId(type=System4.__name__, key="root")
+            )
+            return
+        targets = routing_service.resolve_message_targets(
+            team_id=team_id,
+            channel=channel,
+            metadata=routing_metadata,
         )
+        for target in targets:
+            await self._publish_to_agent(message, AgentId.from_str(target))
 
     @message_handler
     async def handle_assistant_text_message(
@@ -225,3 +233,32 @@ class UserAgent(RoutedAgent):
             await asyncio.to_thread(send_telegram_message, chat_id, text)
         except Exception:  # pragma: no cover - safety net
             logger.exception("Failed to deliver Telegram prompt to chat %s", chat_id)
+
+    def _resolve_team_id(self) -> int | None:
+        team_id_env = os.environ.get("CYBERAGENT_ACTIVE_TEAM_ID")
+        if team_id_env:
+            try:
+                team_id = int(team_id_env)
+            except ValueError:
+                logger.warning("Invalid CYBERAGENT_ACTIVE_TEAM_ID '%s'.", team_id_env)
+                return None
+            mark_team_active(team_id)
+            return team_id
+        team_id = get_last_team_id()
+        if team_id is not None:
+            mark_team_active(team_id)
+        return team_id
+
+    async def _publish_to_agent(self, message: UserMessage, agent_id: AgentId) -> None:
+        topic_type = f"{agent_id.type}:"
+        topic_source = agent_id.key.replace("/", "_")
+        logger.debug(
+            "%s -> %s -> %s/%s",
+            self.id.__str__(),
+            message.__class__.__name__,
+            agent_id.type,
+            topic_source,
+        )
+        await self.publish_message(
+            message=message, topic_id=TopicId(topic_type, topic_source)
+        )

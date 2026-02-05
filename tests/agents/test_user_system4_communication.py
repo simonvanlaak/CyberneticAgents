@@ -19,6 +19,10 @@ from src.cyberagent.channels.inbox import (
 )
 from src.cyberagent.channels.telegram import session_store
 from src.cli_session import enqueue_pending_question, get_pending_question
+from src.cyberagent.core.state import get_last_team_id
+from src.cyberagent.services import routing as routing_service
+from src.cyberagent.services import systems as systems_service
+from src.enums import SystemType
 
 
 class TestUserAgent:
@@ -381,7 +385,7 @@ async def test_user_agent_includes_question_context_in_reply():
     assert user_agent.publish_message.await_count == 1
     await_args = user_agent.publish_message.await_args
     assert await_args is not None
-    published_message = await_args.args[0]
+    published_message = await_args.kwargs["message"]
     assert "What outcome do you want?" in published_message.content
     assert "Build a CLI-first app." in published_message.content
     entries = list_inbox_entries(kind="user_prompt")
@@ -447,7 +451,7 @@ async def test_user_agent_does_not_resolve_cross_channel_question() -> None:
     assert pending.content == "Telegram-only question?"
     await_args = user_agent.publish_message.await_args
     assert await_args is not None
-    published_message = await_args.args[0]
+    published_message = await_args.kwargs["message"]
     assert "Telegram-only question?" not in published_message.content
 
 
@@ -532,3 +536,45 @@ async def test_user_agent_uses_cli_defaults_without_channel_metadata() -> None:
     entries = list_inbox_entries(kind="system_question")
     assert len(entries) == 1
     assert entries[0].channel == DEFAULT_CHANNEL
+
+
+@pytest.mark.asyncio
+async def test_user_agent_routes_message_to_configured_system() -> None:
+    user_agent = UserAgent("test_user")
+    user_agent.publish_message = AsyncMock()
+    setattr(user_agent, "_runtime", cast(AgentRuntime, object()))
+    team_id = get_last_team_id()
+    assert team_id is not None
+    systems1 = systems_service.get_systems_by_type(team_id, SystemType.OPERATION)
+    assert systems1
+    target = systems1[0]
+    routing_service.create_routing_rule(
+        team_id=team_id,
+        name="telegram route",
+        channel="telegram",
+        filters={"telegram_user_id": "123"},
+        targets=[{"system_id": target.id}],
+        priority=5,
+    )
+    ctx = MessageContext(
+        sender=AgentId(type="UserAgent", key="root"),
+        topic_id=TopicId(type="UserAgent", source="root"),
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="test-message",
+    )
+    message = UserMessage(content="hello", source="User")
+    message.metadata = {
+        "channel": "telegram",
+        "session_id": "telegram:chat-1:user-123",
+        "telegram_user_id": "123",
+    }
+
+    await user_agent.handle_user_message(message=message, ctx=ctx)  # type: ignore[call-arg]
+
+    assert user_agent.publish_message.await_count == 1
+    call = user_agent.publish_message.await_args
+    assert call is not None
+    topic_id = call.kwargs["topic_id"]
+    assert topic_id.type == "System1:"
+    assert topic_id.source == "root"
