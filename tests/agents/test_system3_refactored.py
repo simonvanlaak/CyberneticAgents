@@ -218,6 +218,62 @@ class TestSystem3RefactoredImplementation:
                 system3.run.return_value, "assign_task"
             )
 
+    @pytest.mark.asyncio
+    async def test_handle_initiative_assign_message_skips_when_tasks_exist(self):
+        """Skip task generation when the initiative already has tasks."""
+        system3 = System3("System3/controller1")
+
+        initiative_message = InitiativeAssignMessage(
+            initiative_id=1, source="System4/strategy1", content="Start initiative 1."
+        )
+
+        from autogen_core import CancellationToken
+
+        context = MessageContext(
+            sender=AgentId.from_str("System4/strategy1"),
+            topic_id=None,
+            is_rpc=False,
+            cancellation_token=CancellationToken(),
+            message_id="test_msg_2",
+        )
+
+        class DummyInitiative:
+            def __init__(self, initiative_id: int):
+                self.id = initiative_id
+                self.status = ""
+                self.updated = False
+
+            def set_status(self, status):  # noqa: ANN001
+                self.status = str(status)
+
+            def update(self):
+                self.updated = True
+
+        with (
+            patch("src.agents.system3.init_db", lambda: None),
+            patch(
+                "src.cyberagent.services.initiatives._get_initiative"
+            ) as mock_get_initiative,
+            patch(
+                "src.cyberagent.services.tasks.has_tasks_for_initiative"
+            ) as mock_has_tasks,
+        ):
+            mock_get_initiative.return_value = DummyInitiative(1)
+            mock_has_tasks.return_value = True
+
+            system3.run = AsyncMock()
+            system3.assign_task = AsyncMock()
+
+            await system3.handle_initiative_assign_message(
+                message=initiative_message,
+                ctx=context,
+            )  # type: ignore[call-arg]
+
+            mock_get_initiative.assert_called_once_with(1)
+            mock_has_tasks.assert_called_once_with(1)
+            system3.run.assert_not_called()
+            system3.assign_task.assert_not_called()
+
 
 class TestSystem3MessageCompatibility:
     """Test message compatibility with the refactored implementation."""

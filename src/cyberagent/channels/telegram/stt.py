@@ -41,7 +41,7 @@ class TranscriptionResult:
 
 
 def load_config() -> TelegramSTTConfig:
-    provider = os.environ.get("TELEGRAM_STT_PROVIDER", "openai").lower()
+    provider = _resolve_provider()
     model = os.environ.get("TELEGRAM_STT_MODEL") or DEFAULT_MODELS.get(
         provider, "whisper-1"
     )
@@ -63,6 +63,21 @@ def load_config() -> TelegramSTTConfig:
         max_duration_seconds=max_duration_seconds,
         show_transcription=str(show_transcription).lower() not in {"0", "false", "no"},
     )
+
+
+def _resolve_provider() -> str:
+    raw_provider = os.environ.get("TELEGRAM_STT_PROVIDER")
+    if raw_provider:
+        return raw_provider.lower()
+    groq_key = get_secret("GROQ_API_KEY")
+    openai_key = get_secret("OPENAI_API_KEY")
+    if groq_key and not openai_key:
+        return "groq"
+    if openai_key:
+        return "openai"
+    if groq_key:
+        return "groq"
+    return "openai"
 
 
 def get_cache_dir() -> Path:
@@ -158,6 +173,21 @@ def _require_key(provider: str) -> str:
     if not api_key:
         raise RuntimeError(f"Missing required {env_var} environment variable.")
     return api_key
+
+
+def describe_transcription_error(exc: Exception) -> str:
+    message = str(exc)
+    if "Missing required OPENAI_API_KEY" in message:
+        return (
+            "Transcription is not configured. Set OPENAI_API_KEY or set "
+            "TELEGRAM_STT_PROVIDER=groq with GROQ_API_KEY."
+        )
+    if "Missing required GROQ_API_KEY" in message:
+        return (
+            "Transcription is not configured. Set GROQ_API_KEY or set "
+            "TELEGRAM_STT_PROVIDER=openai with OPENAI_API_KEY."
+        )
+    return "Could not transcribe voice message."
 
 
 def _parse_payload(response: requests.Response) -> dict[str, object]:

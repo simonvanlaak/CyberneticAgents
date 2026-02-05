@@ -202,12 +202,12 @@ class TelegramPoller:
                         self._stt_config,
                         self._stt_cache_dir,
                     )
-                except Exception:
+                except Exception as exc:
                     logger.exception("Failed to transcribe Telegram voice message.")
                     await asyncio.to_thread(
                         send_telegram_message,
                         voice.chat_id,
-                        "Could not transcribe voice message.",
+                        telegram_stt.describe_transcription_error(exc),
                     )
                     self._offset = voice.update_id + 1
                     continue

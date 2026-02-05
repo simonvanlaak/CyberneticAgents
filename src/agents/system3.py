@@ -82,6 +82,8 @@ class System3(SystemBase):
     ) -> None:
         init_db()
         initiative = initiative_service.start_initiative(message.initiative_id)
+        if task_service.has_tasks_for_initiative(message.initiative_id):
+            return
 
         initiative_payload = {
             "id": getattr(initiative, "id", None),

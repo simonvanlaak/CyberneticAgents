@@ -1,5 +1,6 @@
 """Task orchestration helpers."""
 
+from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.models.task import Task, get_task as _get_task
 from src.enums import Status
 
@@ -80,6 +81,23 @@ def create_task(
     )
     task.add()
     return task
+
+
+def has_tasks_for_initiative(initiative_id: int) -> bool:
+    """
+    Return True when at least one task exists for an initiative.
+
+    Args:
+        initiative_id: Initiative identifier.
+    """
+    session = next(get_db())
+    try:
+        return (
+            session.query(Task).filter(Task.initiative_id == initiative_id).first()
+            is not None
+        )
+    finally:
+        session.close()
 
 
 def assign_task(task: Task, assignee_agent_id_str: str) -> None:

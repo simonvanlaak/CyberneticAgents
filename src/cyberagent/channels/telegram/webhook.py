@@ -264,10 +264,10 @@ class TelegramWebhookServer:
                 self._stt_config,
                 self._stt_cache_dir,
             )
-        except Exception:
+        except Exception as exc:
             logger.exception("Failed to transcribe Telegram voice message.")
             self._client.send_message(
-                inbound.chat_id, "Could not transcribe voice message."
+                inbound.chat_id, telegram_stt.describe_transcription_error(exc)
             )
             return
         if self._stt_config.show_transcription:
