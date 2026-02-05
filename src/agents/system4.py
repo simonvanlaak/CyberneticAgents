@@ -188,7 +188,12 @@ class System4(SystemBase):
             f"If you want to inform the user about progress or status, use the {InformUserTool.__name__}.",
         ]
 
-        await self.run([message], ctx, message_specific_prompts)
+        await self.run(
+            [message],
+            ctx,
+            message_specific_prompts,
+            tool_choice_required=True,
+        )
 
     def create_procedure_tool(
         self,

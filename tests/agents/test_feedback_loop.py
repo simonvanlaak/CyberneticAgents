@@ -92,7 +92,11 @@ async def test_product_discovery_feedback_loop_creates_tasks(
     system1.team_id = team_id
 
     async def system4_run(
-        chat_messages, ctx, message_specific_prompts=None, output_content_type=None
+        chat_messages,
+        ctx,
+        message_specific_prompts=None,
+        output_content_type=None,
+        tool_choice_required: bool = False,
     ):
         if output_content_type is StrategyCreateResponse:
             response = StrategyCreateResponse(
