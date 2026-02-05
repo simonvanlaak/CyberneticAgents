@@ -47,6 +47,9 @@ def run_discovery_onboarding(args: object) -> Path | None:
 
 
 def start_discovery_background(args: object, team_id: int) -> None:
+    if os.environ.get("CYBERAGENT_DISABLE_BACKGROUND_DISCOVERY"):
+        logger.info("Background discovery disabled via env override.")
+        return
     thread = threading.Thread(
         target=_run_discovery_pipeline,
         kwargs={

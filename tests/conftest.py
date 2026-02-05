@@ -3,6 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 import os
 from pathlib import Path
+import threading
+from typing import Generator
 
 import pytest
 
@@ -12,6 +14,7 @@ from src.cyberagent.db.models.system import ensure_default_systems_for_team
 from src.cyberagent.db.models.recursion import Recursion
 from src.cyberagent.db.models.team import Team
 from src.cyberagent.testing.pytest_worker import get_pytest_worker_id
+from src.cyberagent.testing.thread_exceptions import ThreadExceptionTracker
 from src.rbac import skill_permissions_enforcer
 
 _WORKER_ID = get_pytest_worker_id(os.environ, os.getpid())
@@ -20,7 +23,9 @@ TEST_DB_PATH = (_TEST_DB_ROOT / "test.db").resolve()
 TEST_SKILL_DB_PATH = (_TEST_DB_ROOT / "skill_permissions.db").resolve()
 
 
-def pytest_configure() -> None:
+@pytest.fixture(scope="session", autouse=True)
+def _initialize_test_db() -> None:
+    os.environ["CYBERAGENT_DISABLE_BACKGROUND_DISCOVERY"] = "1"
     tmp_root = TEST_DB_PATH.parent
     tmp_root.mkdir(parents=True, exist_ok=True)
     db_path = TEST_DB_PATH
@@ -45,6 +50,18 @@ def pytest_configure() -> None:
         ensure_default_systems_for_team(team.id)
     finally:
         session.close()
+
+
+@pytest.fixture(autouse=True)
+def _thread_exception_guard() -> Generator[None, None, None]:
+    tracker = ThreadExceptionTracker()
+    original_hook = threading.excepthook
+    threading.excepthook = tracker.handle
+    try:
+        yield
+    finally:
+        threading.excepthook = original_hook
+        tracker.raise_if_any()
 
 
 @pytest.fixture(autouse=True)

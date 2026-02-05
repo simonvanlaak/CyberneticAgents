@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+import threading
 
 from typing import Any, cast
 import pytest
@@ -205,6 +206,46 @@ def test_run_cli_tool_starts_and_stops_executor() -> None:
     assert result["success"] is True
     assert cli_tool.executor.started is True
     assert cli_tool.executor.stopped is True
+
+
+def test_start_discovery_background_skips_when_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started: dict[str, bool] = {"value": False}
+
+    class _FakeThread:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def start(self) -> None:
+            started["value"] = True
+
+    monkeypatch.setenv("CYBERAGENT_DISABLE_BACKGROUND_DISCOVERY", "1")
+    monkeypatch.setattr(threading, "Thread", _FakeThread)
+
+    onboarding_discovery.start_discovery_background(_default_args(), team_id=1)
+
+    assert started["value"] is False
+
+
+def test_start_discovery_background_starts_thread(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    started: dict[str, bool] = {"value": False}
+
+    class _FakeThread:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            pass
+
+        def start(self) -> None:
+            started["value"] = True
+
+    monkeypatch.delenv("CYBERAGENT_DISABLE_BACKGROUND_DISCOVERY", raising=False)
+    monkeypatch.setattr(threading, "Thread", _FakeThread)
+
+    onboarding_discovery.start_discovery_background(_default_args(), team_id=1)
+
+    assert started["value"] is True
 
 
 def test_prompt_continue_without_pkm_handles_eof(
