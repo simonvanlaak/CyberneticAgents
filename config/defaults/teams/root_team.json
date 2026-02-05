@@ -5,6 +5,17 @@
     "procedures": ["First Run Discovery"],
     "auto_execute_procedure": "First Run Discovery",
     "allowed_skills": ["speech-to-text"],
+    "routing_rules": [
+        {
+            "name": "Default DLQ",
+            "channel": "*",
+            "filters": {},
+            "priority": 0,
+            "targets": [
+                {"system_id": "System4/root"}
+            ]
+        }
+    ],
     "systems": [
         {
             "name": "System1/root",
