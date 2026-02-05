@@ -4,7 +4,7 @@
     "strategy": {"name": "Onboarding SOP"},
     "procedures": ["First Run Discovery"],
     "auto_execute_procedure": "First Run Discovery",
-    "allowed_skills": ["speech-to-text"],
+    "allowed_skills": ["speech-to-text", "message-routing"],
     "routing_rules": [
         {
             "name": "Default DLQ",
@@ -28,7 +28,7 @@
             "name": "System3/root",
             "type": "CONTROL",
             "agent_id": "System3/root",
-            "skill_grants": [],
+            "skill_grants": ["message-routing"],
             "config": {}
         },
         {

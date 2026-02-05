@@ -30,6 +30,7 @@ def create_cli_executor() -> Optional[EnvDockerCommandLineCodeExecutor]:
         )
         return EnvDockerCommandLineCodeExecutor(
             work_dir=work_dir,
+            bind_dir=Path.cwd(),
             image=image,
             container_name="cybernetic-agents-cli-executor",
             auto_remove=True,

@@ -43,6 +43,10 @@ RUN chmod +x /usr/local/bin/git-readonly-sync
 COPY src/tools/skills/speech-to-text/speech_to_text.py /usr/local/bin/speech-to-text
 RUN chmod +x /usr/local/bin/speech-to-text
 
+# Message routing helper exposed as a CLI.
+COPY src/tools/skills/message-routing/message_routing.py /usr/local/bin/message-routing
+RUN chmod +x /usr/local/bin/message-routing
+
 RUN git --version && rg --version
 
 CMD ["bash"]

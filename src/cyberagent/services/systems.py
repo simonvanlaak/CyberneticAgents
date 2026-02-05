@@ -9,6 +9,7 @@ from src.cyberagent.db.models.system import (
     get_system as _get_system,
     get_system_by_type as _get_system_by_type,
     get_systems_by_type as _get_systems_by_type,
+    get_system_from_agent_id as _get_system_from_agent_id,
     ensure_default_systems_for_team as _ensure_default_systems_for_team,
 )
 from src.enums import SystemType
@@ -23,6 +24,11 @@ logger = logging.getLogger(__name__)
 def get_system(system_id: int) -> System | None:
     """Return a system by id."""
     return _get_system(system_id)
+
+
+def get_system_by_agent_id(agent_id_str: str) -> System | None:
+    """Return a system by its AgentId string."""
+    return _get_system_from_agent_id(agent_id_str)
 
 
 def get_system_by_type(team_id: int, system_type: SystemType) -> System:
