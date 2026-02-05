@@ -275,8 +275,9 @@ async def test_cli_tool_execute_sets_env(monkeypatch: pytest.MonkeyPatch) -> Non
     monkeypatch.setenv("OP_SERVICE_ACCOUNT_TOKEN", "token")
     executor = _FakeExecutor(json.dumps({"ok": True}))
     tool = CliTool(executor)
+    monkeypatch.setattr(tool, "_check_permission", lambda *_args, **_kwargs: True)
 
-    result = await tool.execute("web_search", query="x")
+    result = await tool.execute("web_search", agent_id="agent-1", query="x")
 
     assert result["success"] is True
     assert executor.envs[0] == {"BRAVE_API_KEY": "token"}
@@ -379,8 +380,9 @@ async def test_cli_tool_execute_includes_stderr(
     monkeypatch.setenv("OP_SERVICE_ACCOUNT_TOKEN", "token")
     executor = _FakeExecutor(json.dumps({"ok": True}))
     tool = CliTool(executor)
+    monkeypatch.setattr(tool, "_check_permission", lambda *_args, **_kwargs: True)
 
-    result = await tool.execute("web_search", query="x")
+    result = await tool.execute("web_search", agent_id="agent-1", query="x")
 
     assert result["success"] is True
     assert result["stderr"] == "stderr output"
@@ -409,8 +411,9 @@ async def test_cli_tool_execute_overrides_timeout(
 
     executor = _TimeoutExecutor()
     tool = CliTool(executor)
+    monkeypatch.setattr(tool, "_check_permission", lambda *_args, **_kwargs: True)
 
-    result = await tool.execute("web_search", timeout_seconds=12)
+    result = await tool.execute("web_search", agent_id="agent-1", timeout_seconds=12)
 
     assert result["success"] is True
     assert executor.seen_timeout == 12
@@ -425,9 +428,11 @@ async def test_cli_tool_execute_requires_token_env(
     monkeypatch.delenv("GIT_TOKEN", raising=False)
     executor = _FakeExecutor(json.dumps({"ok": True}))
     tool = CliTool(executor)
+    monkeypatch.setattr(tool, "_check_permission", lambda *_args, **_kwargs: True)
 
     result = await tool.execute(
         "git_readonly_sync",
+        agent_id="agent-1",
         token_env="GIT_TOKEN",
         repo="https://example.com/repo.git",
         dest="repo",

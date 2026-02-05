@@ -128,6 +128,17 @@ async def test_execute_returns_error_on_rbac_denied(
 
 
 @pytest.mark.asyncio
+async def test_execute_requires_agent_id() -> None:
+    executor = DummyExecutor()
+    tool = CliTool(executor)
+
+    result = await tool.execute("unknown_tool")
+
+    assert result["success"] is False
+    assert "agent_id" in result["error"]
+
+
+@pytest.mark.asyncio
 async def test_execute_requires_agent_id_for_skill() -> None:
     executor = DummyExecutor()
     tool = CliTool(executor)

@@ -22,6 +22,17 @@ def _default_args() -> object:
     return Args()
 
 
+def _stub_system4(monkeypatch: pytest.MonkeyPatch) -> None:
+    class _FakeSystem:
+        agent_id_str = "System4/root"
+
+    monkeypatch.setattr(
+        onboarding_discovery,
+        "get_system_by_type",
+        lambda *_args, **_kwargs: _FakeSystem(),
+    )
+
+
 def _stub_messages(monkeypatch: pytest.MonkeyPatch) -> None:
     def _get_message(_group: str, key: str, **_kwargs: object) -> str:
         if key == "pkm_sync_skipped":
@@ -73,6 +84,7 @@ def test_discovery_prompts_and_continues_without_token(
         lambda **_kwargs: (None, "1Password CLI not authenticated."),
     )
     monkeypatch.setattr(onboarding_discovery, "_create_cli_tool", lambda: object())
+    _stub_system4(monkeypatch)
     monkeypatch.setattr(
         onboarding_discovery,
         "_fetch_profile_links",
@@ -81,7 +93,9 @@ def test_discovery_prompts_and_continues_without_token(
     monkeypatch.setattr(onboarding_discovery, "_write_onboarding_summary", _fake_write)
     monkeypatch.setattr("builtins.input", lambda *_: "y")
 
-    summary_path = onboarding_discovery.run_discovery_onboarding(_default_args())
+    summary_path = onboarding_discovery.run_discovery_onboarding(
+        _default_args(), team_id=1
+    )
 
     assert summary_path == tmp_path / "summary.md"
     assert "PKM sync skipped" in captured["summary"]
@@ -101,9 +115,12 @@ def test_discovery_aborts_without_token_when_declined(
         lambda **_kwargs: (None, "1Password CLI not authenticated."),
     )
     monkeypatch.setattr(onboarding_discovery, "_create_cli_tool", lambda: object())
+    _stub_system4(monkeypatch)
     monkeypatch.setattr("builtins.input", lambda *_: "n")
 
-    summary_path = onboarding_discovery.run_discovery_onboarding(_default_args())
+    summary_path = onboarding_discovery.run_discovery_onboarding(
+        _default_args(), team_id=1
+    )
 
     assert summary_path is None
 
@@ -122,6 +139,7 @@ def test_discovery_aborts_on_sync_failure_when_declined(
         lambda **_kwargs: ("token", None),
     )
     monkeypatch.setattr(onboarding_discovery, "_create_cli_tool", lambda: object())
+    _stub_system4(monkeypatch)
     monkeypatch.setattr(
         onboarding_discovery, "_resolve_default_branch", lambda *_: "main"
     )
@@ -130,7 +148,9 @@ def test_discovery_aborts_on_sync_failure_when_declined(
     )
     monkeypatch.setattr("builtins.input", lambda *_: "no")
 
-    summary_path = onboarding_discovery.run_discovery_onboarding(_default_args())
+    summary_path = onboarding_discovery.run_discovery_onboarding(
+        _default_args(), team_id=1
+    )
 
     assert summary_path is None
 
@@ -155,6 +175,7 @@ def test_discovery_continues_on_sync_failure_when_accepted(
         lambda **_kwargs: ("token", None),
     )
     monkeypatch.setattr(onboarding_discovery, "_create_cli_tool", lambda: object())
+    _stub_system4(monkeypatch)
     monkeypatch.setattr(
         onboarding_discovery, "_resolve_default_branch", lambda *_: "main"
     )
@@ -169,7 +190,9 @@ def test_discovery_continues_on_sync_failure_when_accepted(
     monkeypatch.setattr(onboarding_discovery, "_write_onboarding_summary", _fake_write)
     monkeypatch.setattr("builtins.input", lambda *_: "yes")
 
-    summary_path = onboarding_discovery.run_discovery_onboarding(_default_args())
+    summary_path = onboarding_discovery.run_discovery_onboarding(
+        _default_args(), team_id=1
+    )
 
     assert summary_path == tmp_path / "summary.md"
     assert "PKM sync skipped" in captured["summary"]
@@ -201,7 +224,9 @@ def test_run_cli_tool_starts_and_stops_executor() -> None:
 
     cli_tool = _FakeCliTool()
 
-    result = onboarding_discovery._run_cli_tool(cli_tool, "web-fetch", url="x")
+    result = onboarding_discovery._run_cli_tool(
+        cli_tool, "web-fetch", agent_id="System4/root", url="x"
+    )
 
     assert result["success"] is True
     assert cli_tool.executor.started is True
@@ -281,7 +306,9 @@ def test_run_cli_tool_returns_error_when_start_fails() -> None:
 
     cli_tool = _FakeCliTool()
 
-    result = onboarding_discovery._run_cli_tool(cli_tool, "web-fetch", url="x")
+    result = onboarding_discovery._run_cli_tool(
+        cli_tool, "web-fetch", agent_id="System4/root", url="x"
+    )
 
     assert result["success"] is False
     assert "start failed" in str(result["error"])
@@ -316,9 +343,8 @@ def test_sync_repo_uses_kebab_case_token_flags(
 ) -> None:
     captured: dict[str, object] = {}
 
-    def _fake_run_cli_tool(
-        _cli_tool: object, _tool_name: str, **kwargs: object
-    ) -> dict[str, object]:
+    def _fake_run_cli_tool(*_args: object, **kwargs: object) -> dict[str, object]:
+        assert kwargs["agent_id"] == "System4/root"
         captured.update(kwargs)
         return {"success": True}
 
@@ -326,6 +352,7 @@ def test_sync_repo_uses_kebab_case_token_flags(
 
     onboarding_discovery._sync_obsidian_repo(
         cli_tool=cast(CliTool, object()),
+        agent_id="System4/root",
         repo_url="https://github.com/example/repo",
         branch="main",
         token_env="GITHUB_READONLY_TOKEN",
@@ -341,13 +368,17 @@ def test_sync_repo_uses_kebab_case_token_flags(
 def test_sync_repo_reports_stderr_when_error_missing(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    def _fake_run_cli_tool(*_args: object, **_kwargs: object) -> dict[str, object]:
+    def _fake_run_cli_tool(
+        *_args: object, agent_id: str | None, **_kwargs: object
+    ) -> dict[str, object]:
+        assert agent_id == "System4/root"
         return {"success": False, "stderr": "boom"}
 
     monkeypatch.setattr(onboarding_discovery, "_run_cli_tool", _fake_run_cli_tool)
 
     onboarding_discovery._sync_obsidian_repo(
         cli_tool=cast(CliTool, object()),
+        agent_id="System4/root",
         repo_url="https://github.com/example/repo",
         branch="main",
         token_env="TOKEN",
@@ -363,7 +394,10 @@ def test_fetch_profile_links_calls_callback(
 ) -> None:
     calls: list[tuple[str, str]] = []
 
-    def _fake_run_cli_tool(*_args: object, **_kwargs: object) -> dict[str, object]:
+    def _fake_run_cli_tool(
+        *_args: object, agent_id: str | None, **_kwargs: object
+    ) -> dict[str, object]:
+        assert agent_id == "System4/root"
         return {"success": True, "output": {"content": "Profile content"}}
 
     def _on_entry(link: str, content: str) -> None:
@@ -374,6 +408,7 @@ def test_fetch_profile_links_calls_callback(
     summary = onboarding_discovery._fetch_profile_links(
         cli_tool=cast(CliTool, object()),
         links=["https://example.com/profile"],
+        agent_id="System4/root",
         on_entry=_on_entry,
     )
 
@@ -384,13 +419,17 @@ def test_fetch_profile_links_calls_callback(
 def test_sync_repo_reports_unknown_error_when_missing_details(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    def _fake_run_cli_tool(*_args: object, **_kwargs: object) -> dict[str, object]:
+    def _fake_run_cli_tool(
+        *_args: object, agent_id: str | None, **_kwargs: object
+    ) -> dict[str, object]:
+        assert agent_id == "System4/root"
         return {"success": False}
 
     monkeypatch.setattr(onboarding_discovery, "_run_cli_tool", _fake_run_cli_tool)
 
     onboarding_discovery._sync_obsidian_repo(
         cli_tool=cast(CliTool, object()),
+        agent_id="System4/root",
         repo_url="https://github.com/example/repo",
         branch="main",
         token_env="TOKEN",
@@ -406,9 +445,8 @@ def test_sync_repo_passes_timeout_to_cli_tool(
 ) -> None:
     captured: dict[str, object] = {}
 
-    def _fake_run_cli_tool(
-        _cli_tool: object, _tool_name: str, **kwargs: object
-    ) -> dict[str, object]:
+    def _fake_run_cli_tool(*_args: object, **kwargs: object) -> dict[str, object]:
+        assert kwargs["agent_id"] == "System4/root"
         captured.update(kwargs)
         return {"success": True}
 
@@ -416,6 +454,7 @@ def test_sync_repo_passes_timeout_to_cli_tool(
 
     onboarding_discovery._sync_obsidian_repo(
         cli_tool=cast(CliTool, object()),
+        agent_id="System4/root",
         repo_url="https://github.com/example/repo",
         branch="main",
         token_env="GITHUB_READONLY_TOKEN",
@@ -447,6 +486,7 @@ def test_run_cli_tool_returns_timeout_error(
     result = onboarding_discovery._run_cli_tool(
         DummyTool(),
         "git-readonly-sync",
+        agent_id="System4/root",
         timeout_seconds=1,
     )
 

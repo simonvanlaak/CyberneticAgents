@@ -398,8 +398,7 @@ def _build_onboarding_prompt(summary_path: Path, summary_text: str) -> str:
 
 
 def _run_discovery_onboarding(args: argparse.Namespace, team_id: int) -> Path | None:
-    del team_id
-    return run_discovery_onboarding(args)
+    return run_discovery_onboarding(args, team_id=team_id)
 
 
 def _start_discovery_background(args: argparse.Namespace, team_id: int) -> None:

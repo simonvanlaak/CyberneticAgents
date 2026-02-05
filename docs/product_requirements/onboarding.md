@@ -58,6 +58,7 @@ Added research results in docs/research_synthesys/AI-Powered User Discovery: A F
 - If `NOTION_API_KEY` is available, how should we include Notion content in onboarding?
   - Options: explicit page/database selection, workspace-wide search, or a fixed allowlist.
   - What is the acceptable sync cadence and size limit for Notion ingestion?
+  - Should onboarding ask the user to opt in to Notion ingest, or auto-enable when the key exists?
 
 ## Onboarding Outputs (Phase 1)
 - Onboarding SOP is loaded as the default root purpose and root initiative when the root team
