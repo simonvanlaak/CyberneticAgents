@@ -10,8 +10,10 @@ from pathlib import Path
 import sqlite3
 from typing import Any, Dict
 
+from src.cyberagent.core.paths import resolve_data_path
+
 _AUDIT_DB_ENV = "CYBERAGENT_SECURITY_LOG_DB_PATH"
-_DEFAULT_AUDIT_DB_PATH = Path("data") / "security_logs.db"
+_DEFAULT_AUDIT_DB_PATH = resolve_data_path("security_logs.db")
 _AUDIT_TABLE = "audit_events"
 
 

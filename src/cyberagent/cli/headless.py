@@ -33,6 +33,7 @@ from src.cyberagent.core.runtime import (
 )
 from src.cyberagent.secrets import get_secret
 from src.cyberagent.cli.message_catalog import get_message
+from src.cyberagent.core.paths import get_logs_dir
 
 logger = logging.getLogger(__name__)
 
@@ -88,9 +89,9 @@ async def run_headless_session(initial_message: str | None = None) -> None:
     enforcer = get_enforcer()
     enforcer.clear_policy()
 
-    logs_dir = os.path.join(os.getcwd(), "logs")
-    os.makedirs(logs_dir, exist_ok=True)
-    configure_autogen_logging(logs_dir)
+    logs_dir = get_logs_dir()
+    logs_dir.mkdir(parents=True, exist_ok=True)
+    configure_autogen_logging(str(logs_dir))
 
     runtime = get_runtime()
     await start_cli_executor()

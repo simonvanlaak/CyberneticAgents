@@ -4,11 +4,13 @@ RBAC enforcer helpers for namespace-scoped tool permissions.
 
 from __future__ import annotations
 
-import os
 import logging
+import os
 
 import casbin
 import casbin_sqlalchemy_adapter
+
+from src.cyberagent.core.paths import get_data_dir
 
 logger = logging.getLogger(__name__)
 
@@ -26,10 +28,9 @@ def get_enforcer():
 
 def _create_enforcer():
     """Create a new enforcer instance with domain support enabled."""
-    data_dir = os.path.join(os.getcwd(), "data")
-    os.makedirs(data_dir, exist_ok=True)
-
-    db_path = os.path.join(data_dir, "rbac.db")
+    data_dir = get_data_dir()
+    data_dir.mkdir(parents=True, exist_ok=True)
+    db_path = data_dir / "rbac.db"
     adapter = casbin_sqlalchemy_adapter.Adapter(f"sqlite:///{db_path}")
     model_path = os.path.join(os.path.dirname(__file__), "model.conf")
     enforcer = casbin.Enforcer(model_path, adapter)

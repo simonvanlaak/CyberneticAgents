@@ -10,6 +10,7 @@ from typing import Optional
 from src.cyberagent.tools.cli_executor.docker_env_executor import (
     EnvDockerCommandLineCodeExecutor,
 )
+from src.cyberagent.core.paths import resolve_data_path
 
 
 def create_cli_executor() -> Optional[EnvDockerCommandLineCodeExecutor]:
@@ -20,7 +21,7 @@ def create_cli_executor() -> Optional[EnvDockerCommandLineCodeExecutor]:
         Code executor instance or None if AutoGen not available.
     """
     _maybe_set_docker_host_from_context()
-    work_dir = Path("data") / "docker_cli_executor"
+    work_dir = resolve_data_path("docker_cli_executor")
     work_dir.mkdir(parents=True, exist_ok=True)
 
     try:

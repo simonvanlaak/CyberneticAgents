@@ -1,6 +1,7 @@
 import sys
 from types import ModuleType
 
+from src.cyberagent.core.paths import resolve_data_path
 from src.cyberagent.memory.backends.chroma_index import ChromaVectorIndex
 from src.cyberagent.memory.models import (
     MemoryEntry,
@@ -66,7 +67,7 @@ def test_chroma_vector_index_roundtrip() -> None:
     _install_fake_chromadb()
     index = ChromaVectorIndex(
         collection="memory_vectors",
-        persistence_path="data/chroma_db",
+        persistence_path=str(resolve_data_path("chroma_db")),
         host="",
         port=8000,
         ssl=False,

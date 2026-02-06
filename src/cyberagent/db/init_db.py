@@ -8,16 +8,38 @@ from datetime import timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
+from src.cyberagent.core.paths import get_data_dir
+
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-# Create database directory if it doesn't exist
-os.makedirs("data", exist_ok=True)
+
+def _default_database_url() -> str:
+    db_path = (get_data_dir() / "CyberneticAgents.db").resolve()
+    return f"sqlite:///{db_path}"
+
+
+def _resolve_database_url() -> str:
+    return os.environ.get("CYBERAGENT_DB_URL") or _default_database_url()
+
+
+def _ensure_database_url_current() -> None:
+    if not _DATABASE_URL_FROM_ENV:
+        return
+    resolved = _resolve_database_url()
+    if DATABASE_URL != resolved:
+        configure_database(resolved, from_env=True)
+
 
 # SQLite database setup
-DATABASE_URL = os.environ.get("CYBERAGENT_DB_URL", "sqlite:///data/CyberneticAgents.db")
+# Create database directory if it doesn't exist
+get_data_dir().mkdir(parents=True, exist_ok=True)
+
+# SQLite database setup
+DATABASE_URL = _resolve_database_url()
+_DATABASE_URL_FROM_ENV = True
 engine = create_engine(DATABASE_URL, echo=False)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
@@ -27,6 +49,7 @@ Base = declarative_base()
 
 def init_db():
     """Initialize the database and create all tables"""
+    _ensure_database_url_current()
     _ensure_db_writable()
     # Import models to ensure they're registered with Base
     from src.cyberagent.db.models.initiative import Initiative
@@ -104,18 +127,21 @@ def _ensure_team_last_active_column() -> None:
         )
 
 
-def configure_database(database_url: str) -> None:
+def configure_database(database_url: str, *, from_env: bool = False) -> None:
     """Configure the database connection (used mainly for tests)."""
     global DATABASE_URL
     global engine
     global SessionLocal
+    global _DATABASE_URL_FROM_ENV
     DATABASE_URL = database_url
+    _DATABASE_URL_FROM_ENV = from_env
     engine = create_engine(DATABASE_URL, echo=False)
     SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def get_database_path() -> str:
     """Return the sqlite database path for the current DATABASE_URL."""
+    _ensure_database_url_current()
     parsed = urlparse(DATABASE_URL)
     if parsed.scheme != "sqlite":
         raise ValueError("Database path is only available for sqlite databases.")
@@ -132,10 +158,11 @@ def get_database_path() -> str:
         if normalized.startswith("/"):
             return normalized.lstrip("/")
         return normalized
-    return "data/CyberneticAgents.db"
+    return str((get_data_dir() / "CyberneticAgents.db").resolve())
 
 
 def _ensure_db_writable() -> None:
+    _ensure_database_url_current()
     db_path = get_database_path()
     if db_path == ":memory:":
         return

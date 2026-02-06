@@ -44,6 +44,7 @@ from src.cyberagent.cli.status import main as status_main
 from src.cyberagent.cli.suggestion_queue import enqueue_suggestion
 from src.cyberagent.cli.transcribe import add_transcribe_parser, handle_transcribe
 from src.cyberagent.core.runtime import get_runtime, stop_runtime
+from src.cyberagent.core.paths import get_logs_dir, get_data_dir
 from src.cyberagent.cli.onboarding_args import add_onboarding_args
 from src.cyberagent.cli.pairing import add_pairing_parser, handle_pairing
 from src.cyberagent.core.state import get_last_team_id, mark_team_active
@@ -62,9 +63,9 @@ from src.registry import register_systems
 
 KEYRING_SERVICE = "cyberagent-cli"
 SYSTEM4_AGENT_ID = AgentId(type="System4", key="root")
-LOGS_DIR = Path("logs")
-RUNTIME_PID_FILE = Path("logs/cyberagent.pid")
-CLI_LOG_STATE_FILE = Path("logs/cli_last_seen.json")
+LOGS_DIR = get_logs_dir()
+RUNTIME_PID_FILE = LOGS_DIR / "cyberagent.pid"
+CLI_LOG_STATE_FILE = LOGS_DIR / "cli_last_seen.json"
 SERVE_COMMAND = "serve"
 TEST_START_ENV = "CYBERAGENT_TEST_NO_RUNTIME"
 SUGGEST_COMMAND = 'cyberagent suggest "Describe the task"'
@@ -690,8 +691,8 @@ async def _handle_reset(args: argparse.Namespace) -> int:
 
     await _handle_stop(args)
 
-    _reset_data_dir(Path("data"))
-    _remove_dir(Path("logs"))
+    _reset_data_dir(get_data_dir())
+    _remove_dir(get_logs_dir())
     print(get_message("cyberagent", "reset_complete"))
     return 0
 

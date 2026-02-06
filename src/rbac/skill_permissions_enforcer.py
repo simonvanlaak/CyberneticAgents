@@ -10,6 +10,8 @@ from urllib.parse import urlparse
 import casbin
 import casbin_sqlalchemy_adapter
 
+from src.cyberagent.core.paths import get_data_dir
+
 logger = logging.getLogger(__name__)
 
 _global_enforcer: casbin.Enforcer | None = None
@@ -33,8 +35,7 @@ def _create_enforcer() -> casbin.Enforcer:
     """
     db_url = os.environ.get("CYBERAGENT_SKILL_PERMISSIONS_DB_URL")
     if not db_url:
-        repo_root = Path(__file__).resolve().parents[2]
-        data_dir = repo_root / "data"
+        data_dir = get_data_dir()
         data_dir.mkdir(parents=True, exist_ok=True)
         db_path = data_dir / "skill_permissions.db"
         db_url = f"sqlite:///{db_path}"
@@ -43,7 +44,9 @@ def _create_enforcer() -> casbin.Enforcer:
         if parsed.scheme == "sqlite":
             raw_path = parsed.path or ""
             if raw_path and raw_path != "/:memory:":
-                db_path = Path(raw_path.lstrip("/"))
+                db_path = Path(raw_path)
+                if not db_path.is_absolute():
+                    db_path = Path(raw_path.lstrip("/"))
                 if db_path.parent:
                     db_path.parent.mkdir(parents=True, exist_ok=True)
     adapter = casbin_sqlalchemy_adapter.Adapter(db_url)

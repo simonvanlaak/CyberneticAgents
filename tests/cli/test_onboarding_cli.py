@@ -7,6 +7,7 @@ import pytest
 
 from src.cyberagent.cli import onboarding as onboarding_cli
 from src.cyberagent.cli import onboarding_docker
+from src.cyberagent.cli import onboarding_optional
 from src.cyberagent.cli import onboarding_telegram
 from src.cyberagent.cli import onboarding_vault
 from src.cyberagent.db.db_utils import get_db
@@ -98,7 +99,7 @@ def test_handle_onboarding_creates_default_team(
 def test_ensure_repo_root_env_var_writes_env_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(onboarding_cli, "_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(onboarding_cli, "get_repo_root", lambda: tmp_path)
     monkeypatch.delenv("CYBERAGENT_ROOT", raising=False)
 
     onboarding_cli._ensure_repo_root_env_var()
@@ -114,7 +115,7 @@ def test_ensure_repo_root_env_var_writes_env_file(
 def test_ensure_repo_root_env_var_preserves_existing_value(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.setattr(onboarding_cli, "_repo_root", lambda: tmp_path)
+    monkeypatch.setattr(onboarding_cli, "get_repo_root", lambda: tmp_path)
     monkeypatch.delenv("CYBERAGENT_ROOT", raising=False)
     env_path = tmp_path / ".env"
     env_path.write_text("CYBERAGENT_ROOT=/custom/root\n", encoding="utf-8")
@@ -927,7 +928,7 @@ def test_warn_optional_api_keys_reads_onepassword(
             return "secret"
         return None
 
-    monkeypatch.setattr(onboarding_cli, "_load_secret_from_1password", _load_secret)
+    monkeypatch.setattr(onboarding_optional, "load_secret_from_1password", _load_secret)
 
     onboarding_cli._warn_optional_api_keys()
     captured = capsys.readouterr().out

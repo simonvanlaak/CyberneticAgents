@@ -71,8 +71,7 @@ from src.cyberagent.cli.onboarding_optional import (
     _offer_optional_telegram_setup,
     _warn_optional_api_keys,
 )
-from src.cyberagent.core.paths import get_repo_root as _repo_root
-from src.cyberagent.core.paths import get_logs_dir, get_data_dir
+from src.cyberagent.core.paths import get_repo_root, get_logs_dir, get_data_dir
 from src.enums import SystemType
 
 LOGS_DIR = get_logs_dir()
@@ -92,7 +91,7 @@ ENV_ROOT_KEY = "CYBERAGENT_ROOT"
 
 
 def _ensure_repo_root_env_var() -> None:
-    repo_root = _repo_root()
+    repo_root = get_repo_root()
     if repo_root is None:
         return
     env_path = repo_root / ".env"

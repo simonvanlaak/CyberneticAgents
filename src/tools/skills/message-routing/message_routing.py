@@ -6,6 +6,7 @@ import json
 import os
 import sqlite3
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
@@ -31,7 +32,14 @@ def _build_parser() -> argparse.ArgumentParser:
 
 
 def _get_db_path() -> str:
-    raw = os.environ.get("CYBERAGENT_DB_URL", "sqlite:///data/CyberneticAgents.db")
+    raw = os.environ.get("CYBERAGENT_DB_URL")
+    if not raw:
+        repo_root = os.environ.get("CYBERAGENT_ROOT")
+        if repo_root:
+            db_path = (Path(repo_root) / "data" / "CyberneticAgents.db").resolve()
+            raw = f"sqlite:///{db_path}"
+        else:
+            raw = "sqlite:///data/CyberneticAgents.db"
     parsed = urlparse(raw)
     if parsed.scheme != "sqlite":
         raise ValueError("Only sqlite databases are supported.")
@@ -45,6 +53,10 @@ def _get_db_path() -> str:
         return normalized
     if os.path.isabs(path):
         return path
+    repo_root = os.environ.get("CYBERAGENT_ROOT")
+    if repo_root:
+        relative = path.lstrip("/") or "data/CyberneticAgents.db"
+        return str((Path(repo_root) / relative).resolve())
     return path.lstrip("/") or "data/CyberneticAgents.db"
 
 

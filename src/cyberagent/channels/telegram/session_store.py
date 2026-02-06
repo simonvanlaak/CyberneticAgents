@@ -4,12 +4,12 @@ import json
 import threading
 import time
 from dataclasses import asdict, dataclass, field
-from pathlib import Path
 from typing import Any
 
 from src.cyberagent.channels.telegram.parser import build_session_id
+from src.cyberagent.core.paths import resolve_logs_path
 
-SESSIONS_FILE = Path("logs/telegram_sessions.json")
+SESSIONS_FILE = resolve_logs_path("telegram_sessions.json")
 _lock = threading.Lock()
 _loaded = False
 _sessions: dict[str, TelegramSession] = {}

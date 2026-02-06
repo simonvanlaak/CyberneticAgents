@@ -9,6 +9,7 @@ from src.cyberagent.memory.config import (
     _build_vector_index,
 )
 from src.cyberagent.memory.models import MemoryScope
+from src.cyberagent.core.paths import resolve_data_path
 
 
 def test_load_memory_backend_config_defaults(monkeypatch) -> None:
@@ -25,11 +26,11 @@ def test_load_memory_backend_config_defaults(monkeypatch) -> None:
     config = load_memory_backend_config()
     assert config.backend == "chromadb"
     assert config.chroma_collection == "memory_store"
-    assert config.chroma_persistence_path == "data/chroma_db"
+    assert config.chroma_persistence_path == str(resolve_data_path("chroma_db"))
     assert config.chroma_host == ""
     assert config.chroma_port == 8000
     assert config.chroma_ssl is False
-    assert config.sqlite_path == "data/memory.db"
+    assert config.sqlite_path == str(resolve_data_path("memory.db"))
     assert config.vector_backend == "none"
     assert config.vector_collection == "memory_vectors"
 
@@ -38,11 +39,11 @@ def test_build_memory_registry_list_backend() -> None:
     config = MemoryBackendConfig(
         backend="list",
         chroma_collection="memory_store",
-        chroma_persistence_path="data/chroma_db",
+        chroma_persistence_path=str(resolve_data_path("chroma_db")),
         chroma_host="",
         chroma_port=8000,
         chroma_ssl=False,
-        sqlite_path="data/memory.db",
+        sqlite_path=str(resolve_data_path("memory.db")),
         vector_backend="none",
         vector_collection="memory_vectors",
     )
@@ -82,11 +83,11 @@ def test_build_vector_index_prefers_chromadb_vector_backend() -> None:
     config = MemoryBackendConfig(
         backend="chromadb",
         chroma_collection="memory_store",
-        chroma_persistence_path="data/chroma_db",
+        chroma_persistence_path=str(resolve_data_path("chroma_db")),
         chroma_host="",
         chroma_port=8000,
         chroma_ssl=False,
-        sqlite_path="data/memory.db",
+        sqlite_path=str(resolve_data_path("memory.db")),
         vector_backend="chromadb",
         vector_collection="memory_vectors",
     )

@@ -7,9 +7,11 @@ import uuid
 from dataclasses import dataclass
 from pathlib import Path
 
+from src.cyberagent.core.paths import resolve_logs_path
+
 logger = logging.getLogger(__name__)
 
-SUGGEST_QUEUE_DIR = Path("logs/suggest_queue")
+SUGGEST_QUEUE_DIR = resolve_logs_path("suggest_queue")
 SUGGEST_QUEUE_POLL_SECONDS = 0.5
 
 

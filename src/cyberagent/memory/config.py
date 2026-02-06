@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, cast
 
 from autogen_core.memory import ListMemory
 
+from src.cyberagent.core.paths import resolve_data_path
 from src.cyberagent.memory.backends.autogen import AutoGenMemoryStore
 from src.cyberagent.memory.backends.hybrid import HybridMemoryStore
 from src.cyberagent.memory.backends.vector_index import MemoryVectorIndex
@@ -36,7 +37,9 @@ class MemoryBackendConfig:
 def load_memory_backend_config() -> MemoryBackendConfig:
     backend = os.environ.get("MEMORY_BACKEND", "chromadb").lower()
     chroma_collection = os.environ.get("MEMORY_CHROMA_COLLECTION", "memory_store")
-    chroma_persistence_path = os.environ.get("MEMORY_CHROMA_PATH", "data/chroma_db")
+    chroma_persistence_path = os.environ.get(
+        "MEMORY_CHROMA_PATH", str(resolve_data_path("chroma_db"))
+    )
     chroma_host = os.environ.get("MEMORY_CHROMA_HOST", "")
     chroma_port_raw = os.environ.get("MEMORY_CHROMA_PORT", "8000")
     try:
@@ -52,7 +55,9 @@ def load_memory_backend_config() -> MemoryBackendConfig:
         chroma_host=chroma_host,
         chroma_port=chroma_port,
         chroma_ssl=chroma_ssl,
-        sqlite_path=os.environ.get("MEMORY_SQLITE_PATH", "data/memory.db"),
+        sqlite_path=os.environ.get(
+            "MEMORY_SQLITE_PATH", str(resolve_data_path("memory.db"))
+        ),
         vector_backend=os.environ.get("MEMORY_VECTOR_BACKEND", "none").lower(),
         vector_collection=os.environ.get("MEMORY_VECTOR_COLLECTION", "memory_vectors"),
     )

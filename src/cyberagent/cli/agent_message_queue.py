@@ -8,9 +8,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from src.cyberagent.core.paths import resolve_logs_path
+
 logger = logging.getLogger(__name__)
 
-AGENT_MESSAGE_QUEUE_DIR = Path("logs/agent_message_queue")
+AGENT_MESSAGE_QUEUE_DIR = resolve_logs_path("agent_message_queue")
 
 
 @dataclass(frozen=True)

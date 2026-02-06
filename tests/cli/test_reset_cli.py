@@ -10,6 +10,7 @@ from src.cyberagent.cli import cyberagent
 def test_reset_removes_data_and_logs(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    monkeypatch.setenv("CYBERAGENT_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)
     data_dir = tmp_path / "data"
     logs_dir = tmp_path / "logs"
@@ -31,6 +32,7 @@ def test_reset_removes_data_and_logs(
 def test_reset_preserves_env_file(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    monkeypatch.setenv("CYBERAGENT_ROOT", str(tmp_path))
     monkeypatch.chdir(tmp_path)
     env_file = tmp_path / ".env"
     env_file.write_text("KEY=value\n", encoding="utf-8")

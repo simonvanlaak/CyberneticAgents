@@ -8,11 +8,11 @@ from dataclasses import asdict, dataclass, replace
 from typing import Literal, TypeVar
 
 from src.cyberagent.channels.routing import MessageRoute, is_reply_route_allowed
-from pathlib import Path
+from src.cyberagent.core.paths import resolve_logs_path
 
 DEFAULT_CHANNEL = "cli"
 DEFAULT_SESSION_ID = "cli-main"
-INBOX_STATE_FILE = Path("logs/cli_inbox.json")
+INBOX_STATE_FILE = resolve_logs_path("cli_inbox.json")
 
 InboxEntryKind = Literal["user_prompt", "system_question", "system_response"]
 InboxEntryStatus = Literal["pending", "answered"]
