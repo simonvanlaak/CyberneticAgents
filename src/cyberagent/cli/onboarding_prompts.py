@@ -6,9 +6,10 @@ import termios
 import tty
 
 from src.cyberagent.cli.message_catalog import get_message
+from src.cyberagent.cli.onboarding_pkm import check_notion_token
 
 
-def _prompt_for_missing_inputs(args: argparse.Namespace) -> None:
+def _prompt_for_missing_inputs(args: argparse.Namespace) -> bool:
     user_name = str(getattr(args, "user_name", "") or "").strip()
     if not user_name:
         print(get_message("onboarding", "onboarding_welcome"))
@@ -21,6 +22,10 @@ def _prompt_for_missing_inputs(args: argparse.Namespace) -> None:
     if not pkm_source:
         pkm_source = _prompt_pkm_source()
         setattr(args, "pkm_source", pkm_source)
+
+    if pkm_source == "notion":
+        if not check_notion_token():
+            return False
 
     repo_url = str(getattr(args, "repo_url", "") or "").strip()
     if pkm_source == "github" and not repo_url:
@@ -40,6 +45,7 @@ def _prompt_for_missing_inputs(args: argparse.Namespace) -> None:
             links = [link.strip() for link in raw_links.split(",") if link.strip()]
             if links:
                 setattr(args, "profile_links", links)
+    return True
 
 
 def _prompt_required_value(prompt: str) -> str:

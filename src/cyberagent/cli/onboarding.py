@@ -56,7 +56,6 @@ from src.cyberagent.cli.onboarding_interview import start_onboarding_interview
 from src.cyberagent.cli.onboarding_prompts import _prompt_for_missing_inputs
 from src.cyberagent.cli.message_catalog import get_message
 from src.cyberagent.cli.onboarding_constants import DEFAULT_GIT_TOKEN_ENV
-from src.cyberagent.cli.onboarding_constants import DEFAULT_NOTION_TOKEN_ENV
 from src.cyberagent.cli.onboarding_secrets import (
     VAULT_NAME,
     _parse_env_value,
@@ -66,11 +65,11 @@ from src.cyberagent.cli.onboarding_secrets import (
     load_secret_from_1password_with_error,
 )
 from src.cyberagent.secrets import get_secret
-from src.cyberagent.cli.onboarding_vault import prompt_store_secret_in_1password
 from src.cyberagent.cli.onboarding_optional import (
     _offer_optional_telegram_setup,
     _warn_optional_api_keys,
 )
+from src.cyberagent.cli.onboarding_vault import prompt_store_secret_in_1password
 from src.cyberagent.core.paths import get_repo_root, get_logs_dir, get_data_dir
 from src.enums import SystemType
 
@@ -90,8 +89,12 @@ FEATURE_READY_MESSAGE_KEYS = {
 ENV_ROOT_KEY = "CYBERAGENT_ROOT"
 
 
+def _repo_root() -> Path | None:
+    return get_repo_root()
+
+
 def _ensure_repo_root_env_var() -> None:
-    repo_root = get_repo_root()
+    repo_root = _repo_root()
     if repo_root is None:
         return
     env_path = repo_root / ".env"
@@ -197,7 +200,8 @@ def handle_onboarding(
 
 
 def _validate_onboarding_inputs(args: argparse.Namespace) -> bool:
-    _prompt_for_missing_inputs(args)
+    if not _prompt_for_missing_inputs(args):
+        return False
     user_name = getattr(args, "user_name", None)
     pkm_source = getattr(args, "pkm_source", None)
     repo_url = getattr(args, "repo_url", None)
@@ -209,8 +213,6 @@ def _validate_onboarding_inputs(args: argparse.Namespace) -> bool:
         return False
     if pkm_source == "github" and not repo_url:
         print(get_message("onboarding", "onboarding_needs_repo"))
-        return False
-    if pkm_source == "notion" and not _check_notion_token():
         return False
     return True
 
@@ -918,58 +920,6 @@ def _probe_network_access() -> bool:
             return response.status < 500
     except OSError:
         return False
-
-
-def _check_notion_token() -> bool:
-    token_env = DEFAULT_NOTION_TOKEN_ENV
-    if os.environ.get(token_env):
-        print(get_message("onboarding", "notion_ready"))
-        return True
-    loaded, error = load_secret_from_1password_with_error(
-        vault_name=VAULT_NAME,
-        item_name=token_env,
-        field_label="credential",
-    )
-    if loaded:
-        os.environ[token_env] = loaded
-        print(get_message("onboarding", "notion_ready"))
-        return True
-    if error:
-        print(
-            get_message(
-                "onboarding",
-                "notion_token_missing_with_error",
-                token_env=token_env,
-                error=error,
-            )
-        )
-    else:
-        print(
-            get_message(
-                "onboarding",
-                "notion_token_missing",
-                token_env=token_env,
-                vault_name=VAULT_NAME,
-            )
-        )
-    print(get_message("onboarding", "field_name_hint"))
-    if not prompt_store_secret_in_1password(
-        env_name=token_env,
-        description="Notion API key",
-        doc_hint=None,
-        vault_name=VAULT_NAME,
-    ):
-        return False
-    loaded, _error = load_secret_from_1password_with_error(
-        vault_name=VAULT_NAME,
-        item_name=token_env,
-        field_label="credential",
-    )
-    if not loaded:
-        return False
-    os.environ[token_env] = loaded
-    print(get_message("onboarding", "notion_ready"))
-    return True
 
 
 def _load_secret_from_1password(

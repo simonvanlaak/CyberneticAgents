@@ -8,6 +8,7 @@ import pytest
 
 from src.cyberagent.cli import onboarding as onboarding_cli
 from src.cyberagent.cli import onboarding_optional
+from src.cyberagent.cli import onboarding_pkm
 
 
 def _base_args() -> argparse.Namespace:
@@ -27,7 +28,7 @@ def test_validate_onboarding_inputs_notion_ready_from_env(
     args = _base_args()
     monkeypatch.setenv("NOTION_API_KEY", "token")
     monkeypatch.setattr(
-        onboarding_cli,
+        onboarding_pkm,
         "load_secret_from_1password_with_error",
         lambda **_kwargs: (_ for _ in ()).throw(AssertionError("Should not load")),
     )
@@ -43,12 +44,12 @@ def test_validate_onboarding_inputs_notion_ready_from_1password(
     args = _base_args()
     monkeypatch.delenv("NOTION_API_KEY", raising=False)
     monkeypatch.setattr(
-        onboarding_cli,
+        onboarding_pkm,
         "load_secret_from_1password_with_error",
         lambda **_kwargs: ("token", None),
     )
     monkeypatch.setattr(
-        onboarding_cli,
+        onboarding_pkm,
         "prompt_store_secret_in_1password",
         lambda **_kwargs: (_ for _ in ()).throw(AssertionError("Should not prompt")),
     )
@@ -65,12 +66,12 @@ def test_validate_onboarding_inputs_notion_prompt_declined(
     args = _base_args()
     monkeypatch.delenv("NOTION_API_KEY", raising=False)
     monkeypatch.setattr(
-        onboarding_cli,
+        onboarding_pkm,
         "load_secret_from_1password_with_error",
         lambda **_kwargs: (None, None),
     )
     monkeypatch.setattr(
-        onboarding_cli,
+        onboarding_pkm,
         "prompt_store_secret_in_1password",
         lambda **_kwargs: False,
     )
@@ -95,10 +96,10 @@ def test_validate_onboarding_inputs_notion_prompt_success(
         return True
 
     monkeypatch.setattr(
-        onboarding_cli, "load_secret_from_1password_with_error", _load_secret
+        onboarding_pkm, "load_secret_from_1password_with_error", _load_secret
     )
     monkeypatch.setattr(
-        onboarding_cli, "prompt_store_secret_in_1password", _prompt_store
+        onboarding_pkm, "prompt_store_secret_in_1password", _prompt_store
     )
 
     assert onboarding_cli._validate_onboarding_inputs(args) is True
