@@ -29,3 +29,8 @@ Hurrell, E. (2025). AgentSymposium [Software repository]. GitHub. https://github
 ### Analysis
 
 See `vsm_mas_research_convergence.md` for full analysis of the VSM → Multi-Agent Systems connection.
+
+### Using LLMs for user research / interviews
+Handa, K., Stern, M., Huang, S., Hong, J., Durmus, E., McCain, M., Yun, G., Alt, A., Millar, T., Tamkin, A., Leibrock, J., Ritchie, S., & Ganguli, D. (2025, December 4). Introducing anthropic interviewer: What 1,250 professionals told us about working with AI. https://anthropic.com/research/anthropic-interviewer
+Liu, M., Wang, T., Cohen, C. A., Li, S., & Xiong, C. (2025). Understand User Opinions of Large Language Models via LLM-Powered In-the-Moment User Experience Interviews (arXiv:2502.15226). arXiv. https://doi.org/10.48550/arXiv.2502.15226
+Luo, S. (2025, June 10). The Rise of AI-Native User Research: From Scheduled Interviews to On-Demand Insight. Greylock. https://greylock.com/greymatter/ai-user-research/
