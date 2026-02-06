@@ -17,11 +17,19 @@ def add_onboarding_args(subparsers: argparse._SubParsersAction) -> None:
         help="User name for onboarding discovery.",
     )
     onboarding_parser.add_argument(
+        "--pkm",
+        dest="pkm_source",
+        type=str,
+        default=None,
+        choices=["notion", "github", "skip"],
+        help="PKM source to integrate (notion, github, skip).",
+    )
+    onboarding_parser.add_argument(
         "--repo",
         dest="repo_url",
         type=str,
         default=None,
-        help="Private GitHub repo URL for the Obsidian vault.",
+        help="Private GitHub repo URL for markdown PKM sync.",
     )
     onboarding_parser.add_argument(
         "--profile-link",

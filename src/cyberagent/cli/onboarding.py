@@ -53,11 +53,13 @@ from src.cyberagent.cli.onboarding_defaults import (
 from src.cyberagent.cli.onboarding_discovery import run_discovery_onboarding
 from src.cyberagent.cli.onboarding_discovery import start_discovery_background
 from src.cyberagent.cli.onboarding_interview import start_onboarding_interview
+from src.cyberagent.cli.onboarding_prompts import _prompt_for_missing_inputs
 from src.cyberagent.cli.message_catalog import get_message
 from src.cyberagent.cli import onboarding_telegram
 from src.cyberagent.cli.onboarding_constants import DEFAULT_GIT_TOKEN_ENV
 from src.cyberagent.cli.onboarding_secrets import (
     VAULT_NAME,
+    _parse_env_value,
     get_onepassword_session_env,
     has_onepassword_auth,
     load_secret_from_1password,
@@ -65,11 +67,13 @@ from src.cyberagent.cli.onboarding_secrets import (
 )
 from src.cyberagent.secrets import get_secret
 from src.cyberagent.cli.onboarding_vault import prompt_store_secret_in_1password
+from src.cyberagent.core.paths import get_repo_root as _repo_root
+from src.cyberagent.core.paths import get_logs_dir, get_data_dir
 from src.enums import SystemType
 
-LOGS_DIR = Path("logs")
-TECH_ONBOARDING_STATE_FILE = Path("logs/technical_onboarding.json")
-RUNTIME_PID_FILE = Path("logs/cyberagent.pid")
+LOGS_DIR = get_logs_dir()
+TECH_ONBOARDING_STATE_FILE = LOGS_DIR / "technical_onboarding.json"
+RUNTIME_PID_FILE = LOGS_DIR / "cyberagent.pid"
 NETWORK_SKILL_NAMES = {"web-fetch", "web-search", "git-readonly-sync"}
 TOOL_SECRET_DOC_HINTS = {
     "BRAVE_API_KEY": "src/tools/skills/web-search/SKILL.md",
@@ -80,11 +84,50 @@ FEATURE_READY_MESSAGE_KEYS = {
     "MISTRAL_API_KEY": "feature_ai_ready",
     "TELEGRAM_BOT_TOKEN": "feature_telegram",
 }
+ENV_ROOT_KEY = "CYBERAGENT_ROOT"
+
+
+def _ensure_repo_root_env_var() -> None:
+    repo_root = _repo_root()
+    if repo_root is None:
+        return
+    env_path = repo_root / ".env"
+    repo_root_value = str(repo_root.resolve())
+    lines: list[str] = []
+    if env_path.exists():
+        try:
+            lines = env_path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return
+    updated = False
+    found = False
+    for index, line in enumerate(lines):
+        entry = line.strip()
+        if not entry or entry.startswith("#") or "=" not in entry:
+            continue
+        key, value = entry.split("=", 1)
+        if key.strip() != ENV_ROOT_KEY:
+            continue
+        found = True
+        parsed = _parse_env_value(value)
+        if parsed:
+            os.environ.setdefault(ENV_ROOT_KEY, parsed)
+            return
+        lines[index] = f"{ENV_ROOT_KEY}={repo_root_value}"
+        updated = True
+        break
+    if not found:
+        lines.append(f"{ENV_ROOT_KEY}={repo_root_value}")
+        updated = True
+    if updated:
+        env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    os.environ.setdefault(ENV_ROOT_KEY, repo_root_value)
 
 
 def handle_onboarding(
     args: argparse.Namespace, suggest_command: str, inbox_command: str
 ) -> int:
+    _ensure_repo_root_env_var()
     if not run_technical_onboarding_checks():
         print(get_message("onboarding", "technical_checks_failed"))
         return 1
@@ -131,6 +174,7 @@ def handle_onboarding(
     print(get_message("onboarding", "discovery_starting"))
     start_onboarding_interview(
         user_name=str(getattr(args, "user_name", "")).strip(),
+        pkm_source=str(getattr(args, "pkm_source", "")).strip(),
         repo_url=str(getattr(args, "repo_url", "")).strip(),
         profile_links=list(getattr(args, "profile_links", []) or []),
     )
@@ -144,55 +188,26 @@ def handle_onboarding(
         ):
             return 1
     _start_runtime_after_onboarding(team.id)
+    print(get_message("onboarding", "next_suggest", suggest_command=suggest_command))
+    print(inbox_command)
     return 0
 
 
 def _validate_onboarding_inputs(args: argparse.Namespace) -> bool:
     _prompt_for_missing_inputs(args)
     user_name = getattr(args, "user_name", None)
+    pkm_source = getattr(args, "pkm_source", None)
     repo_url = getattr(args, "repo_url", None)
     if not user_name:
         print(get_message("onboarding", "onboarding_needs_name"))
         return False
-    if not repo_url:
+    if not pkm_source:
+        print(get_message("onboarding", "onboarding_needs_pkm"))
+        return False
+    if pkm_source == "github" and not repo_url:
         print(get_message("onboarding", "onboarding_needs_repo"))
         return False
     return True
-
-
-def _prompt_for_missing_inputs(args: argparse.Namespace) -> None:
-    user_name = str(getattr(args, "user_name", "") or "").strip()
-    if not user_name:
-        print(get_message("onboarding", "onboarding_welcome"))
-        user_name = _prompt_required_value(
-            get_message("onboarding", "onboarding_prompt_user_name")
-        )
-        setattr(args, "user_name", user_name)
-
-    repo_url = str(getattr(args, "repo_url", "") or "").strip()
-    if not repo_url:
-        repo_url = _prompt_required_value(
-            get_message("onboarding", "onboarding_prompt_repo")
-        )
-        setattr(args, "repo_url", repo_url)
-
-    profile_links = list(getattr(args, "profile_links", []) or [])
-    if not profile_links:
-        raw_links = input(
-            get_message("onboarding", "onboarding_prompt_profile_links")
-        ).strip()
-        if raw_links:
-            links = [link.strip() for link in raw_links.split(",") if link.strip()]
-            if links:
-                setattr(args, "profile_links", links)
-
-
-def _prompt_required_value(prompt: str) -> str:
-    while True:
-        value = input(f"{prompt}: ").strip()
-        if value:
-            return value
-        print(get_message("onboarding", "onboarding_missing_value"))
 
 
 def _start_runtime_after_onboarding(team_id: int) -> int | None:
@@ -593,7 +608,7 @@ def _collect_technical_onboarding_state() -> dict[str, object]:
         "skills_root_exists": DEFAULT_SKILLS_ROOT.exists(),
         "docker_host": os.environ.get("DOCKER_HOST", ""),
         "docker_path": shutil.which("docker") or "",
-        "data_dir_writable": _is_path_writable(Path("data")),
+        "data_dir_writable": _is_path_writable(get_data_dir()),
         "logs_dir_writable": _is_path_writable(LOGS_DIR),
     }
 

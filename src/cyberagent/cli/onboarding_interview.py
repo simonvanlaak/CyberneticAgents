@@ -20,6 +20,7 @@ logger = logging.getLogger(__name__)
 def start_onboarding_interview(
     *,
     user_name: str,
+    pkm_source: str,
     repo_url: str,
     profile_links: list[str],
 ) -> None:
@@ -28,7 +29,8 @@ def start_onboarding_interview(
 
     Args:
         user_name: User display name.
-        repo_url: Obsidian vault repo URL.
+        pkm_source: PKM source selection.
+        repo_url: GitHub repo URL for markdown PKM (if applicable).
         profile_links: Profile links provided during onboarding.
     """
     first_question = get_message("onboarding", "onboarding_first_question")
@@ -58,6 +60,7 @@ def start_onboarding_interview(
                 print(qr)
     prompt = build_onboarding_interview_prompt(
         user_name=user_name,
+        pkm_source=pkm_source,
         repo_url=repo_url,
         profile_links=profile_links,
         first_question=first_question,

@@ -11,15 +11,18 @@ from src.cyberagent.cli import onboarding_discovery
 from src.cyberagent.tools.cli_executor.cli_tool import CliTool
 
 
-def _default_args() -> object:
-    class Args:
-        user_name = "Test User"
-        repo_url = "https://github.com/example/repo"
-        profile_links: list[str] = []
-        token_env = "GITHUB_READONLY_TOKEN"
-        token_username = "x-access-token"
+class _Args:
+    def __init__(self) -> None:
+        self.user_name = "Test User"
+        self.pkm_source = "github"
+        self.repo_url = "https://github.com/example/repo"
+        self.profile_links: list[str] = []
+        self.token_env = "GITHUB_READONLY_TOKEN"
+        self.token_username = "x-access-token"
 
-    return Args()
+
+def _default_args() -> _Args:
+    return _Args()
 
 
 def _stub_system4(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -193,6 +196,43 @@ def test_discovery_continues_on_sync_failure_when_accepted(
     summary_path = onboarding_discovery.run_discovery_onboarding(
         _default_args(), team_id=1
     )
+
+    assert summary_path == tmp_path / "summary.md"
+    assert "PKM sync skipped" in captured["summary"]
+
+
+def test_discovery_notion_prompts_and_continues_without_token(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    captured: dict[str, str] = {}
+
+    def _fake_write(summary_text: str) -> Path:
+        captured["summary"] = summary_text
+        return tmp_path / "summary.md"
+
+    args = _default_args()
+    args.pkm_source = "notion"
+    args.repo_url = ""
+
+    monkeypatch.setattr(onboarding_discovery, "_ensure_notion_token", lambda *_: False)
+    _stub_messages(monkeypatch)
+    monkeypatch.setattr(onboarding_discovery, "has_onepassword_auth", lambda: False)
+    monkeypatch.setattr(
+        onboarding_discovery,
+        "load_secret_from_1password_with_error",
+        lambda **_kwargs: (None, "1Password CLI not authenticated."),
+    )
+    monkeypatch.setattr(onboarding_discovery, "_create_cli_tool", lambda: object())
+    _stub_system4(monkeypatch)
+    monkeypatch.setattr(
+        onboarding_discovery,
+        "_fetch_profile_links",
+        lambda *_args, **_kwargs: "profiles",
+    )
+    monkeypatch.setattr(onboarding_discovery, "_write_onboarding_summary", _fake_write)
+    monkeypatch.setattr("builtins.input", lambda *_: "y")
+
+    summary_path = onboarding_discovery.run_discovery_onboarding(args, team_id=1)
 
     assert summary_path == tmp_path / "summary.md"
     assert "PKM sync skipped" in captured["summary"]

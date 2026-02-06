@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import inspect
 import logging
 from datetime import datetime
@@ -14,6 +15,7 @@ from urllib.parse import urlparse, urlunparse
 from src.cyberagent.cli.suggestion_queue import enqueue_suggestion
 from src.cyberagent.cli.onboarding_constants import (
     DEFAULT_GIT_TOKEN_ENV,
+    DEFAULT_NOTION_TOKEN_ENV,
     DEFAULT_TOKEN_USERNAME,
     GIT_SYNC_TIMEOUT_SECONDS,
     ONBOARDING_SUMMARY_DIR,
@@ -29,6 +31,7 @@ from src.cyberagent.cli.onboarding_memory import (
     store_onboarding_memory,
     store_onboarding_memory_entry,
 )
+from src.cyberagent.core.paths import resolve_data_path
 from src.cyberagent.db.models.system import get_system_by_type
 from src.cyberagent.memory.models import MemoryLayer, MemoryPriority, MemorySource
 from src.enums import SystemType
@@ -74,17 +77,22 @@ def _run_discovery_pipeline(
 ) -> Path | None:
     user_name = str(getattr(args, "user_name", "")).strip()
     repo_url = str(getattr(args, "repo_url", "")).strip()
+    pkm_source = str(getattr(args, "pkm_source", "")).strip().lower()
     profile_links = list(getattr(args, "profile_links", []) or [])
     token_env = str(getattr(args, "token_env", DEFAULT_GIT_TOKEN_ENV)).strip()
+    notion_token_env = DEFAULT_NOTION_TOKEN_ENV
     token_username = str(
         getattr(args, "token_username", DEFAULT_TOKEN_USERNAME)
     ).strip()
+    if not pkm_source:
+        pkm_source = "github" if repo_url else "skip"
     agent_id = _resolve_agent_id(team_id)
     if agent_id is None:
         logger.warning("Unable to resolve agent_id for onboarding discovery.")
 
-    repo_sync_allowed = True
-    if not _ensure_onboarding_token(token_env):
+    repo_sync_allowed = pkm_source == "github" and bool(repo_url)
+    notion_sync_allowed = pkm_source == "notion"
+    if repo_sync_allowed and not _ensure_onboarding_token(token_env):
         print(get_message("onboarding_discovery", "need_github_token"))
         print(
             get_message(
@@ -100,6 +108,22 @@ def _run_discovery_pipeline(
             ):
                 return None
         repo_sync_allowed = False
+    if notion_sync_allowed and not _ensure_notion_token(notion_token_env):
+        print(get_message("onboarding_discovery", "need_notion_token"))
+        print(
+            get_message(
+                "onboarding_discovery",
+                "store_notion_token",
+                vault_name=VAULT_NAME,
+                token_env=notion_token_env,
+            )
+        )
+        if allow_prompt:
+            if not _prompt_continue_without_pkm(
+                get_message("onboarding_discovery", "pkm_access_unavailable")
+            ):
+                return None
+        notion_sync_allowed = False
 
     cli_tool = _create_cli_tool()
     if cli_tool is None:
@@ -152,8 +176,31 @@ def _run_discovery_pipeline(
                 get_message("onboarding_discovery", "pkm_sync_failed")
             ):
                 return None
+    elif notion_sync_allowed:
+        print(get_message("onboarding_discovery", "notion_sync_starting"))
+        notion_summary, success = _sync_notion_workspace(
+            cli_tool=cli_tool,
+            agent_id=agent_id,
+        )
+        if success:
+            markdown_summary = notion_summary
+            if team_id is not None and markdown_summary.strip():
+                store_onboarding_memory_entry(
+                    team_id=team_id,
+                    content=markdown_summary,
+                    tags=["onboarding", "pkm"],
+                    source=MemorySource.IMPORT,
+                    priority=MemoryPriority.HIGH,
+                    layer=MemoryLayer.LONG_TERM,
+                )
+        elif allow_prompt:
+            if not _prompt_continue_without_pkm(
+                get_message("onboarding_discovery", "pkm_sync_failed")
+            ):
+                return None
     summary_text = _render_onboarding_summary(
         user_name=user_name,
+        pkm_source=pkm_source,
         repo_url=repo_url,
         profile_links=profile_links,
         markdown_summary=markdown_summary,
@@ -172,6 +219,39 @@ def _run_discovery_pipeline(
 
 
 def _ensure_onboarding_token(token_env: str) -> bool:
+    if os.environ.get(token_env):
+        return True
+    loaded, error = load_secret_from_1password_with_error(
+        vault_name=VAULT_NAME,
+        item_name=token_env,
+        field_label="credential",
+    )
+    if loaded:
+        os.environ[token_env] = loaded
+        return True
+    if has_onepassword_auth():
+        if error and _is_onepassword_auth_error(error):
+            print(
+                get_message(
+                    "onboarding_discovery",
+                    "onepassword_cli_not_ready",
+                    reason=error,
+                )
+            )
+        else:
+            ok, detail = check_onepassword_cli_access()
+            if not ok and detail:
+                print(
+                    get_message(
+                        "onboarding_discovery",
+                        "onepassword_cli_not_ready",
+                        reason=detail,
+                    )
+                )
+    return False
+
+
+def _ensure_notion_token(token_env: str) -> bool:
     if os.environ.get(token_env):
         return True
     loaded, error = load_secret_from_1password_with_error(
@@ -276,7 +356,7 @@ def _sync_obsidian_repo(
     token_username: str,
 ) -> tuple[Path, bool]:
     repo_name = _repo_name_from_url(repo_url)
-    dest = Path("data") / "obsidian" / repo_name
+    dest = resolve_data_path("obsidian", repo_name)
     dest.parent.mkdir(parents=True, exist_ok=True)
     stop_event = _start_sync_notifier()
     result = _run_cli_tool(
@@ -301,6 +381,55 @@ def _sync_obsidian_repo(
         print(get_message("onboarding_discovery", "failed_sync_repo", error=error))
         return dest, False
     return dest, True
+
+
+def _sync_notion_workspace(
+    *,
+    cli_tool: CliTool,
+    agent_id: str | None,
+) -> tuple[str, bool]:
+    search_body = {
+        "page_size": 25,
+        "sort": {"direction": "descending", "timestamp": "last_edited_time"},
+    }
+    result = _run_cli_tool(
+        cli_tool,
+        "notion",
+        agent_id=agent_id,
+        method="POST",
+        path="/v1/search",
+        body=json.dumps(search_body),
+        timeout=30,
+    )
+    if not result.get("success"):
+        error = result.get("error") or result.get("stderr") or result.get("raw_output")
+        if not error:
+            error = f"Unknown error (result={result})" if result else "Unknown error"
+        print(get_message("onboarding_discovery", "failed_sync_notion", error=error))
+        return "", False
+    output = result.get("output")
+    payload = output.get("response") if isinstance(output, dict) else None
+    if not isinstance(payload, dict):
+        print(
+            get_message(
+                "onboarding_discovery",
+                "failed_sync_notion",
+                error="No response payload.",
+            )
+        )
+        return "", False
+    results = payload.get("results")
+    if not isinstance(results, list):
+        print(
+            get_message(
+                "onboarding_discovery",
+                "failed_sync_notion",
+                error="No results returned.",
+            )
+        )
+        return "", False
+    summary = _summarize_notion_results(results)
+    return summary, True
 
 
 def _start_sync_notifier() -> threading.Event:
@@ -330,6 +459,54 @@ def _summarize_markdown_repo(repo_path: Path) -> str:
     if len(files) > 1000:
         lines.append(f"\nSkipped {len(files) - 1000} markdown files (limit 1000).")
     return "\n".join(lines)
+
+
+def _summarize_notion_results(results: list[dict[str, Any]]) -> str:
+    lines = [f"Notion items analyzed: {len(results)}"]
+    for item in results:
+        title = _extract_notion_title(item)
+        url = item.get("url") if isinstance(item.get("url"), str) else ""
+        object_type = (
+            item.get("object") if isinstance(item.get("object"), str) else "item"
+        )
+        last_edited = (
+            item.get("last_edited_time")
+            if isinstance(item.get("last_edited_time"), str)
+            else ""
+        )
+        suffix = f" ({last_edited})" if last_edited else ""
+        url_text = f" {url}" if url else ""
+        lines.append(f"- [{object_type}] {title}{suffix}{url_text}")
+    return "\n".join(lines)
+
+
+def _extract_notion_title(item: dict[str, Any]) -> str:
+    if item.get("object") == "database":
+        title = item.get("title")
+        return _join_notion_title_parts(title) or "Untitled database"
+    if item.get("object") == "page":
+        properties = item.get("properties")
+        if isinstance(properties, dict):
+            for value in properties.values():
+                if not isinstance(value, dict):
+                    continue
+                if value.get("type") != "title":
+                    continue
+                return _join_notion_title_parts(value.get("title")) or "Untitled page"
+    return "Untitled item"
+
+
+def _join_notion_title_parts(parts: Any) -> str:
+    if not isinstance(parts, list):
+        return ""
+    texts = []
+    for part in parts:
+        if not isinstance(part, dict):
+            continue
+        text = part.get("plain_text")
+        if isinstance(text, str) and text:
+            texts.append(text)
+    return "".join(texts).strip()
 
 
 def _fetch_profile_links(
@@ -378,21 +555,24 @@ def _build_profile_link_entry_writer(
 def _render_onboarding_summary(
     *,
     user_name: str,
+    pkm_source: str,
     repo_url: str,
     profile_links: list[str],
     markdown_summary: str,
     profile_summary: str,
 ) -> str:
     links_text = "\n".join(profile_links) if profile_links else "None"
+    repo_line = repo_url if repo_url else "None"
     return "\n".join(
         [
             "# Onboarding Summary",
             f"User: {user_name}",
-            f"Repo: {repo_url}",
+            f"PKM: {pkm_source}",
+            f"Repo: {repo_line}",
             "Profile links:",
             links_text,
             "",
-            "# Repo Notes",
+            "# PKM Notes",
             markdown_summary,
             "",
             "# Profile Notes",
@@ -445,11 +625,13 @@ def build_onboarding_prompt(summary_path: Path, summary_text: str) -> str:
 def build_onboarding_interview_prompt(
     *,
     user_name: str,
+    pkm_source: str,
     repo_url: str,
     profile_links: list[str],
     first_question: str,
 ) -> str:
     links_text = "\n".join(profile_links) if profile_links else "None"
+    repo_line = repo_url if repo_url else "None"
     return "\n".join(
         [
             "## ONBOARDING INTERVIEW",
@@ -463,7 +645,8 @@ def build_onboarding_interview_prompt(
             "the results in memory for future questions.",
             "",
             f"User: {user_name}",
-            f"Repo: {repo_url}",
+            f"PKM: {pkm_source}",
+            f"Repo: {repo_line}",
             "Profile links:",
             links_text,
         ]

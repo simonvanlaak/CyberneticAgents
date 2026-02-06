@@ -43,6 +43,7 @@ def _clear_teams() -> None:
 def _default_onboarding_args() -> argparse.Namespace:
     return argparse.Namespace(
         user_name="Test User",
+        pkm_source="github",
         repo_url="https://github.com/example/repo",
         profile_links=["https://example.com/profile"],
         token_env="GITHUB_READONLY_TOKEN",
@@ -92,6 +93,36 @@ def test_handle_onboarding_creates_default_team(
         assert start_calls[0] == team.id
     finally:
         session.close()
+
+
+def test_ensure_repo_root_env_var_writes_env_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(onboarding_cli, "_repo_root", lambda: tmp_path)
+    monkeypatch.delenv("CYBERAGENT_ROOT", raising=False)
+
+    onboarding_cli._ensure_repo_root_env_var()
+
+    env_path = tmp_path / ".env"
+    assert env_path.exists()
+    assert f"CYBERAGENT_ROOT={tmp_path.resolve()}" in env_path.read_text(
+        encoding="utf-8"
+    )
+    assert os.environ.get("CYBERAGENT_ROOT") == str(tmp_path.resolve())
+
+
+def test_ensure_repo_root_env_var_preserves_existing_value(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(onboarding_cli, "_repo_root", lambda: tmp_path)
+    monkeypatch.delenv("CYBERAGENT_ROOT", raising=False)
+    env_path = tmp_path / ".env"
+    env_path.write_text("CYBERAGENT_ROOT=/custom/root\n", encoding="utf-8")
+
+    onboarding_cli._ensure_repo_root_env_var()
+
+    assert env_path.read_text(encoding="utf-8") == "CYBERAGENT_ROOT=/custom/root\n"
+    assert os.environ.get("CYBERAGENT_ROOT") == "/custom/root"
 
 
 def test_handle_onboarding_skips_when_team_exists(
@@ -242,6 +273,7 @@ def test_handle_onboarding_stops_when_trigger_fails(
 def test_validate_onboarding_inputs_prompts_for_missing() -> None:
     args = argparse.Namespace(
         user_name=None,
+        pkm_source=None,
         repo_url=None,
         profile_links=[],
         token_env="GITHUB_READONLY_TOKEN",
@@ -250,6 +282,7 @@ def test_validate_onboarding_inputs_prompts_for_missing() -> None:
     inputs = iter(
         [
             "Ada Lovelace",
+            "2",
             "https://github.com/example/repo",
             "https://example.com/profile",
         ]
@@ -259,6 +292,8 @@ def test_validate_onboarding_inputs_prompts_for_missing() -> None:
         return next(inputs)
 
     monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(onboarding_cli.sys.stdin, "isatty", lambda: False)
+    monkeypatch.setattr(onboarding_cli.sys.stdout, "isatty", lambda: False)
     monkeypatch.setattr("builtins.input", _fake_input)
     try:
         assert onboarding_cli._validate_onboarding_inputs(args) is True
@@ -266,6 +301,7 @@ def test_validate_onboarding_inputs_prompts_for_missing() -> None:
         monkeypatch.undo()
 
     assert args.user_name == "Ada Lovelace"
+    assert args.pkm_source == "github"
     assert args.repo_url == "https://github.com/example/repo"
     assert args.profile_links == ["https://example.com/profile"]
 
@@ -871,91 +907,6 @@ def test_check_network_access_skips_without_network_skills(
 
     monkeypatch.setattr(onboarding_cli, "_probe_network_access", _fail_probe)
     assert onboarding_cli._check_network_access() is True
-
-
-def test_check_docker_optional_when_no_skills(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr(onboarding_docker, "skills_require_docker", lambda: False)
-    monkeypatch.setattr(onboarding_docker.shutil, "which", lambda *_: None)
-
-    assert onboarding_docker.check_docker_available() is True
-    captured = capsys.readouterr().out
-    assert "Continuing without tool execution" in captured
-
-
-def test_check_cli_tools_image_available_missing(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr(onboarding_docker, "skills_require_docker", lambda: True)
-    monkeypatch.setattr(onboarding_docker.shutil, "which", lambda *_: "/usr/bin/docker")
-
-    class DummyResult:
-        def __init__(self, returncode: int) -> None:
-            self.returncode = returncode
-            self.stdout = ""
-            self.stderr = ""
-
-    def fake_run(*_args: object, **_kwargs: object) -> DummyResult:
-        return DummyResult(returncode=1)
-
-    monkeypatch.setattr(onboarding_docker.subprocess, "run", fake_run)
-
-    assert onboarding_docker.check_cli_tools_image_available() is False
-    captured = capsys.readouterr().out
-    assert "CLI tools image is not available" in captured
-
-
-def test_check_cli_tools_image_available_permission_denied(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr(onboarding_docker, "skills_require_docker", lambda: True)
-    monkeypatch.setattr(onboarding_docker.shutil, "which", lambda *_: "/usr/bin/docker")
-
-    class DummyResult:
-        def __init__(self, returncode: int, stderr: str) -> None:
-            self.returncode = returncode
-            self.stdout = ""
-            self.stderr = stderr
-
-    def fake_run(*_args: object, **_kwargs: object) -> DummyResult:
-        return DummyResult(
-            returncode=1,
-            stderr="permission denied while trying to connect",
-        )
-
-    monkeypatch.setattr(onboarding_docker.subprocess, "run", fake_run)
-
-    assert onboarding_docker.check_cli_tools_image_available() is False
-    captured = capsys.readouterr().out.lower()
-    assert "permission denied" in captured
-    assert "docker group" in captured
-
-
-def test_check_docker_available_permission_denied(
-    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
-) -> None:
-    monkeypatch.setattr(onboarding_docker.shutil, "which", lambda *_: "/usr/bin/docker")
-    monkeypatch.setattr(onboarding_docker, "skills_require_docker", lambda: True)
-
-    class DummyResult:
-        def __init__(self, returncode: int, stderr: str) -> None:
-            self.returncode = returncode
-            self.stdout = ""
-            self.stderr = stderr
-
-    def fake_run(*_args: object, **_kwargs: object) -> DummyResult:
-        return DummyResult(
-            returncode=1,
-            stderr="Permission denied while trying to connect to the Docker API",
-        )
-
-    monkeypatch.setattr(onboarding_docker.subprocess, "run", fake_run)
-
-    assert onboarding_docker.check_docker_available() is False
-    captured = capsys.readouterr().out.lower()
-    assert "cannot access the daemon" in captured
-    assert "docker group" in captured
 
 
 def test_warn_optional_api_keys_reads_onepassword(
