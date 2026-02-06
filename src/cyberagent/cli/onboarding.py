@@ -55,8 +55,8 @@ from src.cyberagent.cli.onboarding_discovery import start_discovery_background
 from src.cyberagent.cli.onboarding_interview import start_onboarding_interview
 from src.cyberagent.cli.onboarding_prompts import _prompt_for_missing_inputs
 from src.cyberagent.cli.message_catalog import get_message
-from src.cyberagent.cli import onboarding_telegram
 from src.cyberagent.cli.onboarding_constants import DEFAULT_GIT_TOKEN_ENV
+from src.cyberagent.cli.onboarding_constants import DEFAULT_NOTION_TOKEN_ENV
 from src.cyberagent.cli.onboarding_secrets import (
     VAULT_NAME,
     _parse_env_value,
@@ -67,6 +67,10 @@ from src.cyberagent.cli.onboarding_secrets import (
 )
 from src.cyberagent.secrets import get_secret
 from src.cyberagent.cli.onboarding_vault import prompt_store_secret_in_1password
+from src.cyberagent.cli.onboarding_optional import (
+    _offer_optional_telegram_setup,
+    _warn_optional_api_keys,
+)
 from src.cyberagent.core.paths import get_repo_root as _repo_root
 from src.cyberagent.core.paths import get_logs_dir, get_data_dir
 from src.enums import SystemType
@@ -206,6 +210,8 @@ def _validate_onboarding_inputs(args: argparse.Namespace) -> bool:
         return False
     if pkm_source == "github" and not repo_url:
         print(get_message("onboarding", "onboarding_needs_repo"))
+        return False
+    if pkm_source == "notion" and not _check_notion_token():
         return False
     return True
 
@@ -915,73 +921,56 @@ def _probe_network_access() -> bool:
         return False
 
 
-def _warn_optional_api_keys() -> None:
-    optional = [
-        "LANGFUSE_PUBLIC_KEY",
-        "LANGFUSE_SECRET_KEY",
-        "LANGSMITH_API_KEY",
-    ]
-    missing: list[str] = []
-    for key in optional:
-        if os.environ.get(key):
-            continue
-        loaded = _load_secret_from_1password(
-            vault_name=VAULT_NAME,
-            item_name=key,
-            field_label="credential",
-        )
-        if loaded:
-            continue
-        missing.append(key)
-    if missing:
-        missing_str = ", ".join(missing)
+def _check_notion_token() -> bool:
+    token_env = DEFAULT_NOTION_TOKEN_ENV
+    if os.environ.get(token_env):
+        print(get_message("onboarding", "notion_ready"))
+        return True
+    loaded, error = load_secret_from_1password_with_error(
+        vault_name=VAULT_NAME,
+        item_name=token_env,
+        field_label="credential",
+    )
+    if loaded:
+        os.environ[token_env] = loaded
+        print(get_message("onboarding", "notion_ready"))
+        return True
+    if error:
         print(
             get_message(
                 "onboarding",
-                "optional_api_keys_missing",
-                missing_keys=missing_str,
+                "notion_token_missing_with_error",
+                token_env=token_env,
+                error=error,
             )
         )
-
-
-def _offer_optional_telegram_setup() -> None:
-    if not onboarding_telegram.sys.stdin.isatty():
-        return
-    if os.environ.get("TELEGRAM_BOT_TOKEN"):
-        onboarding_telegram._offer_optional_telegram_username_setup()
-        _offer_optional_telegram_webhook_setup()
-        return
-    loaded = onboarding_telegram._load_secret_from_1password("TELEGRAM_BOT_TOKEN")
-    if loaded:
-        os.environ["TELEGRAM_BOT_TOKEN"] = loaded
-        onboarding_telegram._offer_optional_telegram_username_setup()
-        _offer_optional_telegram_webhook_setup()
-        return
-    print(get_message("onboarding", "telegram_botfather_instructions"))
-    botfather = onboarding_telegram.botfather_link()
-    print(f"Open: {botfather}")
-    qr = onboarding_telegram.render_telegram_qr(botfather)
-    if qr:
-        print(qr)
-    print(get_message("onboarding", "telegram_not_configured"))
-    if not onboarding_telegram.prompt_store_secret_in_1password(
-        env_name="TELEGRAM_BOT_TOKEN",
-        description="Telegram bot token",
-        doc_hint=onboarding_telegram.TELEGRAM_DOC_HINT,
-        vault_name="CyberneticAgents",
+    else:
+        print(
+            get_message(
+                "onboarding",
+                "notion_token_missing",
+                token_env=token_env,
+                vault_name=VAULT_NAME,
+            )
+        )
+    print(get_message("onboarding", "field_name_hint"))
+    if not prompt_store_secret_in_1password(
+        env_name=token_env,
+        description="Notion API key",
+        doc_hint=None,
+        vault_name=VAULT_NAME,
     ):
-        return
-    loaded = onboarding_telegram._load_secret_from_1password("TELEGRAM_BOT_TOKEN")
-    if loaded:
-        os.environ["TELEGRAM_BOT_TOKEN"] = loaded
-    onboarding_telegram._offer_optional_telegram_username_setup()
-    _offer_optional_telegram_webhook_setup()
-
-
-def _offer_optional_telegram_webhook_setup() -> None:
-    onboarding_telegram._offer_optional_telegram_webhook_setup()
-    if os.environ.get("TELEGRAM_BOT_TOKEN"):
-        _print_feature_ready("TELEGRAM_BOT_TOKEN")
+        return False
+    loaded, _error = load_secret_from_1password_with_error(
+        vault_name=VAULT_NAME,
+        item_name=token_env,
+        field_label="credential",
+    )
+    if not loaded:
+        return False
+    os.environ[token_env] = loaded
+    print(get_message("onboarding", "notion_ready"))
+    return True
 
 
 def _load_secret_from_1password(
