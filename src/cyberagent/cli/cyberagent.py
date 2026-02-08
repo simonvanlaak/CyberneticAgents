@@ -68,6 +68,7 @@ LOGS_DIR = get_logs_dir()
 RUNTIME_PID_FILE = LOGS_DIR / "cyberagent.pid"
 CLI_LOG_STATE_FILE = LOGS_DIR / "cli_last_seen.json"
 SERVE_COMMAND = "serve"
+UI_COMMAND = "ui"
 TEST_START_ENV = "CYBERAGENT_TEST_NO_RUNTIME"
 SUGGEST_COMMAND = 'cyberagent suggest "Describe the task"'
 START_COMMAND = "cyberagent start"
@@ -117,6 +118,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Send an initial message after startup.",
     )
+    subparsers.add_parser(UI_COMMAND, help="Open the local read-only UI.")
     add_onboarding_args(subparsers)
     add_pairing_parser(subparsers)
 
@@ -319,8 +321,9 @@ async def _handle_start(args: argparse.Namespace) -> int:
     if team_id is None:
         return 1
     cmd = [sys.executable, "-m", "src.cyberagent.cli.cyberagent", SERVE_COMMAND]
-    if args.message:
-        cmd.extend(["--message", args.message])
+    message = getattr(args, "message", None)
+    if message:
+        cmd.extend(["--message", message])
     env = os.environ.copy()
     env["CYBERAGENT_ACTIVE_TEAM_ID"] = str(team_id)
     proc = subprocess.Popen(
@@ -409,6 +412,17 @@ async def _handle_stop(_: argparse.Namespace) -> int:
 async def _handle_restart(args: argparse.Namespace) -> int:
     await _handle_stop(args)
     return await _handle_start(args)
+
+
+def _handle_ui(_: argparse.Namespace) -> int:
+    dashboard_path = Path(__file__).resolve().parents[1] / "ui" / "dashboard.py"
+    cmd = [sys.executable, "-m", "streamlit", "run", str(dashboard_path)]
+    result = subprocess.run(
+        cmd,
+        check=False,
+        env=os.environ.copy(),
+    )
+    return int(result.returncode)
 
 
 def _handle_status(args: argparse.Namespace) -> int:
@@ -957,6 +971,7 @@ _HANDLERS = {
     "start": _handle_start,
     "restart": _handle_restart,
     "stop": _handle_stop,
+    UI_COMMAND: _handle_ui,
     "status": _handle_status,
     "onboarding": _handle_onboarding,
     "suggest": _handle_suggest,

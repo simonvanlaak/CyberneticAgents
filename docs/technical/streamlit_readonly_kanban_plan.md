@@ -28,11 +28,11 @@
 - Existing hierarchy/status query reference: `src/cyberagent/cli/status.py`
 
 ## Architecture Overview
-- Add one Streamlit app under `src/cyberagent/ui/kanban.py`.
+- Add one Streamlit app under `src/cyberagent/ui/dashboard.py`.
 - App reads data via existing DB connection/query logic (prefer reusing `status` aggregation patterns).
 - No new API service required for phase 1.
 - Run command:
-  - `streamlit run src/cyberagent/ui/kanban.py`
+  - `streamlit run src/cyberagent/ui/dashboard.py`
 
 ## UI Layout
 - Top bar filters:
