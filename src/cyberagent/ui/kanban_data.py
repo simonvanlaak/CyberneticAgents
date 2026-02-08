@@ -15,6 +15,8 @@ class TaskCard:
     id: int
     team_id: int
     team_name: str
+    purpose_id: Optional[int]
+    purpose_name: Optional[str]
     strategy_id: Optional[int]
     strategy_name: Optional[str]
     initiative_id: Optional[int]
@@ -23,6 +25,19 @@ class TaskCard:
     assignee: Optional[str]
     name: str
     content: str
+
+
+@dataclass(frozen=True)
+class InitiativeKanbanRow:
+    team_id: int
+    team_name: str
+    purpose_id: Optional[int]
+    purpose_name: Optional[str]
+    strategy_id: Optional[int]
+    strategy_name: Optional[str]
+    initiative_id: Optional[int]
+    initiative_name: Optional[str]
+    tasks_by_status: dict[str, list[TaskCard]]
 
 
 def _connect_db() -> sqlite3.Connection:
@@ -64,6 +79,8 @@ def load_task_cards(
             t.id AS task_id,
             t.team_id AS team_id,
             tm.name AS team_name,
+            p.id AS purpose_id,
+            p.name AS purpose_name,
             i.id AS initiative_id,
             i.name AS initiative_name,
             s.id AS strategy_id,
@@ -76,6 +93,7 @@ def load_task_cards(
         JOIN teams tm ON tm.id = t.team_id
         LEFT JOIN initiatives i ON i.id = t.initiative_id
         LEFT JOIN strategies s ON s.id = i.strategy_id
+        LEFT JOIN purposes p ON p.id = s.purpose_id
         WHERE 1 = 1
     """
     params: list[object] = []
@@ -104,6 +122,14 @@ def load_task_cards(
                 id=int(row["task_id"]),
                 team_id=int(row["team_id"]),
                 team_name=str(row["team_name"]),
+                purpose_id=(
+                    int(row["purpose_id"]) if row["purpose_id"] is not None else None
+                ),
+                purpose_name=(
+                    str(row["purpose_name"])
+                    if row["purpose_name"] is not None
+                    else None
+                ),
                 strategy_id=(
                     int(row["strategy_id"]) if row["strategy_id"] is not None else None
                 ),
@@ -144,3 +170,47 @@ def group_tasks_by_status(tasks: list[TaskCard]) -> dict[str, list[TaskCard]]:
         if task.status in grouped:
             grouped[task.status].append(task)
     return grouped
+
+
+def group_tasks_by_hierarchy(tasks: list[TaskCard]) -> list[InitiativeKanbanRow]:
+    """
+    Build initiative-level Kanban rows sorted like `status` hierarchy traversal.
+
+    Sort order: team_id, purpose_id, strategy_id, initiative_id.
+    """
+    buckets: dict[
+        tuple[int, Optional[int], Optional[int], Optional[int]], list[TaskCard]
+    ] = {}
+    for task in tasks:
+        key = (task.team_id, task.purpose_id, task.strategy_id, task.initiative_id)
+        buckets.setdefault(key, []).append(task)
+
+    def _sort_key(
+        key: tuple[int, Optional[int], Optional[int], Optional[int]],
+    ) -> tuple[int, int, int, int]:
+        team_id, purpose_id, strategy_id, initiative_id = key
+        return (
+            team_id,
+            purpose_id if purpose_id is not None else 0,
+            strategy_id if strategy_id is not None else 0,
+            initiative_id if initiative_id is not None else 0,
+        )
+
+    rows: list[InitiativeKanbanRow] = []
+    for key in sorted(buckets.keys(), key=_sort_key):
+        bucket_tasks = sorted(buckets[key], key=lambda task: task.id)
+        first = bucket_tasks[0]
+        rows.append(
+            InitiativeKanbanRow(
+                team_id=first.team_id,
+                team_name=first.team_name,
+                purpose_id=first.purpose_id,
+                purpose_name=first.purpose_name,
+                strategy_id=first.strategy_id,
+                strategy_name=first.strategy_name,
+                initiative_id=first.initiative_id,
+                initiative_name=first.initiative_name,
+                tasks_by_status=group_tasks_by_status(bucket_tasks),
+            )
+        )
+    return rows

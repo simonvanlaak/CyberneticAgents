@@ -3,11 +3,18 @@ from __future__ import annotations
 import importlib
 from typing import Any
 
-from src.cyberagent.ui.kanban_data import (
-    KANBAN_STATUSES,
-    group_tasks_by_status,
-    load_task_cards,
-)
+try:
+    from src.cyberagent.ui.kanban_data import (
+        KANBAN_STATUSES,
+        group_tasks_by_hierarchy,
+        load_task_cards,
+    )
+except ModuleNotFoundError:
+    from kanban_data import (
+        KANBAN_STATUSES,
+        group_tasks_by_hierarchy,
+        load_task_cards,
+    )
 
 
 def _load_streamlit() -> Any:
@@ -94,29 +101,35 @@ def render_board() -> None:
         initiative_id=initiative_id,
         assignee=assignee,
     )
-    grouped = group_tasks_by_status(filtered_tasks)
-
-    columns = st.columns(len(KANBAN_STATUSES))
-    for idx, status in enumerate(KANBAN_STATUSES):
-        column = columns[idx]
-        cards = grouped[status]
-        column.subheader(f"{status} ({len(cards)})")
-        if not cards:
-            column.caption("No tasks")
-            continue
-        for task in cards:
-            assignee_text = task.assignee or "-"
-            initiative_text = task.initiative_name or "-"
-            column.markdown(
-                "\n".join(
-                    [
-                        f"**#{task.id} {task.name}**",
-                        f"- Assignee: `{assignee_text}`",
-                        f"- Initiative: `{initiative_text}`",
-                    ]
+    hierarchy_rows = group_tasks_by_hierarchy(filtered_tasks)
+    for row in hierarchy_rows:
+        purpose_text = row.purpose_name or "-"
+        strategy_text = row.strategy_name or "-"
+        initiative_text = row.initiative_name or "-"
+        st.subheader(
+            f"Team {row.team_name} ({row.team_id}) · "
+            f"Purpose {purpose_text} · Strategy {strategy_text} · "
+            f"Initiative {initiative_text} ({row.initiative_id})"
+        )
+        columns = st.columns(len(KANBAN_STATUSES))
+        for idx, status in enumerate(KANBAN_STATUSES):
+            column = columns[idx]
+            cards = row.tasks_by_status[status]
+            column.markdown(f"**{status} ({len(cards)})**")
+            if not cards:
+                column.caption("No tasks")
+                continue
+            for task in cards:
+                assignee_text = task.assignee or "-"
+                column.markdown(
+                    "\n".join(
+                        [
+                            f"**#{task.id} {task.name}**",
+                            f"- Assignee: `{assignee_text}`",
+                        ]
+                    )
                 )
-            )
-            column.divider()
+                column.divider()
 
     st.subheader("Task Table")
     st.dataframe(
@@ -127,6 +140,7 @@ def render_board() -> None:
                 "assignee": task.assignee,
                 "name": task.name,
                 "team": task.team_name,
+                "purpose": task.purpose_name,
                 "strategy": task.strategy_name,
                 "initiative": task.initiative_name,
             }

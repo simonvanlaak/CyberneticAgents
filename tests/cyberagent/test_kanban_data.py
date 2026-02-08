@@ -10,13 +10,14 @@ from src.cyberagent.db.models.task import Task
 from src.cyberagent.db.models.team import Team
 from src.cyberagent.ui.kanban_data import (
     KANBAN_STATUSES,
+    group_tasks_by_hierarchy,
     group_tasks_by_status,
     load_task_cards,
 )
 from src.enums import Status
 
 
-def _seed_team_hierarchy(name_suffix: str) -> tuple[int, int, int]:
+def _seed_team_hierarchy(name_suffix: str) -> tuple[int, int, int, int]:
     session = next(get_db())
     try:
         team = Team(name=f"kanban-team-{name_suffix}", last_active_at=datetime.utcnow())
@@ -50,7 +51,7 @@ def _seed_team_hierarchy(name_suffix: str) -> tuple[int, int, int]:
         session.flush()
 
         session.commit()
-        return team.id, strategy.id, initiative.id
+        return team.id, purpose.id, strategy.id, initiative.id
     finally:
         session.close()
 
@@ -80,8 +81,8 @@ def _seed_task(
 
 
 def test_load_task_cards_filters_by_team_and_assignee() -> None:
-    team_a, _, initiative_a = _seed_team_hierarchy("a")
-    team_b, _, initiative_b = _seed_team_hierarchy("b")
+    team_a, _, _, initiative_a = _seed_team_hierarchy("a")
+    team_b, _, _, initiative_b = _seed_team_hierarchy("b")
 
     _seed_task(
         team_id=team_a,
@@ -115,7 +116,7 @@ def test_load_task_cards_filters_by_team_and_assignee() -> None:
 
 
 def test_group_tasks_by_status_returns_all_kanban_columns() -> None:
-    team_id, _, initiative_id = _seed_team_hierarchy("group")
+    team_id, _, _, initiative_id = _seed_team_hierarchy("group")
     _seed_task(
         team_id=team_id,
         initiative_id=initiative_id,
@@ -139,3 +140,42 @@ def test_group_tasks_by_status_returns_all_kanban_columns() -> None:
     assert [task.name for task in grouped[Status.COMPLETED.value]] == [
         "Grouped completed"
     ]
+
+
+def test_group_tasks_by_hierarchy_orders_like_status_view() -> None:
+    team_1, purpose_1, strategy_1, initiative_1 = _seed_team_hierarchy("h1")
+    team_2, purpose_2, strategy_2, initiative_2 = _seed_team_hierarchy("h2")
+
+    _seed_task(
+        team_id=team_2,
+        initiative_id=initiative_2,
+        name="Second hierarchy task",
+        status=Status.PENDING,
+        assignee="System1/root",
+    )
+    _seed_task(
+        team_id=team_1,
+        initiative_id=initiative_1,
+        name="First hierarchy task",
+        status=Status.IN_PROGRESS,
+        assignee="System1/ops",
+    )
+
+    rows = group_tasks_by_hierarchy(load_task_cards())
+    relevant = [row for row in rows if row.team_id in {team_1, team_2}]
+
+    assert [
+        (row.team_id, row.purpose_id, row.strategy_id, row.initiative_id)
+        for row in relevant
+    ] == [
+        (team_1, purpose_1, strategy_1, initiative_1),
+        (team_2, purpose_2, strategy_2, initiative_2),
+    ]
+    assert (
+        relevant[0].tasks_by_status[Status.IN_PROGRESS.value][0].name
+        == "First hierarchy task"
+    )
+    assert (
+        relevant[1].tasks_by_status[Status.PENDING.value][0].name
+        == "Second hierarchy task"
+    )
