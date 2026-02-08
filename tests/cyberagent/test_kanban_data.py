@@ -179,3 +179,29 @@ def test_group_tasks_by_hierarchy_orders_like_status_view() -> None:
         relevant[1].tasks_by_status[Status.PENDING.value][0].name
         == "Second hierarchy task"
     )
+
+
+def test_group_tasks_by_hierarchy_hides_completed_only_initiatives() -> None:
+    team_active, _, _, initiative_active = _seed_team_hierarchy("active")
+    team_done, _, _, initiative_done = _seed_team_hierarchy("done")
+
+    _seed_task(
+        team_id=team_active,
+        initiative_id=initiative_active,
+        name="Active task",
+        status=Status.IN_PROGRESS,
+        assignee="System1/ops",
+    )
+    _seed_task(
+        team_id=team_done,
+        initiative_id=initiative_done,
+        name="Done task",
+        status=Status.COMPLETED,
+        assignee="System1/root",
+    )
+
+    rows = group_tasks_by_hierarchy(load_task_cards())
+    initiative_ids = {row.initiative_id for row in rows}
+
+    assert initiative_active in initiative_ids
+    assert initiative_done not in initiative_ids

@@ -199,6 +199,10 @@ def group_tasks_by_hierarchy(tasks: list[TaskCard]) -> list[InitiativeKanbanRow]
     rows: list[InitiativeKanbanRow] = []
     for key in sorted(buckets.keys(), key=_sort_key):
         bucket_tasks = sorted(buckets[key], key=lambda task: task.id)
+        if bucket_tasks and all(
+            task.status == Status.COMPLETED.value for task in bucket_tasks
+        ):
+            continue
         first = bucket_tasks[0]
         rows.append(
             InitiativeKanbanRow(
