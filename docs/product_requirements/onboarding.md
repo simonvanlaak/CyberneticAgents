@@ -1,4 +1,4 @@
-# Planned Feature – Onboarding & Continuous Purpose Adjustment
+# Planned Feature – Onboarding (First-Run Scope)
 
 ## Problem Statement
 New deployments of the CyberneticAgents VSM currently require a **manual boot‑strapping** phase:
@@ -6,16 +6,14 @@ New deployments of the CyberneticAgents VSM currently require a **manual boot‑
 2. Operators must manually create the first set of goals, KPIs and policies.
 3. After the initial setup, purpose adjustments are still performed ad‑hoc.
 
-This manual onboarding is error‑prone and slows down experiments. We need an **automated onboarding flow** that discovers an initial purpose, sets up the basic VSM configuration, and then **continually refines** that purpose as the system gathers data.
+This manual onboarding is error‑prone and slows down experiments. We need an **automated onboarding flow** that discovers an initial purpose and sets up the basic VSM configuration.
 
 ## High‑Level Solution
-Create an onboarding **SOP** that runs once at first start (after technical onboarding)
-and then stays active in the background to **re‑evaluate the system’s purpose** on a
-regular schedule.
+Create an onboarding **SOP** that runs once at first start (after technical onboarding).
 
 ## Dependencies
 Depends on docs/features/standard_operating_procedures.md
-Depends on docs/product_requirements/cron_triggers.md
+Out-of-scope follow-up PRD: docs/product_requirements/continuous_product_discovery.md
 
 ### 1. First‑Run Discovery
 System 4 gets triggered with a default prompt that starts the discovery process on the user.
@@ -33,70 +31,9 @@ The best way arround is for the user to provide already documented knowledge on 
    - Use the repo default branch.
    - If sync fails, continue onboarding without PKM data but warn the user.
    - Store synced repos under `data/obsidian/<repo-name>`.
-   - Sync cadence: hourly.
 3.
 From this gained knowledge, then could system 4 start interviewing the user equiped with knowledge it is now able to ask more percise questions.
 Here Product Discovery principles need to be applied. The VSM is trying to understand what kind of a product it should be.
-
-### 2. Continuous Purpose Adjustment Loop
-Product discovery needs to be countinous. Root system 4 should have a regular trigger (daily)
-to review what tasks the VSM has completed, check for changes in the knowledge that is availbale
-and compare with existing purposes and strategies. It can ask the user follow up questions or
-suggest to innovate and automate tasks that have been repeating.
-
-I want to build an LLM Agent based automatic product discovery that asks questions to its user as well as does web research in order to identify user needs, that could be fulfilled by an LLM Agent. Research best practices on understanding user needs in an interview situation supported with additional research. And ultimately create a framework / flow / guide on how the interview should be structured.
-
-
-Added research results in docs/research_synthesys/AI-Powered User Discovery: A Framework for B2B Multi-Agent Onboarding.md
-Added research results in docs/research_synthesys_by_llms/LLM Agents for Autonomous Interviews: State of Research and Development
-Introduction.md
-
-## Reuse Existing Research (Preferred)
-We should reuse validated interview frameworks instead of inventing a new one. Concrete inputs we can incorporate:
-
-### 1. Anthropic Interviewer (large-scale autonomous interviews)
-Reference: https://www.anthropic.com/news/anthropic-interviewer
-
-Reusable findings:
-- Large-scale, long-form autonomous interviewing is feasible with consistent quality.
-- Separate analysis step clusters themes after interviews (LLM reading transcripts).
-- Public release of interview transcripts can act as prompt examples and eval data.
-
-Incorporation:
-- Structure onboarding as a 3-phase pipeline: plan → interview → analysis.
-- Keep analysis separate from the interview agent to reduce bias and hallucination.
-- Use released transcripts as prompt/eval fixtures for the onboarding interviewer.
-
-### 2. CLUE-Interviewer (LLM-powered in-the-moment UX interviews)
-Reference: https://aclanthology.org/2025.findings-acl.714/
-
-Reusable findings:
-- In-the-moment interviews (right after interaction) yield higher specificity.
-- Follow-up probing is critical; coverage of a target topic set is measurable.
-- Code and data released at https://github.com/cxcscmu/LLM-Interviewer
-
-Incorporation:
-- Use a topic checklist in prompts (coverage targets for discovery).
-- Require follow-up depth (clarification + “why” questions) when users mention pain points.
-- Reuse/inspect the open-source CLUE codebase for interviewer patterns and evals.
-
-### 3. Greylock AI-Native User Research (market behavior + cadence)
-Reference: https://greylock.com/greymatter/ai-user-research/
-
-Reusable findings:
-- AI interviews remove scheduling bottlenecks; research cadence can move from quarterly to weekly.
-- Participants often share more openly with AI than with human moderators.
-- Interviews should be queryable assets, not one-off reports.
-
-Incorporation:
-- Treat onboarding as the first node in an ongoing interview pipeline.
-- Store interviews + summaries in memory for later query and continuous strategy updates.
-- Provide “insight retrieval” interfaces over interview logs.
-
-## Open Source / Reusable Assets
-- CLUE-Interviewer code + data: https://github.com/cxcscmu/LLM-Interviewer
-- Anthropic Interviewer transcripts: linked in Anthropic Interviewer release
-
 
 ## Onboarding Inputs (Phase 1)
 - Required: user name.
@@ -132,19 +69,3 @@ The interview should run through the shared inbox + `UserAgent` to support multi
 - The SOP is executed by System3 after successful secrets/config validation.
 - The root team is created with its root purpose and root initiative assigned from the
   onboarding SOP.
-
-# Onboarding with live research
-Flow requirements:
-1. User enters their name, web links, and PKM vault details.
-2. Send two Telegram messages immediately: a welcome message explaining CyberneticAgents and that
-   an interview starts now, and the first interview question (pre-defined). If Telegram is not
-   configured, fall back to CLI output.
-3. Begin the interview immediately (no waiting for PKM or web link fetch).
-4. Fetch web links in the background. As each link finishes, append the content to memory so the
-   interview agent can read it before each next question.
-5. After web links finish, start PKM sync in the background. As PKM analysis completes, append
-   it to memory the same way so it enriches the interview in real time.
-6. When agents receive new information from user responses, they add it to memory.
-7. Use a fixed heuristic to trigger background web research when the user mentions a specific
-   business, city, product, or other named entity not already present in memory. Store results
-   into memory for future questions.

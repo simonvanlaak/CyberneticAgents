@@ -1,12 +1,15 @@
 # System3 Sequential Processing Implementation Test
 # Test the actual refactored handle_initiative_assign_message method
 
+import re
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from autogen_core import AgentId, MessageContext
 
 from src.agents.messages import InitiativeAssignMessage
+from src.agents.messages import TaskAssignMessage
 from src.agents.system3 import (
     System3,
     TaskCreateResponse,
@@ -357,3 +360,34 @@ if __name__ == "__main__":
     import asyncio
 
     asyncio.run(test_system3_sequential_processing_complete())
+
+
+@pytest.mark.asyncio
+async def test_assign_task_uses_valid_message_source() -> None:
+    system3 = System3("System3/controller1")
+
+    class DummySystem:
+        agent_id_str = "System1/root"
+
+        def get_agent_id(self):
+            return AgentId.from_str("System1/root")
+
+    class DummyTask:
+        name = "Do work"
+
+    published: dict[str, object] = {}
+
+    async def _capture(message, _agent_id):  # noqa: ANN001
+        published["message"] = message
+
+    with (
+        patch("src.cyberagent.services.systems.get_system", return_value=DummySystem()),
+        patch("src.cyberagent.services.tasks.get_task_by_id", return_value=DummyTask()),
+        patch("src.cyberagent.services.tasks.assign_task"),
+    ):
+        system3._publish_message_to_agent = _capture  # type: ignore[method-assign]
+        await system3.assign_task(system_id=1, task_id=7)
+
+    message = cast(TaskAssignMessage | None, published.get("message"))
+    assert message is not None
+    assert re.fullmatch(r"[A-Za-z0-9_-]+", message.source) is not None

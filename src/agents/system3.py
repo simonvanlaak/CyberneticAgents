@@ -307,7 +307,7 @@ class System3(SystemBase):
             TaskAssignMessage(
                 task_id=task_id,
                 assignee_agent_id_str=assignee.agent_id_str,
-                source=str(self.agent_id),
+                source=self.name,
                 content=task.name,
             ),
             assignee.get_agent_id(),

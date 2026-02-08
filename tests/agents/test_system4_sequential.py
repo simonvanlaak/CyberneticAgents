@@ -221,3 +221,32 @@ if __name__ == "__main__":
     import asyncio
 
     asyncio.run(test_system4_sequential_processing_demo())
+
+
+@pytest.mark.asyncio
+async def test_handle_user_message_retries_without_required_tool_choice() -> None:
+    system4 = System4("System4/intelligence1")
+    system4.run = AsyncMock(
+        side_effect=[
+            RuntimeError("Tool choice is required, but model did not call a tool"),
+            None,
+        ]
+    )
+    message = UserMessage(content="Need help with planning", source="User")
+    from autogen_core import CancellationToken, MessageContext, TopicId
+
+    ctx = MessageContext(
+        sender=AgentId.from_str("User/root"),
+        topic_id=TopicId(type="UserAgent", source="root"),
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="test-message",
+    )
+
+    await system4.handle_user_message(message=message, ctx=ctx)  # type: ignore[call-arg]
+
+    assert system4.run.await_count == 2
+    first_call = system4.run.await_args_list[0]
+    second_call = system4.run.await_args_list[1]
+    assert first_call.kwargs["tool_choice_required"] is True
+    assert second_call.kwargs["tool_choice_required"] is False
