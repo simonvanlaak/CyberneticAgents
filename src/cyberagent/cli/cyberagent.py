@@ -863,6 +863,8 @@ def _handle_help(args: argparse.Namespace) -> int:
 
 
 def _check_recent_runtime_errors(command: str | None) -> None:
+    if command == "logs":
+        return
     check_recent_runtime_errors(
         command=command,
         logs_dir=LOGS_DIR,
