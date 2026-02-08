@@ -69,6 +69,7 @@ from src.cyberagent.tools.cli_executor import (
     get_agent_skill_tools,
 )
 from src.cyberagent.tools.memory_crud import MemoryCrudTool
+from src.cyberagent.core.agent_naming import normalize_message_source
 
 if TYPE_CHECKING:
     from src.cyberagent.db.models.system import System
@@ -194,12 +195,25 @@ def _resolve_memory_scopes(
 def get_model_client(
     agent_id: AgentId, structured_output: bool
 ) -> OpenAIChatCompletionClient:
-    # In the future, each system could have a specific model and provider defined, including temperatures etc.
+    provider = os.environ.get("LLM_PROVIDER", "groq").lower()
+    if provider == "openai":
+        model = os.environ.get("OPENAI_MODEL", "gpt-5-nano-2025-08-07")
+        base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+        api_key = get_secret("OPENAI_API_KEY") or ""
+    elif provider == "mistral":
+        model = os.environ.get("MISTRAL_MODEL", "mistral-small-latest")
+        base_url = os.environ.get("MISTRAL_BASE_URL", "https://api.mistral.ai/v1")
+        api_key = get_secret("MISTRAL_API_KEY") or ""
+    else:
+        # Default provider is Groq for backward compatibility.
+        model = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
+        base_url = os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+        api_key = get_secret("GROQ_API_KEY") or ""
+
     return OpenAIChatCompletionClient(
-        # model="llama-3.1-8b-instant",
-        model="openai/gpt-oss-20b",
-        base_url="https://api.groq.com/openai/v1",
-        api_key=get_secret("GROQ_API_KEY") or "",
+        model=model,
+        base_url=base_url,
+        api_key=api_key,
         model_info=ModelInfo(
             vision=False,
             function_calling=True,
@@ -667,6 +681,8 @@ class SystemBase(RoutedAgent):
     async def _publish_message_to_agent(
         self, message: BaseChatMessage, agent_id: AgentId
     ):
+        if isinstance(message, BaseTextChatMessage):
+            message.source = normalize_message_source(message.source)
         topic_type = f"{agent_id.type}:"
         topic_source = agent_id.key.replace("/", "_")
         logger.debug(

@@ -28,6 +28,8 @@ def create_model_client(config: LLMConfig) -> Any:
     """
     if config.provider == "groq":
         return _create_groq_client(config)
+    elif config.provider == "openai":
+        return _create_openai_client(config)
     elif config.provider == "mistral":
         return _create_mistral_client(config)
     else:
@@ -47,6 +49,30 @@ def _create_groq_client(config: LLMConfig) -> OpenAIChatCompletionClient:
     return OpenAIChatCompletionClient(
         model=config.model,
         base_url=config.base_url or "https://api.groq.com/openai/v1",
+        api_key=config.api_key,
+        model_info=ModelInfo(
+            vision=False,
+            function_calling=True,
+            json_output=False,
+            family="unknown",
+            structured_output=False,
+        ),
+    )
+
+
+def _create_openai_client(config: LLMConfig) -> OpenAIChatCompletionClient:
+    """
+    Create an OpenAI model client.
+
+    Args:
+        config: LLM configuration
+
+    Returns:
+        OpenAIChatCompletionClient configured for OpenAI
+    """
+    return OpenAIChatCompletionClient(
+        model=config.model,
+        base_url=config.base_url or "https://api.openai.com/v1",
         api_key=config.api_key,
         model_info=ModelInfo(
             vision=False,
@@ -122,7 +148,7 @@ def get_available_providers() -> list:
     Returns:
         List of available provider names
     """
-    return ["groq", "mistral"]
+    return ["groq", "mistral", "openai"]
 
 
 def validate_config(config: LLMConfig) -> bool:

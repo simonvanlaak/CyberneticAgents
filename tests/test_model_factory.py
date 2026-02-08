@@ -18,7 +18,7 @@ from src.model_factory import (
 
 
 def test_get_available_providers_includes_expected() -> None:
-    assert set(get_available_providers()) == {"groq", "mistral"}
+    assert set(get_available_providers()) == {"groq", "mistral", "openai"}
 
 
 def test_validate_config_rejects_invalid_fields() -> None:
@@ -77,6 +77,19 @@ def test_create_model_client_mistral_returns_openai_fallback(
 
     monkeypatch.setattr(builtins, "__import__", fake_import)
     config = LLMConfig(provider="mistral", model="mistral-small-latest", api_key="k")
+
+    client = create_model_client(config)
+
+    assert isinstance(client, OpenAIChatCompletionClient)
+
+
+def test_create_model_client_openai_returns_openai_client() -> None:
+    config = LLMConfig(
+        provider="openai",
+        model="gpt-5-nano-2025-08-07",
+        api_key="test-openai-key",
+        base_url="https://api.openai.com/v1",
+    )
 
     client = create_model_client(config)
 

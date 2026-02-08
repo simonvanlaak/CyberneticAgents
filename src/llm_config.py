@@ -3,7 +3,7 @@
 LLM Configuration Module
 
 This module provides configuration management for multiple LLM providers
-(Groq and Mistral) in the Cybernetic Agents system.
+(Groq, Mistral, and OpenAI) in the Cybernetic Agents system.
 """
 
 import os
@@ -20,7 +20,7 @@ class LLMConfig:
     Configuration for LLM providers.
 
     Attributes:
-        provider: LLM provider name ("groq" or "mistral")
+        provider: LLM provider name ("groq", "mistral", or "openai")
         model: Model name to use
         api_key: API key for the provider
         temperature: Temperature setting (0.0-1.0)
@@ -49,22 +49,27 @@ SYSTEM_TYPE_MODEL_MAPPING = {
     SystemTypes.SYSTEM_1_OPERATIONS: {
         "groq": "llama-3.3-70b-versatile",
         "mistral": "mistral-small-latest",
+        "openai": "gpt-5-nano-2025-08-07",
     },
     SystemTypes.SYSTEM_2_COORDINATION: {
         "groq": "llama-3.3-70b-versatile",
         "mistral": "mistral-medium-latest",
+        "openai": "gpt-5-nano-2025-08-07",
     },
     SystemTypes.SYSTEM_3_CONTROL: {
         "groq": "llama-3.3-70b-versatile",
         "mistral": "mistral-medium-latest",
+        "openai": "gpt-5-nano-2025-08-07",
     },
     SystemTypes.SYSTEM_4_INTELLIGENCE: {
         "groq": "llama-3.3-70b-versatile",
         "mistral": "mistral-large-latest",
+        "openai": "gpt-5-nano-2025-08-07",
     },
     SystemTypes.SYSTEM_5_POLICY: {
         "groq": "llama-3.3-70b-versatile",
         "mistral": "mistral-large-latest",
+        "openai": "gpt-5-nano-2025-08-07",
     },
 }
 
@@ -77,11 +82,12 @@ def load_llm_config() -> LLMConfig:
         LLMConfig instance with loaded configuration
     """
     # Determine provider from environment or use default
-    provider = os.environ.get("LLM_PROVIDER", "mistral").lower()
+    provider = os.environ.get("LLM_PROVIDER", "groq").lower()
 
     # Load API keys
     groq_api_key = get_secret("GROQ_API_KEY") or ""
     mistral_api_key = get_secret("MISTRAL_API_KEY") or ""
+    openai_api_key = get_secret("OPENAI_API_KEY") or ""
 
     # Validate that the required API key is available
     if provider == "groq" and not groq_api_key:
@@ -91,6 +97,10 @@ def load_llm_config() -> LLMConfig:
     if provider == "mistral" and not mistral_api_key:
         raise ValueError(
             "MISTRAL_API_KEY environment variable is required for Mistral provider"
+        )
+    if provider == "openai" and not openai_api_key:
+        raise ValueError(
+            "OPENAI_API_KEY environment variable is required for OpenAI provider"
         )
 
     # Load common configuration
@@ -115,7 +125,11 @@ def load_llm_config() -> LLMConfig:
     config = LLMConfig(
         provider=provider,
         model=os.environ.get("LLM_MODEL", "mistral-small-latest"),
-        api_key=groq_api_key if provider == "groq" else mistral_api_key,
+        api_key=(
+            groq_api_key
+            if provider == "groq"
+            else mistral_api_key if provider == "mistral" else openai_api_key
+        ),
         temperature=temperature,
         max_tokens=max_tokens,
         top_p=top_p,
@@ -132,6 +146,9 @@ def load_llm_config() -> LLMConfig:
     elif provider == "mistral":
         config.api_type = "mistral"
         config.model = os.environ.get("MISTRAL_MODEL", "mistral-small-latest")
+    elif provider == "openai":
+        config.base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")
+        config.model = os.environ.get("OPENAI_MODEL", "gpt-5-nano-2025-08-07")
 
     return config
 
@@ -142,7 +159,7 @@ def get_model_for_system_type(system_type: str, provider: str) -> str:
 
     Args:
         system_type: The system type (e.g., SystemTypes.SYSTEM_1_OPERATIONS)
-        provider: The LLM provider ("groq" or "mistral")
+        provider: The LLM provider ("groq", "mistral", or "openai")
 
     Returns:
         The recommended model name for the system type and provider
@@ -154,7 +171,11 @@ def get_model_for_system_type(system_type: str, provider: str) -> str:
             return provider_models[provider]
 
     # Fallback to default model for the provider
-    return "llama-3.3-70b-versatile" if provider == "groq" else "mistral-small-latest"
+    if provider == "groq":
+        return "llama-3.3-70b-versatile"
+    if provider == "openai":
+        return "gpt-5-nano-2025-08-07"
+    return "mistral-small-latest"
 
 
 def determine_system_type(agent_id: str) -> str:

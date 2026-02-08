@@ -110,3 +110,27 @@ def test_determine_system_type_system1_match() -> None:
         determine_system_type("root_1operations_sys1")
         == SystemTypes.SYSTEM_1_OPERATIONS
     )
+
+
+def test_load_llm_config_openai_reads_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    monkeypatch.setenv("OPENAI_MODEL", "gpt-5-nano-2025-08-07")
+    monkeypatch.setenv("OPENAI_BASE_URL", "https://api.openai.com/v1")
+
+    config = load_llm_config()
+
+    assert config.provider == "openai"
+    assert config.api_key == "test-openai-key"
+    assert config.model == "gpt-5-nano-2025-08-07"
+    assert config.base_url == "https://api.openai.com/v1"
+
+
+def test_load_llm_config_openai_requires_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.delenv("MISTRAL_API_KEY", raising=False)
+
+    with pytest.raises(ValueError, match="OPENAI_API_KEY"):
+        load_llm_config()
