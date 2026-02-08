@@ -4,6 +4,8 @@
 import pytest
 from unittest.mock import AsyncMock, patch
 from autogen_core import MessageContext, AgentId, CancellationToken
+from autogen_agentchat.base import TaskResult
+from autogen_agentchat.messages import TextMessage
 
 from src.agents.system3 import (
     System3,
@@ -217,3 +219,65 @@ async def test_system3_task_review_escalates_when_no_policies():
     assert isinstance(published_message, PolicySuggestionMessage)
     assert published_message.policy_id is None
     assert published_message.task_id == 42
+
+
+@pytest.mark.asyncio
+async def test_system3_task_review_falls_back_on_json_validate_failure():
+    """Structured review should retry without strict schema when provider rejects JSON generation."""
+    system3 = System3("System3/controller1")
+    system3._publish_message_to_agent = AsyncMock()
+
+    message = TaskReviewMessage(
+        task_id=42,
+        assignee_agent_id_str="System1/root",
+        source="System1/root",
+        content="Task result",
+    )
+    context = MessageContext(
+        sender=AgentId.from_str("System1/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="task_review_fallback",
+    )
+
+    class DummyTask:
+        id = 42
+        assignee = "System1/root"
+
+    class DummySystem5:
+        def get_agent_id(self):
+            return AgentId.from_str("System5/root")
+
+    fallback_json = (
+        '{"cases":[{"policy_id":1,"judgement":"Satisfied","reasoning":"ok"}]}'
+    )
+    mocked_run = AsyncMock(
+        side_effect=[
+            RuntimeError("json_validate_failed: Failed to generate JSON"),
+            TaskResult(messages=[TextMessage(content=fallback_json, source="System3")]),
+        ]
+    )
+
+    with (
+        patch("src.cyberagent.services.tasks._get_task", return_value=DummyTask()),
+        patch(
+            "src.cyberagent.services.policies._get_system_policy_prompts",
+            return_value=[
+                '{"id":1,"content":"Approve when actionable","system_id":1,"team_id":1,"name":"task_completion_criteria"}'
+            ],
+        ),
+        patch.object(system3, "_get_systems_by_type", return_value=[DummySystem5()]),
+        patch.object(system3, "run", mocked_run),
+        patch("src.cyberagent.services.tasks.approve_task") as approve_task,
+    ):
+        await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
+
+    assert mocked_run.await_count == 2
+    first_call = mocked_run.await_args_list[0]
+    second_call = mocked_run.await_args_list[1]
+    assert first_call.args[3].__name__ == "CasesResponse"
+    assert first_call.kwargs["include_memory_context"] is False
+    assert second_call.args[3] is None
+    assert second_call.kwargs["include_memory_context"] is False
+    approve_task.assert_called_once()

@@ -299,6 +299,7 @@ class SystemBase(RoutedAgent):
         message_specific_prompts: List[str] = [],
         output_content_type: type[BaseModel] | None = None,
         tool_choice_required: bool = False,
+        include_memory_context: bool = True,
     ) -> TaskResult:
         mark_team_active(self.team_id)
         self._agent._reflect_on_tool_use = output_content_type is not None
@@ -314,7 +315,9 @@ class SystemBase(RoutedAgent):
 
         # get trace context from message or use agent's stored trace context
         last_message = chat_messages[-1]
-        memory_context = self._build_memory_context(last_message)
+        memory_context = (
+            self._build_memory_context(last_message) if include_memory_context else []
+        )
         await self._set_system_prompt(message_specific_prompts, memory_context)
         self._agent._output_content_type = output_content_type
         message_trace_context_raw = (

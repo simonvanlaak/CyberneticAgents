@@ -300,11 +300,36 @@ class System3(SystemBase):
                 "## Response",
                 "You are required to judge each policy as vague, violated, or passed.",
             ]
-            response = await self.run(
-                [message], ctx, message_specific_prompts, CasesResponse
-            )
-
-            cases_response = self._get_structured_message(response, CasesResponse)
+            try:
+                response = await self.run(
+                    [message],
+                    ctx,
+                    message_specific_prompts,
+                    CasesResponse,
+                    include_memory_context=False,
+                )
+                cases_response = self._get_structured_message(response, CasesResponse)
+            except Exception as exc:
+                if not self._is_json_generation_failure(exc):
+                    raise
+                fallback_prompts = [
+                    *message_specific_prompts,
+                    (
+                        "Return strict JSON only with this schema: "
+                        '{"cases":[{"policy_id":<int>,"judgement":"Vague|Violated|Satisfied","reasoning":"<string>"}]}'
+                    ),
+                    "Do not include markdown or prose outside the JSON object.",
+                ]
+                fallback_response = await self.run(
+                    [message],
+                    ctx,
+                    fallback_prompts,
+                    None,
+                    include_memory_context=False,
+                )
+                cases_response = self._get_structured_message(
+                    fallback_response, CasesResponse
+                )
 
             for case in cases_response.cases:
                 if case.judgement == PolicyJudgement.VIOLATED:
@@ -335,6 +360,10 @@ class System3(SystemBase):
                     # system 5 will call this message handler again once it has clarified the policy.
                 else:
                     raise ValueError("Invalid policy judgement")
+
+    def _is_json_generation_failure(self, exc: Exception) -> bool:
+        text = str(exc).lower()
+        return "json_validate_failed" in text or "failed to generate json" in text
 
     async def assign_task(self, system_id: int, task_id: int):
         assignee = system_service.get_system(system_id)
