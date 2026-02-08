@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 def start_onboarding_interview(
     *,
     user_name: str,
-    pkm_source: str,
+    pkm_source: str | None = None,
     repo_url: str,
     profile_links: list[str],
 ) -> None:
@@ -33,6 +33,9 @@ def start_onboarding_interview(
         repo_url: GitHub repo URL for markdown PKM (if applicable).
         profile_links: Profile links provided during onboarding.
     """
+    normalized_pkm_source = str(pkm_source or "").strip().lower()
+    if not normalized_pkm_source:
+        normalized_pkm_source = "github" if repo_url else "skip"
     first_question = get_message("onboarding", "onboarding_first_question")
     welcome_message = get_message(
         "onboarding", "telegram_onboarding_welcome", user_name=user_name
@@ -60,7 +63,7 @@ def start_onboarding_interview(
                 print(qr)
     prompt = build_onboarding_interview_prompt(
         user_name=user_name,
-        pkm_source=pkm_source,
+        pkm_source=normalized_pkm_source,
         repo_url=repo_url,
         profile_links=profile_links,
         first_question=first_question,

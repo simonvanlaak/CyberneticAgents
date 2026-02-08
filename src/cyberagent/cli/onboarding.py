@@ -200,6 +200,15 @@ def handle_onboarding(
 
 
 def _validate_onboarding_inputs(args: argparse.Namespace) -> bool:
+    pkm_source = getattr(args, "pkm_source", None)
+    repo_url = getattr(args, "repo_url", None)
+    if (
+        not pkm_source
+        and repo_url
+        and not sys.stdin.isatty()
+        and not sys.stdout.isatty()
+    ):
+        setattr(args, "pkm_source", "github")
     if not _prompt_for_missing_inputs(args):
         return False
     user_name = getattr(args, "user_name", None)
