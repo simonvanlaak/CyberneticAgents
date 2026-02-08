@@ -6,6 +6,12 @@ When answering questions, respond with high-confidence answers only: verify in c
 
 Always keep this file up-to-date with newest requirements for the agent.
 
+## PRD Workflow (Required)
+1. Discuss scope and goals of a new feature and create a PRD in `docs/product_requirements/`.
+2. Once agreed, create a rough technical plan in `docs/technical/`.
+3. Implement the plan.
+4. After completion, write the feature description in `docs/features/` and delete the PRD and technical plan.
+
 ## Security
 Never commit or publish real phone numbers, videos, or live configuration values. Use obviously fake placeholders in docs, tests, and examples.
 
