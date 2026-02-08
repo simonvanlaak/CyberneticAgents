@@ -2,6 +2,10 @@
 # Tests for System1 (Operations) agent functionality
 
 import pytest
+from autogen_agentchat.base import TaskResult
+from autogen_agentchat.messages import TextMessage
+from autogen_core import AgentId, CancellationToken, MessageContext
+from unittest.mock import AsyncMock
 
 from src.agents.system1 import System1
 from src.agents.messages import TaskAssignMessage, TaskReviewMessage
@@ -110,3 +114,48 @@ if __name__ == "__main__":
     import asyncio
 
     asyncio.run(test_system1_basic_smoke_test())
+
+
+@pytest.mark.asyncio
+async def test_system1_uses_context_sender_for_task_requestor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    system1 = System1("System1/worker1")
+    message = TaskAssignMessage(
+        task_id=7,
+        assignee_agent_id_str="System1/worker1",
+        source="System3_root",
+        content="Define scope",
+    )
+    ctx = MessageContext(
+        sender=AgentId.from_str("System3/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="test-message",
+    )
+
+    class _DummyTask:
+        pass
+
+    monkeypatch.setattr(
+        "src.cyberagent.services.tasks.start_task", lambda _task_id: _DummyTask()
+    )
+    monkeypatch.setattr("src.cyberagent.services.tasks.complete_task", lambda *_: None)
+    monkeypatch.setattr(
+        system1,
+        "run",
+        AsyncMock(
+            return_value=TaskResult(
+                messages=[TextMessage(content="done", source="System1/worker1")]
+            )
+        ),
+    )
+    system1._publish_message_to_agent = AsyncMock()  # type: ignore[attr-defined]
+
+    await system1.handle_assign_task_message(message=message, ctx=ctx)  # type: ignore[call-arg]
+
+    assert system1._publish_message_to_agent.await_count == 1  # type: ignore[attr-defined]
+    published_args = system1._publish_message_to_agent.await_args.args  # type: ignore[attr-defined]
+    recipient = published_args[1]
+    assert str(recipient) == "System3/root"

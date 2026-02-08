@@ -1,0 +1,85 @@
+from __future__ import annotations
+
+import sqlite3
+from pathlib import Path
+
+import pytest
+
+from src.cyberagent.cli import runtime_resume
+
+
+def _init_resume_db(path: Path) -> None:
+    conn = sqlite3.connect(path)
+    try:
+        conn.execute(
+            "CREATE TABLE initiatives (id INTEGER PRIMARY KEY, team_id INTEGER, status TEXT)"
+        )
+        conn.execute(
+            "CREATE TABLE systems (id INTEGER PRIMARY KEY, team_id INTEGER, type TEXT, agent_id_str TEXT)"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_queue_in_progress_initiatives_enqueues_messages(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db_path = tmp_path / "resume.db"
+    _init_resume_db(db_path)
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            "INSERT INTO initiatives (id, team_id, status) VALUES (1, 7, 'in_progress')"
+        )
+        conn.execute(
+            "INSERT INTO initiatives (id, team_id, status) VALUES (2, 7, 'pending')"
+        )
+        conn.execute(
+            "INSERT INTO initiatives (id, team_id, status) VALUES (3, 7, 'in_progress')"
+        )
+        conn.execute(
+            "INSERT INTO systems (id, team_id, type, agent_id_str) "
+            "VALUES (1, 7, 'control', 'System3/root')"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    recorded: list[dict[str, object]] = []
+    monkeypatch.setattr(runtime_resume, "get_database_path", lambda: str(db_path))
+
+    def _fake_enqueue(**kwargs: object) -> Path:
+        recorded.append(dict(kwargs))
+        return tmp_path / "queued.json"
+
+    monkeypatch.setattr(runtime_resume, "enqueue_agent_message", _fake_enqueue)
+
+    queued = runtime_resume.queue_in_progress_initiatives(team_id=7)
+
+    assert queued == 2
+    assert len(recorded) == 2
+    assert recorded[0]["recipient"] == "System3/root"
+    assert recorded[0]["message_type"] == "initiative_assign"
+    assert recorded[0]["payload"] == {
+        "initiative_id": 1,
+        "source": "System4/root",
+        "content": "Resume initiative 1.",
+    }
+    assert recorded[1]["payload"] == {
+        "initiative_id": 3,
+        "source": "System4/root",
+        "content": "Resume initiative 3.",
+    }
+
+
+def test_queue_in_progress_initiatives_returns_zero_on_sql_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        runtime_resume, "get_database_path", lambda: "/does/not/exist.db"
+    )
+
+    queued = runtime_resume.queue_in_progress_initiatives(team_id=1)
+
+    assert queued == 0

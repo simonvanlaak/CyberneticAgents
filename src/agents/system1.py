@@ -26,7 +26,10 @@ class System1(SystemBase):
     async def handle_assign_task_message(
         self, message: TaskAssignMessage, ctx: MessageContext
     ) -> None:
-        self.task_requestor = AgentId.from_str(message.source)
+        if ctx.sender is not None:
+            self.task_requestor = ctx.sender
+        else:
+            self.task_requestor = AgentId.from_str(message.source)
         task = task_service.start_task(message.task_id)
         response = await self.run([message], ctx)
         latest_message = self._get_last_message(response)

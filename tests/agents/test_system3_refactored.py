@@ -308,6 +308,68 @@ class TestSystem3RefactoredImplementation:
             system3.run.assert_called()
             system3.assign_task.assert_awaited_once_with(1, 101)
 
+    @pytest.mark.asyncio
+    async def test_handle_initiative_assign_message_redelivers_pending_assigned_task(
+        self,
+    ) -> None:
+        system3 = System3("System3/controller1")
+        initiative_message = InitiativeAssignMessage(
+            initiative_id=1, source="System4/strategy1", content="Start initiative 1."
+        )
+
+        from autogen_core import CancellationToken
+
+        context = MessageContext(
+            sender=AgentId.from_str("System4/strategy1"),
+            topic_id=None,
+            is_rpc=False,
+            cancellation_token=CancellationToken(),
+            message_id="test_msg_redeliver",
+        )
+
+        class DummyTask:
+            id = 7
+            name = "Define scope"
+            assignee = "System1/root"
+            status = "pending"
+
+        class DummyInitiative:
+            def __init__(self) -> None:
+                self.id = 1
+                self.status = ""
+                self.updated = False
+
+            def set_status(self, status):  # noqa: ANN001
+                self.status = str(status)
+
+            def update(self):
+                self.updated = True
+
+            def get_tasks(self):
+                return [DummyTask()]
+
+        with (
+            patch("src.agents.system3.init_db", lambda: None),
+            patch(
+                "src.cyberagent.services.initiatives._get_initiative",
+                return_value=DummyInitiative(),
+            ),
+            patch(
+                "src.cyberagent.services.tasks.has_tasks_for_initiative",
+                return_value=True,
+            ),
+        ):
+            system3.run = AsyncMock()
+            system3._publish_message_to_agent = AsyncMock()
+
+            await system3.handle_initiative_assign_message(
+                message=initiative_message,
+                ctx=context,
+            )  # type: ignore[call-arg]
+
+            system3.run.assert_not_called()
+            system3._publish_message_to_agent.assert_awaited_once()
+
 
 class TestSystem3MessageCompatibility:
     """Test message compatibility with the refactored implementation."""

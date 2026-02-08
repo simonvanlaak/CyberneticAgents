@@ -1,7 +1,7 @@
 import json
 from typing import List, Tuple
 
-from autogen_core import MessageContext, message_handler
+from autogen_core import AgentId, MessageContext, message_handler
 from autogen_core.tools import FunctionTool
 from pydantic import BaseModel, ConfigDict
 
@@ -84,10 +84,36 @@ class System3(SystemBase):
         initiative = initiative_service.start_initiative(message.initiative_id)
         existing_tasks = []
         if task_service.has_tasks_for_initiative(message.initiative_id):
-            existing_tasks = [
+            all_tasks = list(initiative.get_tasks())
+
+            def _task_status_value(task: object) -> str:
+                raw_status = getattr(task, "status", None)
+                status_value = getattr(raw_status, "value", raw_status)
+                return str(status_value).lower()
+
+            pending_assigned_tasks = [
                 task
-                for task in initiative.get_tasks()
-                if getattr(task, "assignee", None) is None
+                for task in all_tasks
+                if getattr(task, "assignee", None)
+                and _task_status_value(task) in {"pending", "status.pending"}
+            ]
+            if pending_assigned_tasks:
+                pending_task = pending_assigned_tasks[0]
+                assignee = getattr(pending_task, "assignee", None)
+                if isinstance(assignee, str):
+                    await self._publish_message_to_agent(
+                        TaskAssignMessage(
+                            task_id=pending_task.id,
+                            assignee_agent_id_str=assignee,
+                            source=self.name,
+                            content=pending_task.name,
+                        ),
+                        AgentId.from_str(assignee),
+                    )
+                return
+
+            existing_tasks = [
+                task for task in all_tasks if getattr(task, "assignee", None) is None
             ]
             if not existing_tasks:
                 return

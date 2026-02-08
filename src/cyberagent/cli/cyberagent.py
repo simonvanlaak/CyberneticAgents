@@ -40,6 +40,7 @@ from src.cyberagent.cli.cli_log_state import check_recent_runtime_errors
 from src.cyberagent.cli.cyberagent_helpers import handle_help, handle_login
 from src.cyberagent.cli.headless import run_headless_session
 from src.cyberagent.cli.message_catalog import get_message
+from src.cyberagent.cli.runtime_resume import queue_in_progress_initiatives
 from src.cyberagent.cli.status import main as status_main
 from src.cyberagent.cli.suggestion_queue import enqueue_suggestion
 from src.cyberagent.cli.transcribe import add_transcribe_parser, handle_transcribe
@@ -331,6 +332,7 @@ async def _handle_start(args: argparse.Namespace) -> int:
     )
     RUNTIME_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
     RUNTIME_PID_FILE.write_text(str(proc.pid), encoding="utf-8")
+    queue_in_progress_initiatives(team_id)
     print(get_message("cyberagent", "runtime_starting", pid=proc.pid))
     print(get_message("cyberagent", "next_suggest", suggest_command=SUGGEST_COMMAND))
     return 0
