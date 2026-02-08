@@ -1,5 +1,5 @@
 import json
-from typing import List, Tuple
+from typing import List
 
 from autogen_core import AgentId, MessageContext, message_handler
 from autogen_core.tools import FunctionTool
@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict
 from src.agents.messages import (
     CapabilityGapMessage,
     InitiativeAssignMessage,
+    PolicySuggestionMessage,
     PolicyVagueMessage,
     PolicyViolationMessage,
     TaskAssignMessage,
@@ -45,8 +46,13 @@ class CasesResponse(BaseModel):
     cases: List[PolicyJudgeResponse]
 
 
+class TaskAssignmentResponse(BaseModel):
+    system_id: int
+    task_id: int
+
+
 class TasksAssignResponse(BaseModel):
-    assignments: List[Tuple[int, int]]
+    assignments: List[TaskAssignmentResponse]
 
 
 class System3(SystemBase):
@@ -204,36 +210,32 @@ class System3(SystemBase):
                 *task_prompt_lines,
                 "## ASSIGNMENT",
                 "After having created the tasks, assign the one that needs to be completed first to a System 1 agent.",
-                "Respond with a list where for each system id you assign a task id.",
+                "Return strict JSON only using this schema:",
+                '{"assignments":[{"system_id":1,"task_id":7}]}',
+                "Rules:",
+                "1. assignments must be a list of objects with integer system_id and integer task_id.",
+                "2. Do not return arrays/tuples like [1,7].",
+                "3. Do not add prose, markdown, or explanation.",
+                "4. Assign exactly one next task for now.",
             ]
         )
 
-        # Phase 2: Sequential processing approach
-        # Option A: Try tool use first (without structured output constraint)
-        decision_response = await self.run([message], ctx, assign_tasks_assignment)
+        # Phase 2: Structured assignment output only (NO tools available)
+        self.tools = []  # Remove tools to avoid conflict
 
-        # Check if the tool was called during the decision phase
-        if self._was_tool_called(decision_response, self.assign_task.__name__):
-            # Tool was called, assignments are complete
-            return
-        else:
-            # Tool wasn't called, get structured assignments and process manually
-            # Phase 3: Get structured assignments (NO tools available)
-            self.tools = []  # Remove tools to avoid conflict
+        assignment_response = await self.run(
+            [message], ctx, assign_tasks_assignment, TasksAssignResponse
+        )
+        tasks_assign_response: TasksAssignResponse = self._get_structured_message(
+            assignment_response, TasksAssignResponse
+        )
 
-            assignment_response = await self.run(
-                [message], ctx, assign_tasks_assignment, TasksAssignResponse
-            )
-            tasks_assign_response: TasksAssignResponse = self._get_structured_message(
-                assignment_response, TasksAssignResponse
-            )
+        # Restore tools for future use
+        self.tools = original_tools
 
-            # Restore tools for future use
-            self.tools = original_tools
-
-            # Process assignments manually since tool wasn't called
-            for system_id, task_id in tasks_assign_response.assignments:
-                await self.assign_task(system_id, task_id)
+        # Process assignments from structured output
+        for assignment in tasks_assign_response.assignments:
+            await self.assign_task(assignment.system_id, assignment.task_id)
 
     @message_handler
     async def handle_capability_gap_message(
@@ -272,8 +274,21 @@ class System3(SystemBase):
         system_5_id = policy_systems[0].get_agent_id()
         # break down policies into chunks of 5
         if len(policy_chunk) == 0:
-            # TODO: send a policy suggestion here
-            raise ValueError("No policies found")
+            await self._publish_message_to_agent(
+                PolicySuggestionMessage(
+                    policy_id=None,
+                    task_id=task.id,
+                    content=(
+                        "Task review could not run because no policies exist for "
+                        f"assignee '{task.assignee}'. Create baseline review "
+                        "policies defining completion criteria, evidence "
+                        f"requirements, and safety constraints for task {task.id}."
+                    ),
+                    source=self.name,
+                ),
+                system_5_id,
+            )
+            return
         policy_chunks = [
             policy_chunk[i : i + 5] for i in range(0, len(policy_chunk), 5)
         ]

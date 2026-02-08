@@ -6,6 +6,7 @@ from src.agents.messages import (
     CapabilityGapMessage,
     ConfirmationMessage,
     PolicySuggestionMessage,
+    TaskReviewMessage,
     PolicyVagueMessage,
     PolicyViolationMessage,
     RecursionCreateMessage,
@@ -23,6 +24,7 @@ from src.cyberagent.services import strategies as strategy_service
 from src.cyberagent.services import systems as systems_service
 from src.cyberagent.services import tasks as task_service
 from src.cyberagent.services import teams as teams_service
+from src.enums import SystemType
 
 
 class System5(SystemBase):
@@ -193,6 +195,37 @@ class System5(SystemBase):
         Carefully evaluates the reasoning behind policy change suggestions and
         makes decisions that balance innovation with organizational stability.
         """
+        if message.task_id is not None and message.policy_id is None:
+            task = task_service.get_task_by_id(message.task_id)
+            if not task.assignee:
+                return ConfirmationMessage(
+                    content=f"Task {task.id} has no assignee; cannot bootstrap policies.",
+                    is_error=True,
+                    source=self.name,
+                )
+            created = policy_service.ensure_baseline_policies_for_assignee(
+                task.assignee
+            )
+            control_systems = self._get_systems_by_type(SystemType.CONTROL)
+            if control_systems:
+                await self._publish_message_to_agent(
+                    TaskReviewMessage(
+                        task_id=task.id,
+                        assignee_agent_id_str=task.assignee,
+                        source=self.name,
+                        content=task.result or task.name,
+                    ),
+                    control_systems[0].get_agent_id(),
+                )
+            return ConfirmationMessage(
+                content=(
+                    f"Created {created} baseline policies and retriggered "
+                    f"task review for task {task.id}."
+                ),
+                is_error=False,
+                source=self.name,
+            )
+
         policy_prompt = []
         if message.policy_id:
             policy = policy_service.get_policy_by_id(message.policy_id)

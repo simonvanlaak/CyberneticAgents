@@ -12,6 +12,7 @@ from src.agents.messages import InitiativeAssignMessage
 from src.agents.messages import TaskAssignMessage
 from src.agents.system3 import (
     System3,
+    TaskAssignmentResponse,
     TaskCreateResponse,
     TasksAssignResponse,
     TasksCreateResponse,
@@ -81,8 +82,6 @@ class TestSystem3RefactoredImplementation:
             # Mock the run method for both phases
             system3.run = AsyncMock()
             system3._get_structured_message = MagicMock()
-            system3._was_tool_called = MagicMock()
-
             # Phase 1: Task creation (structured output)
             mock_tasks_response = TasksCreateResponse(
                 tasks=[
@@ -103,16 +102,15 @@ class TestSystem3RefactoredImplementation:
             )
             # Provide task creation response first, then assignment response.
             mock_assign_response = TasksAssignResponse(
-                assignments=[(1, 101), (2, 102)]  # system_id, task_id pairs
+                assignments=[
+                    TaskAssignmentResponse(system_id=1, task_id=101),
+                    TaskAssignmentResponse(system_id=2, task_id=102),
+                ]
             )
             system3._get_structured_message.side_effect = [
                 mock_tasks_response,
                 mock_assign_response,
             ]
-
-            # Phase 2: Tool decision phase
-            # Simulate that the tool was NOT called (so we need structured assignment)
-            system3._was_tool_called.return_value = False
 
             # Mock assign_task method
             system3.assign_task = AsyncMock()
@@ -139,8 +137,8 @@ class TestSystem3RefactoredImplementation:
             assert system3.assign_task.call_count == 2
 
     @pytest.mark.asyncio
-    async def test_handle_initiative_assign_message_tool_called(self):
-        """Test when the assign_task tool is called directly."""
+    async def test_handle_initiative_assign_message_uses_structured_assignments(self):
+        """Test assignment flow uses structured output without tool-decision phase."""
         system3 = System3("System3/controller1")
 
         # Create an initiative message
@@ -193,26 +191,26 @@ class TestSystem3RefactoredImplementation:
             # Mock the run method
             system3.run = AsyncMock()
             system3._get_structured_message = MagicMock()
-            system3._was_tool_called = MagicMock()
-
-            # Simulate that the tool WAS called
-            system3._was_tool_called.return_value = True
-
             from autogen_agentchat.base import Response
             from autogen_agentchat.messages import TextMessage
 
             # Mock the run response
             system3.run.return_value = Response(
                 chat_message=TextMessage(
-                    content="Tool called", source="System3/controller1"
+                    content="Structured assignments", source="System3/controller1"
                 ),
                 inner_messages=[],
             )
 
-            # Provide minimal task creation response for phase 1.
-            system3._get_structured_message.return_value = TasksCreateResponse(
-                tasks=[TaskCreateResponse(name="Task 1", content="Do task 1")]
-            )
+            system3._get_structured_message.side_effect = [
+                TasksCreateResponse(
+                    tasks=[TaskCreateResponse(name="Task 1", content="Do task 1")]
+                ),
+                TasksAssignResponse(
+                    assignments=[TaskAssignmentResponse(system_id=1, task_id=1)]
+                ),
+            ]
+            system3.assign_task = AsyncMock()
 
             # Call the handler
             await system3.handle_initiative_assign_message(
@@ -220,10 +218,7 @@ class TestSystem3RefactoredImplementation:
                 ctx=context,
             )  # type: ignore[call-arg]
 
-            # Verify that when tool is called, we don't proceed to structured assignment
-            system3._was_tool_called.assert_called_with(
-                system3.run.return_value, "assign_task"
-            )
+            system3.assign_task.assert_awaited_once_with(1, 1)
 
     @pytest.mark.asyncio
     async def test_handle_initiative_assign_message_assigns_existing_tasks(self):
@@ -292,9 +287,10 @@ class TestSystem3RefactoredImplementation:
                 ),
                 inner_messages=[],
             )
-            system3._was_tool_called = MagicMock(return_value=False)
             system3._get_structured_message = MagicMock(
-                return_value=TasksAssignResponse(assignments=[(1, 101)])
+                return_value=TasksAssignResponse(
+                    assignments=[TaskAssignmentResponse(system_id=1, task_id=101)]
+                )
             )
             system3.assign_task = AsyncMock()
 
@@ -400,8 +396,7 @@ async def test_system3_sequential_processing_complete():
     # Test the sequential processing concept
     print("\n=== Sequential Processing Implementation ===")
     print("Phase 1: Structured task creation (tools disabled)")
-    print("Phase 2: Tool usage decision (tools enabled)")
-    print("Phase 3: Manual assignment if tools not called")
+    print("Phase 2: Structured task assignment (tools disabled)")
 
     # Test message creation
     initiative_message = InitiativeAssignMessage(

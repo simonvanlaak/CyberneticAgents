@@ -14,6 +14,7 @@ from src.agents.messages import (
     PolicyViolationMessage,
     PolicyVagueMessage,
     PolicySuggestionMessage,
+    TaskReviewMessage,
     StrategyReviewMessage,
     ResearchReviewMessage,
     ConfirmationMessage,
@@ -191,6 +192,54 @@ async def test_system5_policy_suggestion_missing_policy(
         message=message, ctx=ctx
     )  # type: ignore[call-arg]
     assert result.content == "ok"
+
+
+@pytest.mark.asyncio
+async def test_system5_policy_suggestion_bootstraps_policies_and_retries_review():
+    system5 = System5("System5/root")
+    system5._publish_message_to_agent = AsyncMock()
+
+    class DummyTask:
+        id = 77
+        assignee = "System1/root"
+        result = "done"
+        name = "Task 77"
+
+    class DummySystem3:
+        def get_agent_id(self):
+            from autogen_core import AgentId
+
+            return AgentId.from_str("System3/root")
+
+    from unittest.mock import patch
+
+    with (
+        patch(
+            "src.agents.system5.task_service.get_task_by_id", return_value=DummyTask()
+        ),
+        patch(
+            "src.agents.system5.policy_service.ensure_baseline_policies_for_assignee",
+            return_value=3,
+        ),
+        patch.object(system5, "_get_systems_by_type", return_value=[DummySystem3()]),
+    ):
+        result = await system5.handle_policy_suggestion_message(
+            PolicySuggestionMessage(
+                policy_id=None,
+                task_id=77,
+                content="No policies for review",
+                source="System3/root",
+            ),
+            SimpleNamespace(),
+        )  # type: ignore[arg-type]
+
+    assert "Created 3 baseline policies" in result.content
+    system5._publish_message_to_agent.assert_awaited_once()
+    await_args = system5._publish_message_to_agent.await_args
+    assert await_args is not None
+    published = await_args.args[0]
+    assert isinstance(published, TaskReviewMessage)
+    assert published.task_id == 77
 
 
 @pytest.mark.asyncio

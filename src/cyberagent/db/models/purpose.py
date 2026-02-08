@@ -64,18 +64,25 @@ def get_purpose(purpose_id: int) -> Purpose:
 def get_or_create_default_purpose(team_id: int) -> Purpose:
     db = next(get_db())
     try:
-        purpose = (
+        purposes = (
             db.query(Purpose)
-            .filter(
-                Purpose.team_id == team_id,
-                Purpose.name == "Default Purpose",
-            )
-            .first()
+            .filter(Purpose.team_id == team_id)
+            .order_by(Purpose.id.asc())
+            .all()
         )
-        if purpose:
-            db.refresh(purpose)
-            db.expunge(purpose)
-            return purpose
+        if purposes:
+            primary = purposes[0]
+            duplicates = purposes[1:]
+            for duplicate in duplicates:
+                db.query(Strategy).filter(Strategy.purpose_id == duplicate.id).update(
+                    {"purpose_id": primary.id}
+                )
+                db.delete(duplicate)
+            if duplicates:
+                db.commit()
+                db.refresh(primary)
+            db.expunge(primary)
+            return primary
         purpose = Purpose(
             team_id=team_id,
             name="Default Purpose",

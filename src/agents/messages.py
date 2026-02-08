@@ -68,6 +68,7 @@ class PolicySuggestionMessage(BaseTextChatMessage):
     """Used by System 3 and System 4 to suggest a policy change to System 5."""
 
     policy_id: int | None
+    task_id: int | None = None
     content: str
 
 

@@ -41,3 +41,76 @@ def test_get_or_create_default_purpose_returns_existing():
     existing = get_or_create_default_purpose(team_id)
 
     assert existing.id == purpose_id
+
+
+def test_get_or_create_default_purpose_reuses_existing_non_default_name():
+    init_db()
+    team_id = _create_team_id()
+    purpose = Purpose(
+        team_id=team_id,
+        name="Onboarding SOP",
+        content="Custom purpose content.",
+    )
+    purpose_id = purpose.add()
+
+    reused = get_or_create_default_purpose(team_id)
+
+    db = next(get_db())
+    try:
+        purpose_count = db.query(Purpose).filter(Purpose.team_id == team_id).count()
+    finally:
+        db.close()
+
+    assert reused.id == purpose_id
+    assert purpose_count == 1
+
+
+def test_get_or_create_default_purpose_deduplicates_team_purposes():
+    init_db()
+    team_id = _create_team_id()
+    primary = Purpose(
+        team_id=team_id,
+        name="Onboarding SOP",
+        content="Primary purpose.",
+    )
+    primary_id = primary.add()
+    secondary = Purpose(
+        team_id=team_id,
+        name="Default Purpose",
+        content="Secondary purpose.",
+    )
+    secondary_id = secondary.add()
+
+    db = next(get_db())
+    try:
+        from src.cyberagent.db.models.strategy import Strategy
+
+        strategy = Strategy(
+            team_id=team_id,
+            purpose_id=secondary_id,
+            name="Strategy on secondary purpose",
+            description="desc",
+        )
+        db.add(strategy)
+        db.commit()
+        strategy_id = strategy.id
+    finally:
+        db.close()
+
+    reused = get_or_create_default_purpose(team_id)
+
+    db = next(get_db())
+    try:
+        from src.cyberagent.db.models.strategy import Strategy
+
+        purpose_count = db.query(Purpose).filter(Purpose.team_id == team_id).count()
+        migrated_strategy = (
+            db.query(Strategy).filter(Strategy.id == strategy_id).first()
+        )
+    finally:
+        db.close()
+
+    assert reused.id == primary_id
+    assert purpose_count == 1
+    assert migrated_strategy is not None
+    assert migrated_strategy.purpose_id == primary_id

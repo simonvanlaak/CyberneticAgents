@@ -2,11 +2,20 @@
 # Tests for System3 (Control) agent functionality
 
 import pytest
-from unittest.mock import patch
-from autogen_core import MessageContext, AgentId
+from unittest.mock import AsyncMock, patch
+from autogen_core import MessageContext, AgentId, CancellationToken
 
-from src.agents.system3 import System3, TasksCreateResponse, TasksAssignResponse
-from src.agents.messages import InitiativeAssignMessage
+from src.agents.system3 import (
+    System3,
+    TaskAssignmentResponse,
+    TasksAssignResponse,
+    TasksCreateResponse,
+)
+from src.agents.messages import (
+    InitiativeAssignMessage,
+    PolicySuggestionMessage,
+    TaskReviewMessage,
+)
 
 
 class TestSystem3Basic:
@@ -77,10 +86,17 @@ class TestSystem3StructuredResponses:
 
     def test_tasks_assign_response(self):
         """Test TasksAssignResponse structure."""
-        response = TasksAssignResponse(assignments=[(1, 101), (2, 102)])
+        response = TasksAssignResponse(
+            assignments=[
+                TaskAssignmentResponse(system_id=1, task_id=101),
+                TaskAssignmentResponse(system_id=2, task_id=102),
+            ]
+        )
         assert len(response.assignments) == 2
-        assert response.assignments[0] == (1, 101)
-        assert response.assignments[1] == (2, 102)
+        assert response.assignments[0].system_id == 1
+        assert response.assignments[0].task_id == 101
+        assert response.assignments[1].system_id == 2
+        assert response.assignments[1].task_id == 102
 
 
 class TestSystem3Integration:
@@ -154,3 +170,50 @@ if __name__ == "__main__":
     import asyncio
 
     asyncio.run(test_system3_basic_smoke_test())
+
+
+@pytest.mark.asyncio
+async def test_system3_task_review_escalates_when_no_policies():
+    """No-policy task reviews should escalate to System5 instead of crashing."""
+    system3 = System3("System3/controller1")
+    system3._publish_message_to_agent = AsyncMock()
+
+    message = TaskReviewMessage(
+        task_id=42,
+        assignee_agent_id_str="System1/root",
+        source="System1/root",
+        content="Task result",
+    )
+    context = MessageContext(
+        sender=AgentId.from_str("System1/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="task_review_no_policy",
+    )
+
+    class DummyTask:
+        id = 42
+        assignee = "System1/root"
+
+    class DummySystem5:
+        def get_agent_id(self):
+            return AgentId.from_str("System5/root")
+
+    with (
+        patch("src.cyberagent.services.tasks._get_task", return_value=DummyTask()),
+        patch(
+            "src.cyberagent.services.policies._get_system_policy_prompts",
+            return_value=[],
+        ),
+        patch.object(system3, "_get_systems_by_type", return_value=[DummySystem5()]),
+    ):
+        await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
+
+    system3._publish_message_to_agent.assert_awaited_once()
+    await_args = system3._publish_message_to_agent.await_args
+    assert await_args is not None
+    published_message = await_args.args[0]
+    assert isinstance(published_message, PolicySuggestionMessage)
+    assert published_message.policy_id is None
+    assert published_message.task_id == 42
