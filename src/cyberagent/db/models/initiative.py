@@ -43,12 +43,13 @@ class Initiative(Base):
     tasks = relationship("Task", back_populates="initiative")
     procedure = relationship("Procedure")
 
-    def get_assign_message(self):
+    def get_assign_message(self) -> InitiativeAssignMessage:
         self.status = Status(Status.PENDING)
+        source = f"initiative_{self.id}" if self.id is not None else "initiative"
 
         return InitiativeAssignMessage(
             initiative_id=self.id,
-            source=self.name,
+            source=source,
             content=f"Start initiative {self.id}.",
         )
 

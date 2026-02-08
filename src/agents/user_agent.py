@@ -117,79 +117,74 @@ class UserAgent(RoutedAgent):
         self, message: TextMessage, ctx: MessageContext
     ) -> None:
         logger.debug("[%s]: %s", ctx.sender.__str__(), message.content)
-        if message.metadata:
-            inform_user_flag = str(message.metadata.get("inform_user", "")).lower() in {
-                "true",
-                "1",
-                "yes",
-            }
-            ask_user_flag = str(message.metadata.get("ask_user", "")).lower() in {
-                "true",
-                "1",
-                "yes",
-            }
-            channel = (
-                self._last_channel_context.channel
-                if self._last_channel_context
-                else DEFAULT_CHANNEL
+        metadata = message.metadata if isinstance(message.metadata, dict) else {}
+        ask_user_flag = str(metadata.get("ask_user", "")).lower() in {
+            "true",
+            "1",
+            "yes",
+        }
+        channel = (
+            self._last_channel_context.channel
+            if self._last_channel_context
+            else DEFAULT_CHANNEL
+        )
+        session_id = (
+            self._last_channel_context.session_id
+            if self._last_channel_context
+            else DEFAULT_SESSION_ID
+        )
+        if ask_user_flag and metadata.get("question_id") is None:
+            asked_by = str(ctx.sender) if ctx.sender else None
+            enqueue_pending_question(
+                message.content,
+                asked_by=asked_by,
+                channel=channel,
+                session_id=session_id,
             )
-            session_id = (
-                self._last_channel_context.session_id
-                if self._last_channel_context
-                else DEFAULT_SESSION_ID
+            if (
+                self._last_channel_context
+                and self._last_channel_context.channel == "telegram"
+                and self._last_channel_context.telegram_chat_id is not None
+            ):
+                await self._send_telegram_prompt(
+                    self._last_channel_context.telegram_chat_id,
+                    message.content,
+                )
+        elif ask_user_flag:
+            add_inbox_entry(
+                "system_question",
+                message.content,
+                channel=channel,
+                session_id=session_id,
+                asked_by=str(ctx.sender) if ctx.sender else None,
+                status="pending",
             )
-            if ask_user_flag and message.metadata.get("question_id") is None:
-                asked_by = str(ctx.sender) if ctx.sender else None
-                enqueue_pending_question(
+            if (
+                self._last_channel_context
+                and self._last_channel_context.channel == "telegram"
+                and self._last_channel_context.telegram_chat_id is not None
+            ):
+                await self._send_telegram_prompt(
+                    self._last_channel_context.telegram_chat_id,
                     message.content,
-                    asked_by=asked_by,
-                    channel=channel,
-                    session_id=session_id,
                 )
-                if (
-                    self._last_channel_context
-                    and self._last_channel_context.channel == "telegram"
-                    and self._last_channel_context.telegram_chat_id is not None
-                ):
-                    await self._send_telegram_prompt(
-                        self._last_channel_context.telegram_chat_id,
-                        message.content,
-                    )
-            elif inform_user_flag:
-                add_inbox_entry(
-                    "system_response",
+        else:
+            add_inbox_entry(
+                "system_response",
+                message.content,
+                channel=channel,
+                session_id=session_id,
+                asked_by=str(ctx.sender) if ctx.sender else None,
+            )
+            if (
+                self._last_channel_context
+                and self._last_channel_context.channel == "telegram"
+                and self._last_channel_context.telegram_chat_id is not None
+            ):
+                await self._send_telegram_prompt(
+                    self._last_channel_context.telegram_chat_id,
                     message.content,
-                    channel=channel,
-                    session_id=session_id,
-                    asked_by=str(ctx.sender) if ctx.sender else None,
                 )
-                if (
-                    self._last_channel_context
-                    and self._last_channel_context.channel == "telegram"
-                    and self._last_channel_context.telegram_chat_id is not None
-                ):
-                    await self._send_telegram_prompt(
-                        self._last_channel_context.telegram_chat_id,
-                        message.content,
-                    )
-            elif ask_user_flag:
-                add_inbox_entry(
-                    "system_question",
-                    message.content,
-                    channel=channel,
-                    session_id=session_id,
-                    asked_by=str(ctx.sender) if ctx.sender else None,
-                    status="pending",
-                )
-                if (
-                    self._last_channel_context
-                    and self._last_channel_context.channel == "telegram"
-                    and self._last_channel_context.telegram_chat_id is not None
-                ):
-                    await self._send_telegram_prompt(
-                        self._last_channel_context.telegram_chat_id,
-                        message.content,
-                    )
         pending_question = get_pending_question()
         if pending_question:
             logger.debug("Pending question (System4): %s", pending_question.content)

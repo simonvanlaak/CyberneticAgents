@@ -223,8 +223,8 @@ class TestSystem3RefactoredImplementation:
             )
 
     @pytest.mark.asyncio
-    async def test_handle_initiative_assign_message_skips_when_tasks_exist(self):
-        """Skip task generation when the initiative already has tasks."""
+    async def test_handle_initiative_assign_message_assigns_existing_tasks(self):
+        """Assign existing unassigned tasks when tasks are already materialized."""
         system3 = System3("System3/controller1")
 
         initiative_message = InitiativeAssignMessage(
@@ -253,6 +253,18 @@ class TestSystem3RefactoredImplementation:
             def update(self):
                 self.updated = True
 
+            def get_tasks(self):
+                class _Task:
+                    def __init__(self, task_id: int) -> None:
+                        self.id = task_id
+                        self.name = f"Task {task_id}"
+                        self.assignee = None
+
+                    def to_prompt(self):
+                        return [f"task-{self.id}"]
+
+                return [_Task(101), _Task(102)]
+
         with (
             patch("src.agents.system3.init_db", lambda: None),
             patch(
@@ -261,11 +273,26 @@ class TestSystem3RefactoredImplementation:
             patch(
                 "src.cyberagent.services.tasks.has_tasks_for_initiative"
             ) as mock_has_tasks,
+            patch.object(system3, "_get_systems_by_type") as mock_get_systems,
         ):
             mock_get_initiative.return_value = DummyInitiative(1)
             mock_has_tasks.return_value = True
+            mock_get_systems.return_value = []
+
+            from autogen_agentchat.base import Response
+            from autogen_agentchat.messages import TextMessage
 
             system3.run = AsyncMock()
+            system3.run.return_value = Response(
+                chat_message=TextMessage(
+                    content="Assignments prepared", source="System3/controller1"
+                ),
+                inner_messages=[],
+            )
+            system3._was_tool_called = MagicMock(return_value=False)
+            system3._get_structured_message = MagicMock(
+                return_value=TasksAssignResponse(assignments=[(1, 101)])
+            )
             system3.assign_task = AsyncMock()
 
             await system3.handle_initiative_assign_message(
@@ -275,8 +302,8 @@ class TestSystem3RefactoredImplementation:
 
             mock_get_initiative.assert_called_once_with(1)
             mock_has_tasks.assert_called_once_with(1)
-            system3.run.assert_not_called()
-            system3.assign_task.assert_not_called()
+            system3.run.assert_called()
+            system3.assign_task.assert_awaited_once_with(1, 101)
 
 
 class TestSystem3MessageCompatibility:

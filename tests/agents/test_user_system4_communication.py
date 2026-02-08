@@ -337,7 +337,7 @@ async def test_user_agent_forwards_question_with_id_to_telegram() -> None:
 
 
 @pytest.mark.asyncio
-async def test_user_agent_non_question_message_does_not_enqueue_question():
+async def test_user_agent_non_question_message_records_system_response():
     clear_pending_questions()
     user_agent = UserAgent("test_user")
     sender = AgentId(type=System4.__name__, key="root")
@@ -358,8 +358,9 @@ async def test_user_agent_non_question_message_does_not_enqueue_question():
     )  # type: ignore[call-arg]
 
     assert get_pending_question() is None
-    entries = list_inbox_entries()
-    assert entries == []
+    entries = list_inbox_entries(kind="system_response")
+    assert len(entries) == 1
+    assert entries[0].content == "General update without metadata."
 
 
 @pytest.mark.asyncio

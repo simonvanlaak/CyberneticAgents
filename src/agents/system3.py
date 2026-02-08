@@ -82,8 +82,15 @@ class System3(SystemBase):
     ) -> None:
         init_db()
         initiative = initiative_service.start_initiative(message.initiative_id)
+        existing_tasks = []
         if task_service.has_tasks_for_initiative(message.initiative_id):
-            return
+            existing_tasks = [
+                task
+                for task in initiative.get_tasks()
+                if getattr(task, "assignee", None) is None
+            ]
+            if not existing_tasks:
+                return
 
         initiative_payload = {
             "id": getattr(initiative, "id", None),
@@ -135,36 +142,40 @@ class System3(SystemBase):
             ]
         )
 
-        # Phase 1: Use structured output to create tasks (NO tools available)
-        # Remove tools temporarily to avoid conflicts with structured output
         original_tools = self.tools.copy()
-        self.tools = []  # Remove tools to avoid conflict with structured output
+        if existing_tasks:
+            tasks = existing_tasks
+        else:
+            # Phase 1: Use structured output to create tasks (NO tools available)
+            # Remove tools temporarily to avoid conflicts with structured output
+            self.tools = []  # Remove tools to avoid conflict with structured output
 
-        response = await self.run(
-            [message], ctx, break_down_tasks_assignment, TasksCreateResponse
-        )
-
-        # Restore tools for potential future use
-        self.tools = original_tools
-
-        tasks_create_response: TasksCreateResponse = self._get_structured_message(
-            response, TasksCreateResponse
-        )
-        tasks = []
-        for task_response in tasks_create_response.tasks:
-            task = task_service.create_task(
-                team_id=self.team_id,
-                initiative_id=message.initiative_id,
-                name=task_response.name,
-                content=task_response.content,
+            response = await self.run(
+                [message], ctx, break_down_tasks_assignment, TasksCreateResponse
             )
-            tasks.append(task)
+
+            # Restore tools for potential future use
+            self.tools = original_tools
+
+            tasks_create_response: TasksCreateResponse = self._get_structured_message(
+                response, TasksCreateResponse
+            )
+            tasks = []
+            for task_response in tasks_create_response.tasks:
+                task = task_service.create_task(
+                    team_id=self.team_id,
+                    initiative_id=message.initiative_id,
+                    name=task_response.name,
+                    content=task_response.content,
+                )
+                tasks.append(task)
 
         assign_tasks_assignment = message_specific_prompts
+        task_prompt_lines = [line for task in tasks for line in task.to_prompt()]
         assign_tasks_assignment.extend(
             [
                 "## TASKS",
-                *[task.to_prompt() for task in tasks],
+                *task_prompt_lines,
                 "## ASSIGNMENT",
                 "After having created the tasks, assign the one that needs to be completed first to a System 1 agent.",
                 "Respond with a list where for each system id you assign a task id.",
