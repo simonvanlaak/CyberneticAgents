@@ -9,12 +9,14 @@ try:
         group_tasks_by_hierarchy,
         load_task_cards,
     )
+    from src.cyberagent.ui.teams_data import load_teams_with_members
 except ModuleNotFoundError:
     from kanban_data import (
         KANBAN_STATUSES,
         group_tasks_by_hierarchy,
         load_task_cards,
     )
+    from teams_data import load_teams_with_members
 
 
 def _load_streamlit() -> Any:
@@ -87,6 +89,11 @@ def _apply_filters(
 def render_board() -> None:
     st = _load_streamlit()
     st.set_page_config(page_title="CyberneticAgents Kanban", layout="wide")
+    page = st.sidebar.selectbox("Page", ["Kanban", "Teams"])
+    if page == "Teams":
+        render_teams_page(st)
+        return
+
     st.title("CyberneticAgents Task Kanban (Read-Only)")
 
     all_tasks = load_task_cards()
@@ -149,6 +156,33 @@ def render_board() -> None:
         use_container_width=True,
         hide_index=True,
     )
+
+
+def render_teams_page(st: Any) -> None:
+    st.title("CyberneticAgents Teams (Read-Only)")
+    teams = load_teams_with_members()
+    if not teams:
+        st.info("No teams found.")
+        return
+
+    for team in teams:
+        st.subheader(f"Team {team.team_name} ({team.team_id})")
+        if not team.members:
+            st.caption("No team members")
+            continue
+        st.dataframe(
+            [
+                {
+                    "id": member.id,
+                    "name": member.name,
+                    "type": member.system_type,
+                    "agent_id": member.agent_id_str,
+                }
+                for member in team.members
+            ],
+            use_container_width=True,
+            hide_index=True,
+        )
 
 
 def main() -> None:
