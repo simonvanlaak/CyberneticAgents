@@ -29,6 +29,7 @@ dependencies = [
   "pytest-asyncio",
   "requests",
   "qrcode",
+  "streamlit",
 ]
 
 [project.scripts]
