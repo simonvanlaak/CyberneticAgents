@@ -48,6 +48,55 @@ I want to build an LLM Agent based automatic product discovery that asks questio
 
 
 Added research results in docs/research_synthesys/AI-Powered User Discovery: A Framework for B2B Multi-Agent Onboarding.md
+Added research results in docs/research_synthesys_by_llms/LLM Agents for Autonomous Interviews: State of Research and Development
+Introduction.md
+
+## Reuse Existing Research (Preferred)
+We should reuse validated interview frameworks instead of inventing a new one. Concrete inputs we can incorporate:
+
+### 1. Anthropic Interviewer (large-scale autonomous interviews)
+Reference: https://www.anthropic.com/news/anthropic-interviewer
+
+Reusable findings:
+- Large-scale, long-form autonomous interviewing is feasible with consistent quality.
+- Separate analysis step clusters themes after interviews (LLM reading transcripts).
+- Public release of interview transcripts can act as prompt examples and eval data.
+
+Incorporation:
+- Structure onboarding as a 3-phase pipeline: plan → interview → analysis.
+- Keep analysis separate from the interview agent to reduce bias and hallucination.
+- Use released transcripts as prompt/eval fixtures for the onboarding interviewer.
+
+### 2. CLUE-Interviewer (LLM-powered in-the-moment UX interviews)
+Reference: https://aclanthology.org/2025.findings-acl.714/
+
+Reusable findings:
+- In-the-moment interviews (right after interaction) yield higher specificity.
+- Follow-up probing is critical; coverage of a target topic set is measurable.
+- Code and data released at https://github.com/cxcscmu/LLM-Interviewer
+
+Incorporation:
+- Use a topic checklist in prompts (coverage targets for discovery).
+- Require follow-up depth (clarification + “why” questions) when users mention pain points.
+- Reuse/inspect the open-source CLUE codebase for interviewer patterns and evals.
+
+### 3. Greylock AI-Native User Research (market behavior + cadence)
+Reference: https://greylock.com/greymatter/ai-user-research/
+
+Reusable findings:
+- AI interviews remove scheduling bottlenecks; research cadence can move from quarterly to weekly.
+- Participants often share more openly with AI than with human moderators.
+- Interviews should be queryable assets, not one-off reports.
+
+Incorporation:
+- Treat onboarding as the first node in an ongoing interview pipeline.
+- Store interviews + summaries in memory for later query and continuous strategy updates.
+- Provide “insight retrieval” interfaces over interview logs.
+
+## Open Source / Reusable Assets
+- CLUE-Interviewer code + data: https://github.com/cxcscmu/LLM-Interviewer
+- Anthropic Interviewer transcripts: linked in Anthropic Interviewer release
+
 
 ## Onboarding Inputs (Phase 1)
 - Required: user name.
