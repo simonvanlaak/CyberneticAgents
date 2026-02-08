@@ -9,13 +9,13 @@ import pytest
 from src.cyberagent.cli import cyberagent
 
 
-def test_build_parser_includes_ui_command() -> None:
+def test_build_parser_includes_dashboard_command() -> None:
     parser = cyberagent.build_parser()
-    parsed = parser.parse_args(["ui"])
-    assert parsed.command == "ui"
+    parsed = parser.parse_args(["dashboard"])
+    assert parsed.command == "dashboard"
 
 
-def test_ui_command_starts_streamlit(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_dashboard_command_starts_streamlit(monkeypatch: pytest.MonkeyPatch) -> None:
     recorded: dict[str, object] = {}
 
     class DummyCompleted:
@@ -34,7 +34,7 @@ def test_ui_command_starts_streamlit(monkeypatch: pytest.MonkeyPatch) -> None:
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
-    exit_code = cyberagent.main(["ui"])
+    exit_code = cyberagent.main(["dashboard"])
 
     assert exit_code == 0
     cmd = cast(Sequence[str], recorded["cmd"])

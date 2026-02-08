@@ -68,7 +68,7 @@ LOGS_DIR = get_logs_dir()
 RUNTIME_PID_FILE = LOGS_DIR / "cyberagent.pid"
 CLI_LOG_STATE_FILE = LOGS_DIR / "cli_last_seen.json"
 SERVE_COMMAND = "serve"
-UI_COMMAND = "ui"
+DASHBOARD_COMMAND = "dashboard"
 TEST_START_ENV = "CYBERAGENT_TEST_NO_RUNTIME"
 SUGGEST_COMMAND = 'cyberagent suggest "Describe the task"'
 START_COMMAND = "cyberagent start"
@@ -118,7 +118,9 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Send an initial message after startup.",
     )
-    subparsers.add_parser(UI_COMMAND, help="Open the local read-only UI.")
+    subparsers.add_parser(
+        DASHBOARD_COMMAND, help="Open the local read-only Streamlit dashboard."
+    )
     add_onboarding_args(subparsers)
     add_pairing_parser(subparsers)
 
@@ -971,7 +973,7 @@ _HANDLERS = {
     "start": _handle_start,
     "restart": _handle_restart,
     "stop": _handle_stop,
-    UI_COMMAND: _handle_ui,
+    DASHBOARD_COMMAND: _handle_ui,
     "status": _handle_status,
     "onboarding": _handle_onboarding,
     "suggest": _handle_suggest,
