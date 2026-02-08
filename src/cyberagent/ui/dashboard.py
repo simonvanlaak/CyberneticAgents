@@ -10,6 +10,8 @@ try:
         load_task_cards,
     )
     from src.cyberagent.ui.teams_data import load_teams_with_members
+    from src.cyberagent.ui.dashboard_log_badge import count_warnings_errors
+    from src.cyberagent.core.paths import get_logs_dir
 except ModuleNotFoundError:
     from kanban_data import (
         KANBAN_STATUSES,
@@ -17,6 +19,8 @@ except ModuleNotFoundError:
         load_task_cards,
     )
     from teams_data import load_teams_with_members
+    from dashboard_log_badge import count_warnings_errors
+    from src.cyberagent.core.paths import get_logs_dir
 
 
 def _load_streamlit() -> Any:
@@ -89,12 +93,21 @@ def _apply_filters(
 def render_board() -> None:
     st = _load_streamlit()
     st.set_page_config(page_title="CyberneticAgents Kanban", layout="wide")
+
+    warnings, errors = count_warnings_errors(get_logs_dir())
+    title_col, badge_col = st.columns([8, 2])
+    with badge_col:
+        st.markdown(f"⚠️ **{warnings}**  ❌ **{errors}**")
+
     page = st.sidebar.selectbox("Page", ["Kanban", "Teams"])
     if page == "Teams":
+        with title_col:
+            st.title("CyberneticAgents Teams (Read-Only)")
         render_teams_page(st)
         return
 
-    st.title("CyberneticAgents Task Kanban (Read-Only)")
+    with title_col:
+        st.title("CyberneticAgents Task Kanban (Read-Only)")
 
     all_tasks = load_task_cards()
     if not all_tasks:
@@ -159,7 +172,6 @@ def render_board() -> None:
 
 
 def render_teams_page(st: Any) -> None:
-    st.title("CyberneticAgents Teams (Read-Only)")
     teams = load_teams_with_members()
     if not teams:
         st.info("No teams found.")
