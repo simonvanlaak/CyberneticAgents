@@ -43,10 +43,9 @@ def get_system_policy_prompts(agent_id_str: str) -> List[str]:
         if system is None:
             return ["No system policies found - system not registered in database."]
         team_id = system.team_id
-        prompts = []
-        prompts.extend(
-            policy.to_prompt()
-            for policy in db.query(Policy)
+        prompts: list[str] = []
+        policies = (
+            db.query(Policy)
             .filter(
                 or_(
                     Policy.system_id == system.id,
@@ -55,6 +54,8 @@ def get_system_policy_prompts(agent_id_str: str) -> List[str]:
             )
             .all()
         )
+        for policy in policies:
+            prompts.extend(policy.to_prompt())
         return prompts
     finally:
         db.close()
@@ -68,15 +69,16 @@ def get_team_policy_prompts(agent_id_str: str) -> List[str]:
         if system is None:
             return ["No team policies found - system not registered in database."]
         team_id = system.team_id
-        prompts = []
-        prompts.extend(
-            policy.to_prompt()
-            for policy in db.query(Policy)
+        prompts: list[str] = []
+        policies = (
+            db.query(Policy)
             .filter(
                 and_(Policy.team_id == team_id, Policy.system_id.is_(None)),
             )
             .all()
         )
+        for policy in policies:
+            prompts.extend(policy.to_prompt())
         return prompts
     finally:
         db.close()

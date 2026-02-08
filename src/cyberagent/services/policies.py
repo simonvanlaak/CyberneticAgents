@@ -2,6 +2,8 @@
 
 from typing import List
 
+from sqlalchemy import and_, or_
+
 from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.models.policy import Policy
 from src.cyberagent.db.models.policy import (
@@ -62,8 +64,10 @@ def ensure_baseline_policies_for_assignee(agent_id: str) -> int:
         existing_count = (
             db.query(Policy)
             .filter(
-                Policy.team_id == system.team_id,
-                Policy.system_id.is_(None),
+                or_(
+                    and_(Policy.team_id == system.team_id, Policy.system_id.is_(None)),
+                    Policy.system_id == system.id,
+                )
             )
             .count()
         )
@@ -74,7 +78,7 @@ def ensure_baseline_policies_for_assignee(agent_id: str) -> int:
             db.add(
                 Policy(
                     team_id=system.team_id,
-                    system_id=None,
+                    system_id=system.id,
                     name=name,
                     content=content,
                 )
