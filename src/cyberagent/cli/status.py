@@ -267,9 +267,6 @@ def render_status(teams: list[TeamView]) -> str:
                     )
                     if not initiative.tasks:
                         lines.append(f"        {get_message('status', 'no_tasks')}")
-                        lines.append(
-                            f"        {get_message('status', 'next_request_tasks', suggest_command=SUGGEST_COMMAND)}"
-                        )
                         continue
                     task_lines = [
                         (

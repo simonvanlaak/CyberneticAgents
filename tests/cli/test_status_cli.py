@@ -247,3 +247,33 @@ def test_status_json_output_includes_fields():
         ]["id"]
         == task_id
     )
+
+
+def test_status_render_no_tasks_does_not_show_suggest_hint() -> None:
+    init_db()
+    team_id = _create_team_id()
+    purpose = Purpose(
+        team_id=team_id,
+        name="Purpose No Tasks",
+        content="Purpose content.",
+    )
+    purpose_id = purpose.add()
+    strategy_id = _insert_strategy(
+        team_id=team_id,
+        purpose_id=purpose_id,
+        name="Strategy No Tasks",
+        description="Strategy description.",
+        status="in_progress",
+    )
+    _insert_initiative(
+        team_id=team_id,
+        strategy_id=strategy_id,
+        name="Initiative No Tasks",
+        description="Initiative description.",
+        status="pending",
+    )
+
+    output = render_status(collect_status(team_id=team_id, active_only=False))
+
+    assert "No tasks found." in output
+    assert 'Next: run cyberagent suggest --payload "Describe the task"' not in output
