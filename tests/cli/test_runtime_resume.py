@@ -15,6 +15,18 @@ def _init_resume_db(path: Path) -> None:
             "CREATE TABLE initiatives (id INTEGER PRIMARY KEY, team_id INTEGER, status TEXT)"
         )
         conn.execute(
+            "CREATE TABLE tasks ("
+            "id INTEGER PRIMARY KEY, "
+            "team_id INTEGER, "
+            "initiative_id INTEGER, "
+            "status TEXT, "
+            "assignee TEXT, "
+            "name TEXT, "
+            "content TEXT, "
+            "result TEXT"
+            ")"
+        )
+        conn.execute(
             "CREATE TABLE systems (id INTEGER PRIMARY KEY, team_id INTEGER, type TEXT, agent_id_str TEXT)"
         )
         conn.commit()
@@ -39,6 +51,13 @@ def test_queue_in_progress_initiatives_enqueues_messages(
             "INSERT INTO initiatives (id, team_id, status) VALUES (3, 7, 'in_progress')"
         )
         conn.execute(
+            "INSERT INTO tasks (id, team_id, initiative_id, status) VALUES (10, 7, 2, 'pending')"
+        )
+        conn.execute(
+            "INSERT INTO tasks (id, team_id, initiative_id, status, assignee) "
+            "VALUES (11, 7, 2, 'completed', 'System1/root')"
+        )
+        conn.execute(
             "INSERT INTO systems (id, team_id, type, agent_id_str) "
             "VALUES (1, 7, 'control', 'System3/root')"
         )
@@ -57,19 +76,32 @@ def test_queue_in_progress_initiatives_enqueues_messages(
 
     queued = runtime_resume.queue_in_progress_initiatives(team_id=7)
 
-    assert queued == 2
-    assert len(recorded) == 2
+    assert queued == 4
+    assert len(recorded) == 4
     assert recorded[0]["recipient"] == "System3/root"
     assert recorded[0]["message_type"] == "initiative_assign"
     assert recorded[0]["payload"] == {
         "initiative_id": 1,
-        "source": "System4/root",
+        "source": "System4_root",
         "content": "Resume initiative 1.",
     }
     assert recorded[1]["payload"] == {
+        "initiative_id": 2,
+        "source": "System4_root",
+        "content": "Resume initiative 2.",
+    }
+    assert recorded[2]["payload"] == {
         "initiative_id": 3,
-        "source": "System4/root",
+        "source": "System4_root",
         "content": "Resume initiative 3.",
+    }
+    assert recorded[3]["message_type"] == "task_review"
+    assert recorded[3]["sender"] == "System1/root"
+    assert recorded[3]["payload"] == {
+        "task_id": 11,
+        "assignee_agent_id_str": "System1/root",
+        "source": "System1_root",
+        "content": "Review completed task 11.",
     }
 
 

@@ -160,3 +160,78 @@ async def test_agent_message_queue_stops_on_disk_io_error(
 
     assert stop_event.is_set() is True
     assert list(tmp_path.glob("*.json"))
+
+
+@pytest.mark.asyncio
+async def test_agent_message_queue_defers_on_non_disk_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    queued_path = tmp_path / "queued.json"
+    queued_path.write_text("{}", encoding="utf-8")
+    queued_message = agent_message_queue.QueuedAgentMessage(
+        path=queued_path,
+        recipient="System3/root",
+        sender="System4/root",
+        message_type="initiative_assign",
+        payload={"initiative_id": 1, "source": "System4_root", "content": "Resume."},
+        queued_at=0.0,
+        attempts=0,
+        next_attempt_at=0.0,
+    )
+    calls: dict[str, int] = {"defer": 0}
+    stop_event = asyncio.Event()
+
+    class FailingRuntime:
+        async def send_message(self, *args, **kwargs):  # noqa: ANN001
+            raise RuntimeError("connection error")
+
+    monkeypatch.setattr(
+        headless, "read_queued_agent_messages", lambda: [queued_message]
+    )
+    monkeypatch.setattr(headless, "SUGGEST_QUEUE_POLL_SECONDS", 0)
+
+    def _defer(**kwargs: object) -> bool:
+        calls["defer"] += 1
+        stop_event.set()
+        return False
+
+    monkeypatch.setattr(headless, "defer_agent_message", _defer)
+
+    await asyncio.wait_for(
+        headless._process_agent_message_queue(FailingRuntime(), stop_event),
+        timeout=1,
+    )
+
+    assert calls["defer"] == 1
+
+
+def test_build_agent_message_normalizes_invalid_source_name() -> None:
+    message = headless._build_agent_message(
+        "initiative_assign",
+        {
+            "initiative_id": 5,
+            "source": "System4/root",
+            "content": "Resume initiative 5.",
+        },
+    )
+
+    assert isinstance(message, headless.InitiativeAssignMessage)
+    assert message.source == "System4_root"
+
+
+def test_build_task_review_message_normalizes_invalid_source_name() -> None:
+    message = headless._build_agent_message(
+        "task_review",
+        {
+            "task_id": 42,
+            "assignee_agent_id_str": "System1/root",
+            "source": "System1/root",
+            "content": "Done.",
+        },
+    )
+
+    assert isinstance(message, headless.TaskReviewMessage)
+    assert message.task_id == 42
+    assert message.assignee_agent_id_str == "System1/root"
+    assert message.source == "System1_root"

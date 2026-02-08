@@ -3,10 +3,11 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import time
 from typing import Protocol
 
 from autogen_core import AgentId, CancellationToken
-from src.agents.messages import InitiativeAssignMessage, UserMessage
+from src.agents.messages import InitiativeAssignMessage, TaskReviewMessage, UserMessage
 from src.agents.user_agent import UserAgent
 from src.cli_session import forward_user_messages, read_stdin_loop
 from src.cyberagent.channels.inbox import DEFAULT_CHANNEL, DEFAULT_SESSION_ID
@@ -19,6 +20,7 @@ from src.cyberagent.cli.suggestion_queue import (
 )
 from src.cyberagent.cli.agent_message_queue import (
     ack_agent_message,
+    defer_agent_message,
     read_queued_agent_messages,
 )
 from src.cyberagent.db.init_db import init_db
@@ -34,6 +36,7 @@ from src.cyberagent.core.runtime import (
 from src.cyberagent.secrets import get_secret
 from src.cyberagent.cli.message_catalog import get_message
 from src.cyberagent.core.paths import get_logs_dir
+from src.cyberagent.core.agent_naming import normalize_message_source
 
 logger = logging.getLogger(__name__)
 
@@ -190,8 +193,27 @@ def _build_agent_message(message_type: str, payload: dict[str, object]) -> objec
         content = payload.get("content")
         return InitiativeAssignMessage(
             initiative_id=initiative_id,
-            source=str(source) if source is not None else "Onboarding",
+            source=normalize_message_source(
+                str(source) if source is not None else "Onboarding"
+            ),
             content=str(content) if content is not None else "Start initiative.",
+        )
+    if message_type == "task_review":
+        task_id = payload.get("task_id")
+        assignee_agent_id_str = payload.get("assignee_agent_id_str")
+        if not isinstance(task_id, int):
+            raise ValueError("task_review payload missing task_id")
+        if not isinstance(assignee_agent_id_str, str) or not assignee_agent_id_str:
+            raise ValueError("task_review payload missing assignee_agent_id_str")
+        source = payload.get("source")
+        content = payload.get("content")
+        return TaskReviewMessage(
+            task_id=task_id,
+            assignee_agent_id_str=assignee_agent_id_str,
+            source=normalize_message_source(
+                str(source) if source is not None else assignee_agent_id_str
+            ),
+            content=str(content) if content is not None else "Task completed.",
         )
     raise ValueError(f"Unsupported agent message type: {message_type}")
 
@@ -204,6 +226,8 @@ async def _process_agent_message_queue(
         for message in messages:
             if stop_event.is_set():
                 break
+            if message.next_attempt_at > time.time():
+                continue
             try:
                 payload_message = _build_agent_message(
                     message.message_type, message.payload
@@ -220,6 +244,7 @@ async def _process_agent_message_queue(
                 if _is_disk_io_error(exc):
                     _handle_disk_io_error(exc, stop_event, "agent message delivery")
                     break
+                defer_agent_message(path=message.path, error=str(exc))
                 logger.exception("Failed to deliver agent message %s", message.path)
-                break
+                continue
         await asyncio.sleep(SUGGEST_QUEUE_POLL_SECONDS)

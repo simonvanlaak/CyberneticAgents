@@ -3,15 +3,17 @@ from __future__ import annotations
 import sqlite3
 
 from src.cyberagent.cli.agent_message_queue import enqueue_agent_message
+from src.cyberagent.core.agent_naming import normalize_message_source
 from src.cyberagent.db.init_db import get_database_path
 
 
 def queue_in_progress_initiatives(team_id: int) -> int:
     """
-    Queue initiative_assign messages for in-progress initiatives to System3.
+    Queue startup-resume messages to System3.
 
     This allows runtime startup to resume control flow for initiatives that were
-    already in progress before the runtime stopped.
+    already in progress before the runtime stopped, and to backfill task review
+    for completed-but-unapproved tasks.
     """
     db_path = get_database_path()
     queued = 0
@@ -21,11 +23,31 @@ def queue_in_progress_initiatives(team_id: int) -> int:
         try:
             cursor = conn.cursor()
             cursor.execute(
-                "SELECT id FROM initiatives WHERE team_id = ? "
-                "AND UPPER(status) = ? ORDER BY id",
-                (team_id, "IN_PROGRESS"),
+                "SELECT i.id FROM initiatives i "
+                "WHERE i.team_id = ? AND ("
+                "UPPER(i.status) = ? OR ("
+                "UPPER(i.status) = ? AND EXISTS ("
+                "SELECT 1 FROM tasks t WHERE t.team_id = i.team_id "
+                "AND t.initiative_id = i.id"
+                ")"
+                ")) ORDER BY i.id",
+                (team_id, "IN_PROGRESS", "PENDING"),
             )
             initiative_ids = [int(row["id"]) for row in cursor.fetchall()]
+            cursor.execute(
+                "SELECT id, assignee, COALESCE(result, content, name, '') AS review_content "
+                "FROM tasks WHERE team_id = ? AND UPPER(status) = ? "
+                "AND assignee IS NOT NULL AND assignee != '' ORDER BY id",
+                (team_id, "COMPLETED"),
+            )
+            completed_tasks = [
+                (
+                    int(row["id"]),
+                    str(row["assignee"]),
+                    str(row["review_content"]),
+                )
+                for row in cursor.fetchall()
+            ]
             cursor.execute(
                 "SELECT agent_id_str FROM systems WHERE team_id = ? "
                 "AND UPPER(type) = ? ORDER BY id LIMIT 1",
@@ -49,8 +71,22 @@ def queue_in_progress_initiatives(team_id: int) -> int:
             message_type="initiative_assign",
             payload={
                 "initiative_id": initiative_id,
-                "source": "System4/root",
+                "source": normalize_message_source("System4/root"),
                 "content": f"Resume initiative {initiative_id}.",
+            },
+        )
+        queued += 1
+
+    for task_id, assignee, review_content in completed_tasks:
+        enqueue_agent_message(
+            recipient=recipient,
+            sender=assignee,
+            message_type="task_review",
+            payload={
+                "task_id": task_id,
+                "assignee_agent_id_str": assignee,
+                "source": normalize_message_source(assignee),
+                "content": review_content or f"Review completed task {task_id}.",
             },
         )
         queued += 1
