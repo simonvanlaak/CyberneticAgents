@@ -1,7 +1,7 @@
 import pytest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
-from typing import cast
+from typing import Any, cast
 
 from autogen_agentchat.base import TaskResult
 from autogen_agentchat.messages import TextMessage
@@ -14,7 +14,7 @@ from src.agents.system4 import InitiativeCreateResponse, StrategyCreateResponse,
 @pytest.mark.asyncio
 async def test_system4_strategy_request_triggers_system3_assignment(monkeypatch):
     system4 = System4("System4/root")
-    system4.run = AsyncMock(
+    cast(Any, system4).run = AsyncMock(
         return_value=TaskResult(messages=[TextMessage(content="ok", source="test")])
     )
 
@@ -102,12 +102,16 @@ async def test_system4_strategy_request_includes_response_format(monkeypatch):
     captured: dict[str, object] = {}
 
     async def fake_run(
-        chat_messages, ctx, message_specific_prompts=None, output_content_type=None
+        chat_messages,
+        ctx,
+        message_specific_prompts=None,
+        output_content_type=None,
+        tool_choice_required: bool = False,
     ):  # noqa: ANN001
         captured["prompts"] = message_specific_prompts or []
         return TaskResult(messages=[TextMessage(content="ok", source="test")])
 
-    system4.run = fake_run
+    cast(Any, system4).run = fake_run
     system4._get_structured_message = MagicMock(
         return_value=StrategyCreateResponse(
             name="Test Strategy",
