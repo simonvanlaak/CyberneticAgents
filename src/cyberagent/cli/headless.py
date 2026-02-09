@@ -23,6 +23,10 @@ from src.cyberagent.cli.agent_message_queue import (
     defer_agent_message,
     read_queued_agent_messages,
 )
+from src.cyberagent.cli.processed_message_journal import (
+    mark_processed_message,
+    was_processed_message,
+)
 from src.cyberagent.db.init_db import init_db
 from src.cyberagent.core.state import get_last_team_id
 from src.cyberagent.core.logging import configure_autogen_logging
@@ -160,6 +164,9 @@ async def _process_suggestion_queue(
         for suggestion in suggestions:
             if stop_event.is_set():
                 break
+            if was_processed_message("suggestion", suggestion.idempotency_key):
+                ack_suggestion(suggestion.path)
+                continue
             message = UserMessage(content=suggestion.payload_text, source="User")
             message.metadata = {
                 "channel": DEFAULT_CHANNEL,
@@ -171,6 +178,7 @@ async def _process_suggestion_queue(
                     recipient=AgentId(type="System4", key="root"),
                     sender=AgentId(type="UserAgent", key="root"),
                 )
+                mark_processed_message("suggestion", suggestion.idempotency_key)
                 ack_suggestion(suggestion.path)
             except Exception as exc:  # pragma: no cover - safety net
                 if _is_disk_io_error(exc):
@@ -225,6 +233,9 @@ async def _process_agent_message_queue(
                 break
             if message.next_attempt_at > time.time():
                 continue
+            if was_processed_message("agent_message", message.idempotency_key):
+                ack_agent_message(message.path)
+                continue
             try:
                 payload_message = _build_agent_message(
                     message.message_type, message.payload
@@ -236,6 +247,7 @@ async def _process_agent_message_queue(
                     recipient=recipient,
                     sender=sender,
                 )
+                mark_processed_message("agent_message", message.idempotency_key)
                 ack_agent_message(message.path)
             except Exception as exc:  # pragma: no cover - safety net
                 if _is_disk_io_error(exc):

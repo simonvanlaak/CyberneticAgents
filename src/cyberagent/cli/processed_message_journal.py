@@ -51,5 +51,7 @@ def mark_processed_message(scope: str, idempotency_key: str) -> None:
 
 
 def _journal_path(scope: str) -> Path:
-    safe_scope = "".join(ch if ch.isalnum() or ch in {"_", "-"} else "_" for ch in scope)
+    safe_scope = "".join(
+        ch if ch.isalnum() or ch in {"_", "-"} else "_" for ch in scope
+    )
     return JOURNAL_DIR / f"{safe_scope}.jsonl"

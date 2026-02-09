@@ -197,6 +197,101 @@ async def test_agent_message_queue_defers_on_non_disk_error(
     assert calls["defer"] == 1
 
 
+@pytest.mark.asyncio
+async def test_agent_message_queue_skips_already_processed_messages(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    queued_path = tmp_path / "queued.json"
+    queued_path.write_text("{}", encoding="utf-8")
+    queued_message = agent_message_queue.QueuedAgentMessage(
+        path=queued_path,
+        recipient="System3/root",
+        sender="System4/root",
+        message_type="initiative_assign",
+        payload={"initiative_id": 1, "source": "System4_root", "content": "Resume."},
+        idempotency_key="agent_message:already-processed",
+        queued_at=0.0,
+        attempts=0,
+        next_attempt_at=0.0,
+    )
+    stop_event = asyncio.Event()
+    calls: dict[str, int] = {"acked": 0}
+
+    class RuntimeSpy:
+        async def send_message(self, *args, **kwargs):  # noqa: ANN001
+            raise AssertionError("send_message should not be called for replay")
+
+    monkeypatch.setattr(
+        headless, "read_queued_agent_messages", lambda: [queued_message]
+    )
+    monkeypatch.setattr(headless, "SUGGEST_QUEUE_POLL_SECONDS", 0)
+    monkeypatch.setattr(headless, "was_processed_message", lambda *_: True)
+
+    def _ack(_path: Path) -> None:
+        calls["acked"] += 1
+        stop_event.set()
+
+    monkeypatch.setattr(headless, "ack_agent_message", _ack)
+
+    await asyncio.wait_for(
+        headless._process_agent_message_queue(RuntimeSpy(), stop_event),
+        timeout=1,
+    )
+
+    assert calls["acked"] == 1
+
+
+@pytest.mark.asyncio
+async def test_agent_message_queue_marks_processed_before_ack(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    queued_path = tmp_path / "queued.json"
+    queued_path.write_text("{}", encoding="utf-8")
+    queued_message = agent_message_queue.QueuedAgentMessage(
+        path=queued_path,
+        recipient="System3/root",
+        sender="System4/root",
+        message_type="initiative_assign",
+        payload={"initiative_id": 1, "source": "System4_root", "content": "Resume."},
+        idempotency_key="agent_message:new",
+        queued_at=0.0,
+        attempts=0,
+        next_attempt_at=0.0,
+    )
+    stop_event = asyncio.Event()
+    order: list[str] = []
+
+    class RuntimeOk:
+        async def send_message(self, *args, **kwargs):  # noqa: ANN001
+            order.append("send")
+            return None
+
+    monkeypatch.setattr(
+        headless, "read_queued_agent_messages", lambda: [queued_message]
+    )
+    monkeypatch.setattr(headless, "SUGGEST_QUEUE_POLL_SECONDS", 0)
+    monkeypatch.setattr(headless, "was_processed_message", lambda *_: False)
+
+    def _mark(_scope: str, _key: str) -> None:
+        order.append("mark")
+
+    def _ack(_path: Path) -> None:
+        order.append("ack")
+        stop_event.set()
+
+    monkeypatch.setattr(headless, "mark_processed_message", _mark)
+    monkeypatch.setattr(headless, "ack_agent_message", _ack)
+
+    await asyncio.wait_for(
+        headless._process_agent_message_queue(RuntimeOk(), stop_event),
+        timeout=1,
+    )
+
+    assert order == ["send", "mark", "ack"]
+
+
 def test_build_agent_message_normalizes_invalid_source_name() -> None:
     message = headless._build_agent_message(
         "initiative_assign",
