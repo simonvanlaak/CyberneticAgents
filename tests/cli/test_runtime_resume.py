@@ -23,7 +23,8 @@ def _init_resume_db(path: Path) -> None:
             "assignee TEXT, "
             "name TEXT, "
             "content TEXT, "
-            "result TEXT"
+            "result TEXT, "
+            "reasoning TEXT"
             ")"
         )
         conn.execute(
@@ -58,6 +59,10 @@ def test_queue_in_progress_initiatives_enqueues_messages(
             "VALUES (11, 7, 2, 'completed', 'System1/root')"
         )
         conn.execute(
+            "INSERT INTO tasks (id, team_id, initiative_id, status, assignee, reasoning) "
+            "VALUES (12, 7, 1, 'blocked', 'System1/root', 'Ambiguous output')"
+        )
+        conn.execute(
             "INSERT INTO systems (id, team_id, type, agent_id_str) "
             "VALUES (1, 7, 'control', 'System3/root')"
         )
@@ -76,8 +81,8 @@ def test_queue_in_progress_initiatives_enqueues_messages(
 
     queued = runtime_resume.queue_in_progress_initiatives(team_id=7)
 
-    assert queued == 4
-    assert len(recorded) == 4
+    assert queued == 5
+    assert len(recorded) == 5
     assert recorded[0]["recipient"] == "System3/root"
     assert recorded[0]["message_type"] == "initiative_assign"
     assert recorded[0]["payload"] == {
@@ -102,6 +107,14 @@ def test_queue_in_progress_initiatives_enqueues_messages(
         "assignee_agent_id_str": "System1/root",
         "source": "System1_root",
         "content": "Review completed task 11.",
+    }
+    assert recorded[4]["message_type"] == "task_review"
+    assert recorded[4]["sender"] == "System1/root"
+    assert recorded[4]["payload"] == {
+        "task_id": 12,
+        "assignee_agent_id_str": "System1/root",
+        "source": "System1_root",
+        "content": "Ambiguous output",
     }
 
 

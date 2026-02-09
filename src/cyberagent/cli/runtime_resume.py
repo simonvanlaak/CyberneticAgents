@@ -35,12 +35,12 @@ def queue_in_progress_initiatives(team_id: int) -> int:
             )
             initiative_ids = [int(row["id"]) for row in cursor.fetchall()]
             cursor.execute(
-                "SELECT id, assignee, COALESCE(result, content, name, '') AS review_content "
-                "FROM tasks WHERE team_id = ? AND UPPER(status) = ? "
+                "SELECT id, assignee, COALESCE(reasoning, result, content, name, '') AS review_content "
+                "FROM tasks WHERE team_id = ? AND UPPER(status) IN (?, ?) "
                 "AND assignee IS NOT NULL AND assignee != '' ORDER BY id",
-                (team_id, "COMPLETED"),
+                (team_id, "COMPLETED", "BLOCKED"),
             )
-            completed_tasks = [
+            review_tasks = [
                 (
                     int(row["id"]),
                     str(row["assignee"]),
@@ -77,7 +77,7 @@ def queue_in_progress_initiatives(team_id: int) -> int:
         )
         queued += 1
 
-    for task_id, assignee, review_content in completed_tasks:
+    for task_id, assignee, review_content in review_tasks:
         enqueue_agent_message(
             recipient=recipient,
             sender=assignee,
