@@ -46,6 +46,10 @@ from src.cyberagent.cli.onboarding_docker import (
 )
 from src.cyberagent.tools.cli_executor.skill_runtime import DEFAULT_SKILLS_ROOT
 from src.cyberagent.cli.onboarding_defaults import (
+    get_auto_execute_procedure,
+    get_default_purpose_name,
+    get_default_strategy_name,
+    get_default_team_name,
     load_procedure_defaults,
     load_root_team_defaults,
 )
@@ -70,6 +74,7 @@ from src.cyberagent.cli.onboarding_optional import (
 )
 from src.cyberagent.cli.onboarding_vault import prompt_store_secret_in_1password
 from src.cyberagent.cli import dashboard_launcher
+from src.cyberagent.cli.runtime_start_health import process_exited_during_startup
 from src.cyberagent.core.paths import get_repo_root, get_logs_dir, get_data_dir
 from src.enums import SystemType
 from src.rbac.enforcer import give_user_tool_permission
@@ -77,6 +82,7 @@ from src.rbac.enforcer import give_user_tool_permission
 LOGS_DIR = get_logs_dir()
 TECH_ONBOARDING_STATE_FILE = LOGS_DIR / "technical_onboarding.json"
 RUNTIME_PID_FILE = LOGS_DIR / "cyberagent.pid"
+RUNTIME_STARTUP_GRACE_SECONDS = 1.0
 NETWORK_SKILL_NAMES = {"web-fetch", "web-search", "git-readonly-sync"}
 TOOL_SECRET_DOC_HINTS = {
     "BRAVE_API_KEY": "src/tools/skills/web-search/SKILL.md",
@@ -142,10 +148,10 @@ def handle_onboarding(
         return 1
     procedures = load_procedure_defaults()
     team_defaults = load_root_team_defaults()
-    team_name = _get_default_team_name(team_defaults)
-    purpose_name = _get_default_purpose_name(team_defaults)
-    strategy_name = _get_default_strategy_name(team_defaults)
-    auto_execute = _get_auto_execute_procedure(team_defaults, procedures)
+    team_name = get_default_team_name(team_defaults)
+    purpose_name = get_default_purpose_name(team_defaults)
+    strategy_name = get_default_strategy_name(team_defaults)
+    auto_execute = get_auto_execute_procedure(team_defaults, procedures)
     init_db()
     session = next(get_db())
     try:
@@ -205,7 +211,9 @@ def handle_onboarding(
             onboarding_purpose_name=purpose_name,
         ):
             return 1
-    _start_runtime_after_onboarding(team.id)
+    runtime_pid = _start_runtime_after_onboarding(team.id)
+    if runtime_pid == -1:
+        return 1
     print(get_message("onboarding", "next_suggest", suggest_command=suggest_command))
     _start_dashboard_after_onboarding(team.id)
     return 0
@@ -259,6 +267,21 @@ def _start_runtime_after_onboarding(team_id: int) -> int | None:
         stderr=subprocess.STDOUT,
         close_fds=True,
     )
+    returncode = process_exited_during_startup(proc, RUNTIME_STARTUP_GRACE_SECONDS)
+    if returncode is not None:
+        try:
+            RUNTIME_PID_FILE.unlink()
+        except OSError:
+            pass
+        print(
+            get_message(
+                "onboarding",
+                "runtime_start_failed",
+                returncode=returncode,
+            )
+        )
+        print(get_message("onboarding", "runtime_start_failed_hint"))
+        return -1
     RUNTIME_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
     RUNTIME_PID_FILE.write_text(str(proc.pid), encoding="utf-8")
     print(get_message("onboarding", "runtime_starting", pid=proc.pid))
@@ -295,51 +318,6 @@ def _resolve_runtime_db_url() -> str:
     if not db_path.is_absolute():
         db_path = (Path.cwd() / db_path).resolve()
     return f"sqlite:///{db_path}"
-
-
-def _get_default_team_name(team_defaults: dict[str, object]) -> str:
-    team_block = team_defaults.get("team")
-    if isinstance(team_block, dict):
-        name = team_block.get("name")
-        if isinstance(name, str) and name.strip():
-            return name.strip()
-    return "root"
-
-
-def _get_default_purpose_name(team_defaults: dict[str, object]) -> str:
-    purpose = team_defaults.get("purpose")
-    if isinstance(purpose, dict):
-        name = purpose.get("name")
-        if isinstance(name, str) and name.strip():
-            return name.strip()
-    return "Onboarding SOP"
-
-
-def _get_default_strategy_name(team_defaults: dict[str, object]) -> str:
-    strategy = team_defaults.get("strategy")
-    if isinstance(strategy, dict):
-        name = strategy.get("name")
-        if isinstance(name, str) and name.strip():
-            return name.strip()
-    return "Onboarding SOP"
-
-
-def _get_auto_execute_procedure(
-    team_defaults: dict[str, object], procedures: list[dict[str, object]]
-) -> str | None:
-    value = team_defaults.get("auto_execute_procedure")
-    if isinstance(value, str) and value.strip():
-        return value.strip()
-    listed = team_defaults.get("procedures")
-    if isinstance(listed, list) and listed:
-        first = listed[0]
-        if isinstance(first, str) and first.strip():
-            return first.strip()
-    if procedures:
-        first_name = procedures[0].get("name")
-        if isinstance(first_name, str) and first_name.strip():
-            return first_name.strip()
-    return None
 
 
 def _seed_default_procedures(team_id: int, procedures: list[dict[str, object]]) -> None:
@@ -391,7 +369,7 @@ def _seed_default_team_envelope(team_id: int, team_defaults: dict[str, object]) 
 
 
 def _seed_root_team_envelope_from_defaults(team_defaults: dict[str, object]) -> None:
-    team_name = _get_default_team_name(team_defaults)
+    team_name = get_default_team_name(team_defaults)
     allowed = team_defaults.get("allowed_skills")
     if not isinstance(allowed, list):
         return

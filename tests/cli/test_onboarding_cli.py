@@ -498,7 +498,7 @@ def test_handle_onboarding_triggers_onboarding_sop(
             .filter(
                 Purpose.team_id == team.id,
                 Purpose.name
-                == onboarding_cli._get_default_purpose_name(
+                == onboarding_cli.get_default_purpose_name(
                     onboarding_cli.load_root_team_defaults()
                 ),
             )

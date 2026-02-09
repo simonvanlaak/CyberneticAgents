@@ -16,6 +16,7 @@ from src.cyberagent.cli.constants import (
 )
 from src.cyberagent.cli.headless import run_headless_session
 from src.cyberagent.cli.message_catalog import get_message
+from src.cyberagent.cli.runtime_start_health import process_exited_during_startup
 from src.cyberagent.cli.runtime_resume import queue_in_progress_initiatives
 from src.cyberagent.core.paths import get_logs_dir
 from src.cyberagent.core.runtime import stop_runtime
@@ -24,6 +25,7 @@ from src.cyberagent.db.init_db import init_db
 
 LOGS_DIR = get_logs_dir()
 RUNTIME_PID_FILE = LOGS_DIR / "cyberagent.pid"
+RUNTIME_STARTUP_GRACE_SECONDS = 1.0
 
 
 async def _handle_start(args: argparse.Namespace) -> int:
@@ -50,6 +52,18 @@ async def _handle_start(args: argparse.Namespace) -> int:
         stderr=subprocess.STDOUT,
         close_fds=True,
     )
+    returncode = process_exited_during_startup(proc, RUNTIME_STARTUP_GRACE_SECONDS)
+    if returncode is not None:
+        _clear_runtime_pid_file()
+        print(
+            get_message(
+                "cyberagent",
+                "runtime_start_failed",
+                returncode=returncode,
+            )
+        )
+        print(get_message("cyberagent", "runtime_start_failed_hint"))
+        return 1
     RUNTIME_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
     RUNTIME_PID_FILE.write_text(str(proc.pid), encoding="utf-8")
     queue_in_progress_initiatives(team_id)
@@ -115,6 +129,18 @@ def _start_runtime_background() -> int | None:
         stderr=subprocess.STDOUT,
         close_fds=True,
     )
+    returncode = process_exited_during_startup(proc, RUNTIME_STARTUP_GRACE_SECONDS)
+    if returncode is not None:
+        _clear_runtime_pid_file()
+        print(
+            get_message(
+                "cyberagent",
+                "runtime_start_failed",
+                returncode=returncode,
+            )
+        )
+        print(get_message("cyberagent", "runtime_start_failed_hint"))
+        return None
     RUNTIME_PID_FILE.parent.mkdir(parents=True, exist_ok=True)
     RUNTIME_PID_FILE.write_text(str(proc.pid), encoding="utf-8")
     return proc.pid
