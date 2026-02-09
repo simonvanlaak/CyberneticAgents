@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import sys
 import time
 from typing import Protocol
 
@@ -80,6 +81,13 @@ def _handle_disk_io_error(
     stop_event.set()
 
 
+def _stdin_is_interactive() -> bool:
+    try:
+        return os.isatty(sys.stdin.fileno())
+    except (AttributeError, OSError, ValueError):
+        return False
+
+
 async def run_headless_session(initial_message: str | None = None) -> None:
     """
     Run the headless CLI session that forwards user input to the runtime.
@@ -110,7 +118,9 @@ async def run_headless_session(initial_message: str | None = None) -> None:
 
     queue: asyncio.Queue[str] = asyncio.Queue()
     stop_event = asyncio.Event()
-    reader_task = asyncio.create_task(read_stdin_loop(queue, stop_event))
+    reader_task: asyncio.Task[None] | None = None
+    if _stdin_is_interactive():
+        reader_task = asyncio.create_task(read_stdin_loop(queue, stop_event))
     forward_task = asyncio.create_task(
         forward_user_messages(queue, runtime, recipient, stop_event)
     )
@@ -145,7 +155,8 @@ async def run_headless_session(initial_message: str | None = None) -> None:
     try:
         await stop_event.wait()
     finally:
-        reader_task.cancel()
+        if reader_task is not None:
+            reader_task.cancel()
         forward_task.cancel()
         suggestion_task.cancel()
         agent_message_task.cancel()

@@ -39,6 +39,7 @@ async def test_run_headless_session_starts_cli_executor(
     monkeypatch.setattr(headless, "register_systems", fake_register)
     monkeypatch.setattr(headless, "configure_autogen_logging", lambda _dir: None)
     monkeypatch.setattr(headless, "get_runtime", lambda: DummyRuntime())
+    monkeypatch.setattr(headless, "_stdin_is_interactive", lambda: True)
     monkeypatch.setattr(headless, "read_stdin_loop", fake_read_stdin)
     monkeypatch.setattr(headless, "forward_user_messages", fake_forward)
     monkeypatch.setattr(headless, "start_cli_executor", fake_start_cli_executor)
@@ -105,6 +106,7 @@ async def test_run_headless_session_starts_webhook_when_configured(
     monkeypatch.setattr(headless, "register_systems", fake_register)
     monkeypatch.setattr(headless, "configure_autogen_logging", lambda _dir: None)
     monkeypatch.setattr(headless, "get_runtime", lambda: DummyRuntime())
+    monkeypatch.setattr(headless, "_stdin_is_interactive", lambda: True)
     monkeypatch.setattr(headless, "read_stdin_loop", fake_read_stdin)
     monkeypatch.setattr(headless, "forward_user_messages", fake_forward)
     monkeypatch.setattr(headless, "start_cli_executor", fake_start_cli_executor)
@@ -117,6 +119,61 @@ async def test_run_headless_session_starts_webhook_when_configured(
     assert started["value"] is True
     assert stopped["value"] is True
     assert poller_used["value"] is False
+
+
+@pytest.mark.asyncio
+async def test_run_headless_session_skips_reader_without_tty(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    reader_called: dict[str, bool] = {"value": False}
+    stopped: dict[str, bool] = {"value": False}
+
+    async def fake_register() -> None:
+        return None
+
+    class DummyRuntime:
+        async def send_message(self, *args, **kwargs):  # noqa: ANN001
+            return None
+
+    async def fake_read_stdin(queue, stop_event):  # noqa: ANN001
+        reader_called["value"] = True
+        stop_event.set()
+
+    async def fake_start_cli_executor() -> None:
+        return None
+
+    async def fake_forward(queue, runtime, recipient, stop_event):  # noqa: ANN001
+        await stop_event.wait()
+
+    async def fake_process_suggestion_queue(runtime, stop_event):  # noqa: ANN001
+        stop_event.set()
+
+    async def fake_process_agent_message_queue(runtime, stop_event):  # noqa: ANN001
+        await stop_event.wait()
+
+    async def fake_stop_runtime() -> None:
+        stopped["value"] = True
+
+    monkeypatch.setattr(headless, "init_db", lambda: None)
+    monkeypatch.setattr(headless, "register_systems", fake_register)
+    monkeypatch.setattr(headless, "configure_autogen_logging", lambda _dir: None)
+    monkeypatch.setattr(headless, "get_runtime", lambda: DummyRuntime())
+    monkeypatch.setattr(headless, "_stdin_is_interactive", lambda: False)
+    monkeypatch.setattr(headless, "read_stdin_loop", fake_read_stdin)
+    monkeypatch.setattr(headless, "forward_user_messages", fake_forward)
+    monkeypatch.setattr(headless, "start_cli_executor", fake_start_cli_executor)
+    monkeypatch.setattr(
+        headless, "_process_suggestion_queue", fake_process_suggestion_queue
+    )
+    monkeypatch.setattr(
+        headless, "_process_agent_message_queue", fake_process_agent_message_queue
+    )
+    monkeypatch.setattr(headless, "stop_runtime", fake_stop_runtime)
+
+    await headless.run_headless_session()
+
+    assert reader_called["value"] is False
+    assert stopped["value"] is True
 
 
 @pytest.mark.asyncio
