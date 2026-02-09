@@ -9,6 +9,8 @@ def test_enqueue_suggestion_writes_payload(tmp_path, monkeypatch) -> None:
     assert path.exists()
     payload = json.loads(path.read_text(encoding="utf-8"))
     assert payload["payload_text"] == "hello"
+    assert isinstance(payload.get("idempotency_key"), str)
+    assert payload["idempotency_key"]
 
 
 def test_read_queued_suggestions_returns_payload(tmp_path, monkeypatch) -> None:
@@ -19,3 +21,4 @@ def test_read_queued_suggestions_returns_payload(tmp_path, monkeypatch) -> None:
     queued = suggestion_queue.read_queued_suggestions()
     texts = [item.payload_text for item in queued]
     assert texts == ["first", "second"]
+    assert all(item.idempotency_key for item in queued)

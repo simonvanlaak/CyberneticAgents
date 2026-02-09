@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import hashlib
 import time
 import uuid
 from dataclasses import dataclass
@@ -23,6 +24,7 @@ class QueuedAgentMessage:
     sender: str | None
     message_type: str
     payload: dict[str, Any]
+    idempotency_key: str
     queued_at: float
     attempts: int
     next_attempt_at: float
@@ -34,6 +36,7 @@ def enqueue_agent_message(
     sender: str | None,
     message_type: str,
     payload: dict[str, Any],
+    idempotency_key: str | None = None,
 ) -> Path:
     """
     Persist an agent message payload for the background runtime to process.
@@ -44,6 +47,13 @@ def enqueue_agent_message(
         "sender": sender,
         "message_type": message_type,
         "payload": payload,
+        "idempotency_key": idempotency_key
+        or _build_agent_message_idempotency_key(
+            recipient=recipient,
+            sender=sender,
+            message_type=message_type,
+            payload=payload,
+        ),
         "queued_at": time.time(),
         "attempts": 0,
         "next_attempt_at": 0.0,
@@ -83,6 +93,17 @@ def read_queued_agent_messages() -> list[QueuedAgentMessage]:
             continue
         sender = data.get("sender")
         sender_value = sender if isinstance(sender, str) else None
+        raw_idempotency_key = data.get("idempotency_key")
+        idempotency_key = (
+            raw_idempotency_key
+            if isinstance(raw_idempotency_key, str) and raw_idempotency_key
+            else _build_agent_message_idempotency_key(
+                recipient=recipient,
+                sender=sender_value,
+                message_type=message_type,
+                payload=payload,
+            )
+        )
         queued_at = data.get("queued_at")
         queued_at_value = queued_at if isinstance(queued_at, (int, float)) else 0.0
         attempts = data.get("attempts")
@@ -98,6 +119,7 @@ def read_queued_agent_messages() -> list[QueuedAgentMessage]:
                 sender=sender_value,
                 message_type=message_type,
                 payload=payload,
+                idempotency_key=idempotency_key,
                 queued_at=queued_at_value,
                 attempts=attempts_value,
                 next_attempt_at=next_attempt_at_value,
@@ -172,3 +194,21 @@ def defer_agent_message(
     except OSError as exc:
         logger.warning("Failed to update deferred agent message %s: %s", path, exc)
     return False
+
+
+def _build_agent_message_idempotency_key(
+    *,
+    recipient: str,
+    sender: str | None,
+    message_type: str,
+    payload: dict[str, Any],
+) -> str:
+    canonical_payload = json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    )
+    material = f"{recipient}|{sender or ''}|{message_type}|{canonical_payload}"
+    message_hash = hashlib.sha256(material.encode("utf-8")).hexdigest()
+    return f"agent_message:{message_hash}"

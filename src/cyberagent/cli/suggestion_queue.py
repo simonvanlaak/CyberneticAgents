@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import hashlib
 import time
 import uuid
 from dataclasses import dataclass
@@ -19,10 +20,11 @@ SUGGEST_QUEUE_POLL_SECONDS = 0.5
 class QueuedSuggestion:
     path: Path
     payload_text: str
+    idempotency_key: str
     queued_at: float
 
 
-def enqueue_suggestion(payload_text: str) -> Path:
+def enqueue_suggestion(payload_text: str, idempotency_key: str | None = None) -> Path:
     """
     Persist a suggestion payload for the background runtime to process.
 
@@ -35,6 +37,8 @@ def enqueue_suggestion(payload_text: str) -> Path:
     SUGGEST_QUEUE_DIR.mkdir(parents=True, exist_ok=True)
     payload = {
         "payload_text": payload_text,
+        "idempotency_key": idempotency_key
+        or _build_suggestion_idempotency_key(payload_text),
         "queued_at": time.time(),
     }
     file_id = f"{time.time_ns()}_{uuid.uuid4().hex}"
@@ -62,11 +66,20 @@ def read_queued_suggestions() -> list[QueuedSuggestion]:
         if not isinstance(payload_text, str):
             logger.warning("Suggestion %s missing payload_text", path)
             continue
+        raw_idempotency_key = data.get("idempotency_key")
+        idempotency_key = (
+            raw_idempotency_key
+            if isinstance(raw_idempotency_key, str) and raw_idempotency_key
+            else _build_suggestion_idempotency_key(payload_text)
+        )
         queued_at = data.get("queued_at")
         queued_at_value = queued_at if isinstance(queued_at, (int, float)) else 0.0
         suggestions.append(
             QueuedSuggestion(
-                path=path, payload_text=payload_text, queued_at=queued_at_value
+                path=path,
+                payload_text=payload_text,
+                idempotency_key=idempotency_key,
+                queued_at=queued_at_value,
             )
         )
     return suggestions
@@ -80,3 +93,8 @@ def ack_suggestion(path: Path) -> None:
         path.unlink()
     except OSError as exc:
         logger.warning("Failed to remove suggestion %s: %s", path, exc)
+
+
+def _build_suggestion_idempotency_key(payload_text: str) -> str:
+    payload_hash = hashlib.sha256(payload_text.encode("utf-8")).hexdigest()
+    return f"suggestion:{payload_hash}"

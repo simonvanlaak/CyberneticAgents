@@ -165,6 +165,7 @@ async def test_agent_message_queue_defers_on_non_disk_error(
         sender="System4/root",
         message_type="initiative_assign",
         payload={"initiative_id": 1, "source": "System4_root", "content": "Resume."},
+        idempotency_key="agent_message:test",
         queued_at=0.0,
         attempts=0,
         next_attempt_at=0.0,

@@ -81,6 +81,11 @@ Critical review of the current project architecture across runtime, agent orches
 - [x] Step 2: Centralize all task transitions behind task application service (remove direct status mutation in agents).
 - [x] Step 3: Enforce review-entry contract for review-eligible statuses only.
 
+### Phase 4 Progress
+- [x] Step 1: Add idempotency keys to queued messages.
+- [ ] Step 2: Add processed-message journal for replay-safe startup.
+- [ ] Step 3: Harden dead-letter recovery tooling (`cyberagent inbox`/ops command).
+
 ## Phase 0: Stabilization (1 sprint)
 1. Fix entrypoint architecture debt:
    - Replace `main.py` imports with `src.cyberagent.cli.*` or make it a compatibility shim that delegates to `cyberagent`.
