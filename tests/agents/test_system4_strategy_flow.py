@@ -57,7 +57,7 @@ async def test_system4_strategy_request_triggers_system3_assignment(monkeypatch)
     monkeypatch.setattr("src.agents.system4.Strategy", DummyStrategy)
     monkeypatch.setattr("src.agents.system4.Initiative", DummyInitiative)
     monkeypatch.setattr(
-        "src.agents.system4.get_or_create_default_purpose",
+        "src.agents.system4.purpose_service.get_or_create_default_purpose",
         lambda team_id: SimpleNamespace(id=1),
     )
 
@@ -72,7 +72,8 @@ async def test_system4_strategy_request_triggers_system3_assignment(monkeypatch)
         get_agent_id=lambda: AgentId.from_str("System3/root")
     )
     monkeypatch.setattr(
-        "src.agents.system4.get_system_by_type", lambda *args, **kwargs: system3_agent
+        "src.agents.system4.system_service.get_system_by_type",
+        lambda *args, **kwargs: system3_agent,
     )
 
     system4._publish_message_to_agent = AsyncMock()
@@ -150,7 +151,7 @@ async def test_system4_strategy_request_includes_response_format(monkeypatch):
     monkeypatch.setattr("src.agents.system4.Strategy", DummyStrategy)
     monkeypatch.setattr("src.agents.system4.Initiative", DummyInitiative)
     monkeypatch.setattr(
-        "src.agents.system4.get_or_create_default_purpose",
+        "src.agents.system4.purpose_service.get_or_create_default_purpose",
         lambda team_id: SimpleNamespace(id=1),
     )
     dummy_initiative = SimpleNamespace(
@@ -230,7 +231,7 @@ async def test_system4_strategy_request_falls_back_to_first_initiative(monkeypat
     monkeypatch.setattr("src.agents.system4.Strategy", DummyStrategy)
     monkeypatch.setattr("src.agents.system4.Initiative", DummyInitiative)
     monkeypatch.setattr(
-        "src.agents.system4.get_or_create_default_purpose",
+        "src.agents.system4.purpose_service.get_or_create_default_purpose",
         lambda team_id: SimpleNamespace(id=1),
     )
 
@@ -240,7 +241,8 @@ async def test_system4_strategy_request_falls_back_to_first_initiative(monkeypat
         get_agent_id=lambda: AgentId.from_str("System3/root")
     )
     monkeypatch.setattr(
-        "src.agents.system4.get_system_by_type", lambda *args, **kwargs: system3_agent
+        "src.agents.system4.system_service.get_system_by_type",
+        lambda *args, **kwargs: system3_agent,
     )
 
     system4._publish_message_to_agent = AsyncMock()

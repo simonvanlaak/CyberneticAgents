@@ -167,7 +167,8 @@ async def test_suggest_policy_tool_omits_missing_policy(
             return AgentId.from_str("System5/root")
 
     monkeypatch.setattr(
-        "src.agents.system4.get_system_by_type", lambda *_: DummySystem()
+        "src.agents.system4.system_service.get_system_by_type",
+        lambda *_: DummySystem(),
     )
 
     await system4.suggest_policy_tool(123, "Test suggestion")

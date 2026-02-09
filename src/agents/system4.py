@@ -47,13 +47,6 @@ class StrategyLike(Protocol):
     def get_initiatives(self) -> List[InitiativeLike]: ...
 
 
-# Legacy monkeypatch compatibility for tests that patch module-level callables.
-get_or_create_default_purpose = purpose_service.get_or_create_default_purpose
-create_strategy = strategy_service.create_strategy
-create_initiative = initiative_service.create_initiative
-get_system_by_type = system_service.get_system_by_type
-
-
 class InitiativeCreateResponse(BaseModel):
     name: str
     description: str
@@ -346,8 +339,8 @@ class System4(SystemBase):
         strategy_response = self._get_structured_message(
             response, StrategyCreateResponse
         )
-        purpose = get_or_create_default_purpose(self.team_id)
-        strategy = create_strategy(
+        purpose = purpose_service.get_or_create_default_purpose(self.team_id)
+        strategy = strategy_service.create_strategy(
             team_id=self.team_id,
             purpose_id=purpose.id,
             name=strategy_response.name,
@@ -357,7 +350,7 @@ class System4(SystemBase):
         strategy_id = strategy.id
         initiatives = []
         for initiative_response in strategy_response.initiatives:
-            initiative = create_initiative(
+            initiative = initiative_service.create_initiative(
                 team_id=self.team_id,
                 strategy_id=strategy_id,
                 name=initiative_response.name,
@@ -377,7 +370,9 @@ class System4(SystemBase):
 
         await self._publish_message_to_agent(
             build_initiative_assign_message(initiative.id),
-            get_system_by_type(self.team_id, SystemType.CONTROL).get_agent_id(),
+            system_service.get_system_by_type(
+                self.team_id, SystemType.CONTROL
+            ).get_agent_id(),
         )
         return ConfirmationMessage(
             content=f"Initiative {initiative.name}:{initiative.description} started.",
