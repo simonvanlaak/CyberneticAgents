@@ -38,9 +38,12 @@ def _prompt_for_missing_inputs(args: argparse.Namespace) -> bool:
 
     profile_links = list(getattr(args, "profile_links", []) or [])
     if not profile_links:
-        raw_links = input(
-            get_message("onboarding", "onboarding_prompt_profile_links")
-        ).strip()
+        try:
+            raw_links = input(
+                get_message("onboarding", "onboarding_prompt_profile_links")
+            ).strip()
+        except EOFError:
+            raw_links = ""
         if raw_links:
             links = [link.strip() for link in raw_links.split(",") if link.strip()]
             if links:

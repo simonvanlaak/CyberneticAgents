@@ -49,3 +49,21 @@ def test_prompt_for_missing_inputs_github_prompts_repo_and_links(
     assert onboarding_prompts._prompt_for_missing_inputs(args) is True
     assert args.repo_url == "https://github.com/example/repo"
     assert args.profile_links == ["https://example.com/profile"]
+
+
+def test_prompt_for_missing_inputs_github_handles_eof_for_optional_links(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    args = _base_args(pkm_source="github")
+    responses = iter(["https://github.com/example/repo"])
+
+    def _fake_input(prompt: str) -> str:
+        if "profile links" in prompt.lower():
+            raise EOFError
+        return next(responses)
+
+    monkeypatch.setattr("builtins.input", _fake_input)
+
+    assert onboarding_prompts._prompt_for_missing_inputs(args) is True
+    assert args.repo_url == "https://github.com/example/repo"
+    assert args.profile_links == []
