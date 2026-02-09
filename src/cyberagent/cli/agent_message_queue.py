@@ -42,18 +42,22 @@ def enqueue_agent_message(
     Persist an agent message payload for the background runtime to process.
     """
     AGENT_MESSAGE_QUEUE_DIR.mkdir(parents=True, exist_ok=True)
+    resolved_idempotency_key = idempotency_key or _build_agent_message_idempotency_key(
+        recipient=recipient,
+        sender=sender,
+        message_type=message_type,
+        payload=payload,
+    )
+    existing_path = _find_queued_message_by_idempotency_key(resolved_idempotency_key)
+    if existing_path is not None:
+        return existing_path
+
     payload_data = {
         "recipient": recipient,
         "sender": sender,
         "message_type": message_type,
         "payload": payload,
-        "idempotency_key": idempotency_key
-        or _build_agent_message_idempotency_key(
-            recipient=recipient,
-            sender=sender,
-            message_type=message_type,
-            payload=payload,
-        ),
+        "idempotency_key": resolved_idempotency_key,
         "queued_at": time.time(),
         "attempts": 0,
         "next_attempt_at": 0.0,
@@ -64,6 +68,20 @@ def enqueue_agent_message(
     tmp_path.write_text(json.dumps(payload_data, indent=2), encoding="utf-8")
     tmp_path.replace(target)
     return target
+
+
+def _find_queued_message_by_idempotency_key(idempotency_key: str) -> Path | None:
+    if not AGENT_MESSAGE_QUEUE_DIR.exists():
+        return None
+    for path in sorted(AGENT_MESSAGE_QUEUE_DIR.glob("*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        queued_key = data.get("idempotency_key")
+        if queued_key == idempotency_key:
+            return path
+    return None
 
 
 def read_queued_agent_messages() -> list[QueuedAgentMessage]:

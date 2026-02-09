@@ -77,6 +77,26 @@ def test_enqueue_agent_message_accepts_explicit_idempotency_key(tmp_path: Path) 
     assert queued[0].idempotency_key == "resume:initiative:1"
 
 
+def test_enqueue_agent_message_deduplicates_by_idempotency_key(tmp_path: Path) -> None:
+    agent_message_queue.AGENT_MESSAGE_QUEUE_DIR = tmp_path / "queue"
+    first = agent_message_queue.enqueue_agent_message(
+        recipient="System3/root",
+        sender="System4/root",
+        message_type="initiative_assign",
+        payload={"initiative_id": 1, "source": "System4_root", "content": "Resume."},
+    )
+    second = agent_message_queue.enqueue_agent_message(
+        recipient="System3/root",
+        sender="System4/root",
+        message_type="initiative_assign",
+        payload={"initiative_id": 1, "source": "System4_root", "content": "Resume."},
+    )
+
+    queued = agent_message_queue.read_queued_agent_messages()
+    assert first == second
+    assert len(queued) == 1
+
+
 def test_requeue_dead_letter_agent_message_moves_message_to_queue(
     tmp_path: Path,
 ) -> None:
