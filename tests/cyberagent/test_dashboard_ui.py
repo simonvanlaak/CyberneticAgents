@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from src.cli_session import InboxEntry
+from src.cli_session import AnsweredQuestion, InboxEntry
 from src.cyberagent.ui import dashboard
 from src.cyberagent.ui.teams_data import TeamMemberView, TeamWithMembersView
 
@@ -12,8 +12,12 @@ class _FakeStreamlit:
         self.dataframe_calls: list[dict[str, object]] = []
         self.dataframe_data: list[object] = []
         self.info_messages: list[str] = []
+        self.success_messages: list[str] = []
+        self.error_messages: list[str] = []
         self.code_values: list[str] = []
         self.checkbox_values: dict[str, bool] = {}
+        self.text_input_values: dict[str, str] = {}
+        self.button_values: dict[str, bool] = {}
 
     def subheader(self, text: str) -> None:
         self.subheaders.append(text)
@@ -24,11 +28,27 @@ class _FakeStreamlit:
     def info(self, text: str) -> None:
         self.info_messages.append(text)
 
+    def success(self, text: str) -> None:
+        self.success_messages.append(text)
+
+    def error(self, text: str) -> None:
+        self.error_messages.append(text)
+
     def code(self, text: str) -> None:
         self.code_values.append(text)
 
     def checkbox(self, label: str, value: bool = False) -> bool:
         return self.checkbox_values.get(label, value)
+
+    def text_input(self, _label: str, value: str = "", key: str | None = None) -> str:
+        if key is None:
+            return value
+        return self.text_input_values.get(key, value)
+
+    def button(self, _label: str, key: str | None = None) -> bool:
+        if key is None:
+            return False
+        return self.button_values.get(key, False)
 
     def dataframe(self, _data: object, **kwargs: object) -> None:
         self.dataframe_data.append(_data)
@@ -151,6 +171,7 @@ def test_render_inbox_page_excludes_answered_questions_by_default(
     assert fake_st.subheaders == [
         "User Prompts",
         "System Questions",
+        "Answer Pending Questions",
         "System Responses",
     ]
     question_rows = fake_st.dataframe_data[1]
@@ -197,3 +218,81 @@ def test_render_inbox_page_can_include_answered_questions(monkeypatch) -> None:
         "pending question",
         "answered question",
     ]
+
+
+def test_render_inbox_page_can_answer_pending_question(monkeypatch) -> None:
+    fake_st = _FakeStreamlit()
+    fake_st.text_input_values["inbox_answer_21"] = "Shipped"
+    fake_st.button_values["inbox_answer_submit_21"] = True
+    monkeypatch.setattr(
+        dashboard,
+        "list_inbox_entries",
+        lambda **_: [
+            InboxEntry(
+                entry_id=21,
+                kind="system_question",
+                content="What happened?",
+                created_at=21.0,
+                channel="cli",
+                session_id="cli-main",
+                asked_by="System4/root",
+                status="pending",
+            )
+        ],
+    )
+    resolved_calls: list[tuple[str, str | None, str | None]] = []
+
+    def _fake_resolve(
+        answer: str, channel: str | None = None, session_id: str | None = None
+    ) -> AnsweredQuestion:
+        resolved_calls.append((answer, channel, session_id))
+        return AnsweredQuestion(
+            question_id=21,
+            content="What happened?",
+            asked_by="System4/root",
+            created_at=21.0,
+            answer=answer,
+            answered_at=22.0,
+            channel=channel or "cli",
+            session_id=session_id or "cli-main",
+        )
+
+    monkeypatch.setattr(dashboard, "resolve_pending_question", _fake_resolve)
+
+    dashboard.render_inbox_page(fake_st)
+
+    assert resolved_calls == [("Shipped", "cli", "cli-main")]
+    assert fake_st.success_messages == ["Answer submitted for question #21."]
+
+
+def test_render_inbox_page_rejects_empty_answer(monkeypatch) -> None:
+    fake_st = _FakeStreamlit()
+    fake_st.text_input_values["inbox_answer_22"] = "   "
+    fake_st.button_values["inbox_answer_submit_22"] = True
+    monkeypatch.setattr(
+        dashboard,
+        "list_inbox_entries",
+        lambda **_: [
+            InboxEntry(
+                entry_id=22,
+                kind="system_question",
+                content="Need answer",
+                created_at=22.0,
+                channel="cli",
+                session_id="cli-main",
+                status="pending",
+            )
+        ],
+    )
+    called = {"resolve": False}
+
+    def _fake_resolve(*_args, **_kwargs):
+        called["resolve"] = True
+        return None
+
+    monkeypatch.setattr(dashboard, "resolve_pending_question", _fake_resolve)
+
+    dashboard.render_inbox_page(fake_st)
+
+    assert called["resolve"] is False
+    assert fake_st.error_messages == ["Answer cannot be empty for question #22."]

@@ -15,7 +15,7 @@ try:
     from src.cyberagent.ui.teams_data import load_teams_with_members
     from src.cyberagent.ui.dashboard_log_badge import count_warnings_errors
     from src.cyberagent.core.paths import get_logs_dir
-    from src.cli_session import list_inbox_entries
+    from src.cli_session import list_inbox_entries, resolve_pending_question
 except ModuleNotFoundError:
     from kanban_data import (
         KANBAN_STATUSES,
@@ -26,7 +26,7 @@ except ModuleNotFoundError:
     from teams_data import load_teams_with_members
     from dashboard_log_badge import count_warnings_errors
     from src.cyberagent.core.paths import get_logs_dir
-    from cli_session import list_inbox_entries
+    from cli_session import list_inbox_entries, resolve_pending_question
 
 
 def _load_streamlit() -> Any:
@@ -210,6 +210,39 @@ def render_inbox_page(st: Any) -> None:
             width="stretch",
             hide_index=True,
         )
+        pending_questions = [
+            entry
+            for entry in system_questions
+            if (entry.status or "pending") == "pending"
+        ]
+        if pending_questions:
+            st.subheader("Answer Pending Questions")
+            for entry in pending_questions:
+                answer_key = f"inbox_answer_{entry.entry_id}"
+                submit_key = f"inbox_answer_submit_{entry.entry_id}"
+                answer = st.text_input(
+                    f"Answer question #{entry.entry_id}: {entry.content}",
+                    value="",
+                    key=answer_key,
+                )
+                if not st.button(
+                    f"Submit answer #{entry.entry_id}",
+                    key=submit_key,
+                ):
+                    continue
+                normalized = answer.strip()
+                if not normalized:
+                    st.error(f"Answer cannot be empty for question #{entry.entry_id}.")
+                    continue
+                resolved = resolve_pending_question(
+                    normalized,
+                    channel=entry.channel,
+                    session_id=entry.session_id,
+                )
+                if resolved is None:
+                    st.error(f"Question #{entry.entry_id} is no longer pending.")
+                    continue
+                st.success(f"Answer submitted for question #{entry.entry_id}.")
     if system_responses:
         st.subheader("System Responses")
         st.dataframe(
