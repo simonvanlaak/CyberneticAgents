@@ -58,6 +58,12 @@ class TestSystem3Basic:
         assert hasattr(system3, "handle_initiative_assign_message")
         assert callable(getattr(system3, "handle_initiative_assign_message"))
 
+    def test_system3_registers_capability_gap_tool(self):
+        """System3 must expose capability_gap_tool referenced in its prompts."""
+        system3 = System3("System3/controller1")
+        tool_names = [tool.name for tool in system3.tools]
+        assert "capability_gap_tool" in tool_names
+
 
 class TestSystem3Messages:
     """Test System3 message handling."""

@@ -84,6 +84,12 @@ class System3(SystemBase):
                 "Execute an approved procedure by materializing an initiative and tasks.",
             )
         )
+        self.tools.append(
+            FunctionTool(
+                self.capability_gap_tool,
+                "Escalate a capability gap to System5 when no viable System1 can execute a task.",
+            )
+        )
 
     def _extract_parse_failure_retry_count(self, task: Any) -> int:
         raw_case_judgement = getattr(task, "case_judgement", None)
