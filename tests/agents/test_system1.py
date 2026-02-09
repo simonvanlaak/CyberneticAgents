@@ -8,7 +8,11 @@ from autogen_core import AgentId, CancellationToken, MessageContext
 from unittest.mock import AsyncMock
 
 from src.agents.system1 import System1
-from src.agents.messages import TaskAssignMessage, TaskReviewMessage
+from src.agents.messages import (
+    CapabilityGapMessage,
+    TaskAssignMessage,
+    TaskReviewMessage,
+)
 
 
 class TestSystem1Basic:
@@ -147,7 +151,12 @@ async def test_system1_uses_context_sender_for_task_requestor(
         "run",
         AsyncMock(
             return_value=TaskResult(
-                messages=[TextMessage(content="done", source="System1/worker1")]
+                messages=[
+                    TextMessage(
+                        content='{"status":"done","result":"Task executed","reasoning":null}',
+                        source="System1/worker1",
+                    )
+                ]
             )
         ),
     )
@@ -159,3 +168,66 @@ async def test_system1_uses_context_sender_for_task_requestor(
     published_args = system1._publish_message_to_agent.await_args.args  # type: ignore[attr-defined]
     recipient = published_args[1]
     assert str(recipient) == "System3/root"
+
+
+@pytest.mark.asyncio
+async def test_system1_blocked_marks_task_and_escalates_to_system3(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    system1 = System1("System1/worker1")
+    message = TaskAssignMessage(
+        task_id=9,
+        assignee_agent_id_str="System1/worker1",
+        source="System3/root",
+        content="Fetch private data",
+    )
+    ctx = MessageContext(
+        sender=AgentId.from_str("System3/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="blocked-task",
+    )
+
+    class _DummyTask:
+        pass
+
+    task = _DummyTask()
+    captured: dict[str, object] = {"complete_called": False}
+
+    monkeypatch.setattr(
+        "src.cyberagent.services.tasks.start_task", lambda _task_id: task
+    )
+    monkeypatch.setattr(
+        "src.cyberagent.services.tasks.complete_task",
+        lambda *_: captured.__setitem__("complete_called", True),
+    )
+    monkeypatch.setattr(
+        "src.cyberagent.services.tasks.mark_task_blocked",
+        lambda _task, reason: captured.__setitem__("reason", reason),
+    )
+    monkeypatch.setattr(
+        system1,
+        "run",
+        AsyncMock(
+            return_value=TaskResult(
+                messages=[
+                    TextMessage(
+                        content='{"status":"blocked","result":"Cannot proceed.","reasoning":"Missing API key"}',
+                        source="System1/worker1",
+                    )
+                ]
+            )
+        ),
+    )
+    system1._publish_message_to_agent = AsyncMock()  # type: ignore[attr-defined]
+
+    await system1.handle_assign_task_message(message=message, ctx=ctx)  # type: ignore[call-arg]
+
+    assert captured["complete_called"] is False
+    assert captured["reason"] == "Missing API key"
+    published_args = system1._publish_message_to_agent.await_args.args  # type: ignore[attr-defined]
+    assert isinstance(published_args[0], CapabilityGapMessage)
+    assert published_args[0].task_id == 9
+    assert published_args[0].content == "Missing API key"
+    assert str(published_args[1]) == "System3/root"

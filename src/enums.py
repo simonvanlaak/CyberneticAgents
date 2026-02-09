@@ -10,6 +10,7 @@ class Status(PyEnum):
     PENDING = "pending"
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
+    BLOCKED = "blocked"
     APPROVED = "approved"
     REJECTED = "rejected"
 

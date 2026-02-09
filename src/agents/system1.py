@@ -1,9 +1,18 @@
+from typing import Literal
+
 from autogen_core import AgentId, MessageContext, message_handler
+from pydantic import BaseModel
 
 from src.agents.system_base import SystemBase
 from src.cyberagent.services import tasks as task_service
 
-from .messages import TaskAssignMessage, TaskReviewMessage
+from .messages import CapabilityGapMessage, TaskAssignMessage, TaskReviewMessage
+
+
+class TaskExecutionResult(BaseModel):
+    status: Literal["done", "blocked"] = "done"
+    result: str
+    reasoning: str | None = None
 
 
 class System1(SystemBase):
@@ -33,16 +42,36 @@ class System1(SystemBase):
         task = task_service.start_task(message.task_id)
         response = await self.run([message], ctx)
         latest_message = self._get_last_message(response)
-        result = (
+        raw_result = (
             latest_message.to_model_text()
             if hasattr(latest_message, "to_model_text")
             else str(latest_message)
         )
-        task_service.complete_task(task, result)
+
+        try:
+            execution = TaskExecutionResult.model_validate_json(raw_result)
+        except Exception:
+            execution = TaskExecutionResult(status="done", result=raw_result)
+
+        if execution.status == "blocked":
+            reasoning = execution.reasoning or execution.result
+            task_service.mark_task_blocked(task, reasoning)
+            await self._publish_message_to_agent(
+                CapabilityGapMessage(
+                    task_id=message.task_id,
+                    content=reasoning,
+                    assignee_agent_id_str=str(self.agent_id),
+                    source=str(self.agent_id),
+                ),
+                self.task_requestor,
+            )
+            return
+
+        task_service.complete_task(task, execution.result)
         await self._publish_message_to_agent(
             TaskReviewMessage(
                 task_id=message.task_id,
-                content=result,
+                content=execution.result,
                 assignee_agent_id_str=str(self.agent_id),
                 source=str(self.agent_id),
             ),
