@@ -10,8 +10,7 @@ VAULT_NAME = "CyberneticAgents"
 
 
 def has_onepassword_auth() -> bool:
-    if not os.getenv("OP_SERVICE_ACCOUNT_TOKEN"):
-        _load_service_account_token_from_env_file()
+    _load_service_account_token_from_env_file()
     return bool(os.getenv("OP_SERVICE_ACCOUNT_TOKEN")) or bool(
         get_onepassword_session_env()
     )

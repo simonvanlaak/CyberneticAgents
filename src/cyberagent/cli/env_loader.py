@@ -14,7 +14,7 @@ def _find_env_file(start: Path) -> Path | None:
 
 def load_op_service_account_token() -> None:
     env_path = _find_env_file(Path.cwd())
-    if os.environ.get("OP_SERVICE_ACCOUNT_TOKEN") or env_path is None:
+    if env_path is None:
         return
     try:
         content = env_path.read_text(encoding="utf-8")
@@ -31,7 +31,8 @@ def load_op_service_account_token() -> None:
             continue
         token = _parse_env_value(value)
         if token:
-            os.environ.setdefault("OP_SERVICE_ACCOUNT_TOKEN", token)
+            # Prefer repo-local credentials over globally exported stale tokens.
+            os.environ["OP_SERVICE_ACCOUNT_TOKEN"] = token
         return
 
 
