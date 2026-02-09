@@ -7,7 +7,12 @@
   "strategy": { "name": "Onboarding SOP" },
   "procedures": ["First Run Discovery"],
   "auto_execute_procedure": "First Run Discovery",
-  "allowed_skills": ["speech-to-text", "message-routing", "memory_crud"],
+  "allowed_skills": [
+    "speech-to-text",
+    "message-routing",
+    "memory_crud",
+    "git-readonly-sync"
+  ],
   "routing_rules": [
     {
       "name": "Default DLQ",
@@ -36,7 +41,7 @@
       "name": "System4/root",
       "type": "INTELLIGENCE",
       "agent_id": "System4/root",
-      "skill_grants": ["memory_crud"],
+      "skill_grants": ["memory_crud", "git-readonly-sync"],
       "config": {}
     },
     {

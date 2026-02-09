@@ -10,7 +10,7 @@ from typing import Optional
 from src.cyberagent.tools.cli_executor.docker_env_executor import (
     EnvDockerCommandLineCodeExecutor,
 )
-from src.cyberagent.core.paths import resolve_data_path
+from src.cyberagent.core.paths import get_repo_root
 
 
 def create_cli_executor() -> Optional[EnvDockerCommandLineCodeExecutor]:
@@ -21,7 +21,8 @@ def create_cli_executor() -> Optional[EnvDockerCommandLineCodeExecutor]:
         Code executor instance or None if AutoGen not available.
     """
     _maybe_set_docker_host_from_context()
-    work_dir = resolve_data_path("docker_cli_executor")
+    bind_dir = _resolve_bind_dir()
+    work_dir = bind_dir
     work_dir.mkdir(parents=True, exist_ok=True)
 
     try:
@@ -31,13 +32,25 @@ def create_cli_executor() -> Optional[EnvDockerCommandLineCodeExecutor]:
         )
         return EnvDockerCommandLineCodeExecutor(
             work_dir=work_dir,
-            bind_dir=Path.cwd(),
+            bind_dir=bind_dir,
             image=image,
             container_name="cybernetic-agents-cli-executor",
             auto_remove=True,
+            delete_tmp_files=True,
         )
     except Exception:
         return None
+
+
+def _resolve_bind_dir() -> Path:
+    """
+    Resolve a bind dir that always contains the executor work directory.
+
+    Docker exec writes temp scripts under ``work_dir``. If ``bind_dir`` does not
+    contain that path, the container cannot execute generated scripts.
+    """
+    repo_root = get_repo_root()
+    return (repo_root or Path.cwd()).resolve()
 
 
 def _maybe_set_docker_host_from_context(

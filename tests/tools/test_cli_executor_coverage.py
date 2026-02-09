@@ -116,12 +116,14 @@ class _FakeDockerExecutor:
         image: str,
         container_name: str,
         auto_remove: bool,
+        delete_tmp_files: bool = False,
     ) -> None:
         self.work_dir = work_dir
         self.bind_dir = bind_dir
         self.image = image
         self.container_name = container_name
         self.auto_remove = auto_remove
+        self.delete_tmp_files = delete_tmp_files
 
 
 def _make_env_executor() -> EnvDockerCommandLineCodeExecutor:
@@ -217,6 +219,25 @@ def test_create_cli_executor_default_image(monkeypatch: pytest.MonkeyPatch) -> N
 
     assert executor is not None
     assert executor.image == "ghcr.io/simonvanlaak/cyberneticagents-cli-tools:latest"
+
+
+def test_create_cli_executor_binds_repo_root_when_cwd_differs(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo_root = tmp_path / "repo"
+    repo_root.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    outside.mkdir(parents=True)
+    monkeypatch.chdir(outside)
+    monkeypatch.setattr(factory, "get_repo_root", lambda: repo_root)
+    monkeypatch.setattr(
+        factory, "EnvDockerCommandLineCodeExecutor", _FakeDockerExecutor
+    )
+
+    executor = cast(_FakeDockerExecutor, factory.create_cli_executor())
+
+    assert executor is not None
+    assert executor.bind_dir == repo_root
 
 
 def test_env_executor_stop_ignores_missing_container(

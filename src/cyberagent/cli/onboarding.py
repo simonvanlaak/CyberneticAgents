@@ -73,6 +73,7 @@ from src.cyberagent.cli.onboarding_vault import prompt_store_secret_in_1password
 from src.cyberagent.cli import dashboard_launcher
 from src.cyberagent.core.paths import get_repo_root, get_logs_dir, get_data_dir
 from src.enums import SystemType
+from src.rbac.enforcer import give_user_tool_permission
 
 LOGS_DIR = get_logs_dir()
 TECH_ONBOARDING_STATE_FILE = LOGS_DIR / "technical_onboarding.json"
@@ -465,6 +466,8 @@ def _ensure_team_systems(team_id: int, team_defaults: dict[str, object]) -> None
                     systems_service.add_skill_grant(
                         system.id, skill_name, actor_id="onboarding"
                     )
+                    if skill_name in NETWORK_SKILL_NAMES:
+                        give_user_tool_permission(system.agent_id_str, skill_name, "*")
 
 
 def _build_onboarding_prompt(summary_path: Path, summary_text: str) -> str:

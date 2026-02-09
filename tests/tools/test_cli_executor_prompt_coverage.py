@@ -99,12 +99,14 @@ class _FakeDockerExecutor:
         image: str,
         container_name: str,
         auto_remove: bool,
+        delete_tmp_files: bool = False,
     ) -> None:
         self.work_dir = work_dir
         self.bind_dir = bind_dir
         self.image = image
         self.container_name = container_name
         self.auto_remove = auto_remove
+        self.delete_tmp_files = delete_tmp_files
 
 
 def _make_env_executor() -> EnvDockerCommandLineCodeExecutor:

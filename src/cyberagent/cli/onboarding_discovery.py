@@ -31,7 +31,7 @@ from src.cyberagent.cli.onboarding_memory import (
     store_onboarding_memory,
     store_onboarding_memory_entry,
 )
-from src.cyberagent.core.paths import resolve_data_path
+from src.cyberagent.core.paths import get_repo_root, resolve_data_path
 from src.cyberagent.db.models.system import get_system_by_type
 from src.cyberagent.memory.models import MemoryLayer, MemoryPriority, MemorySource
 from src.enums import SystemType
@@ -353,6 +353,7 @@ def _sync_obsidian_repo(
 ) -> tuple[Path, bool]:
     repo_name = _repo_name_from_url(repo_url)
     dest = resolve_data_path("obsidian", repo_name)
+    dest_arg = _container_repo_relative_path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
     stop_event = _start_sync_notifier()
     result = _run_cli_tool(
@@ -360,7 +361,7 @@ def _sync_obsidian_repo(
         "git-readonly-sync",
         agent_id=agent_id,
         repo=repo_url,
-        dest=str(dest),
+        dest=dest_arg,
         branch=branch,
         depth=1,
         timeout_seconds=GIT_SYNC_TIMEOUT_SECONDS,
@@ -377,6 +378,17 @@ def _sync_obsidian_repo(
         print(get_message("onboarding_discovery", "failed_sync_repo", error=error))
         return dest, False
     return dest, True
+
+
+def _container_repo_relative_path(path: Path) -> str:
+    """
+    Convert host paths under repo root into container workspace-relative paths.
+    """
+    root = get_repo_root() or Path.cwd()
+    try:
+        return str(path.resolve().relative_to(root.resolve()))
+    except ValueError:
+        return str(path)
 
 
 def _sync_notion_workspace(
