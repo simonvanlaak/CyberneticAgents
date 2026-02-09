@@ -74,6 +74,8 @@ class SystemBase(SystemBaseMixin, RoutedAgent):
     MESSAGE_LENGTH_ERROR_FRAGMENT = (
         "please reduce the length of the messages or completion"
     )
+    TOOL_CHOICE_REQUIRED_FRAGMENT = "tool choice is required"
+    TOOL_NOT_CALLED_FRAGMENT = "did not call a tool"
 
     def __init__(
         self,
@@ -271,6 +273,12 @@ class SystemBase(SystemBaseMixin, RoutedAgent):
                     )
                 if retry_result is not None:
                     task_result = retry_result
+                elif self._is_required_tool_choice_missing_call_error(
+                    exc=exc,
+                    output_content_type=output_content_type,
+                    tool_choice_required=tool_choice_required,
+                ):
+                    raise
                 elif (
                     output_content_type is None
                     or not self._is_json_generation_failure(exc)
@@ -357,6 +365,20 @@ class SystemBase(SystemBaseMixin, RoutedAgent):
 
     def _is_message_length_error(self, exc: Exception) -> bool:
         return self.MESSAGE_LENGTH_ERROR_FRAGMENT in str(exc).lower()
+
+    def _is_required_tool_choice_missing_call_error(
+        self,
+        exc: Exception,
+        output_content_type: type[BaseModel] | None,
+        tool_choice_required: bool,
+    ) -> bool:
+        if output_content_type is not None or not tool_choice_required:
+            return False
+        error_text = str(exc).lower()
+        return (
+            self.TOOL_CHOICE_REQUIRED_FRAGMENT in error_text
+            and self.TOOL_NOT_CALLED_FRAGMENT in error_text
+        )
 
     async def _retry_with_compacted_message_payload(
         self,

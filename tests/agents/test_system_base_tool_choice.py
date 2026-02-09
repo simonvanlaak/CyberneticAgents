@@ -386,6 +386,50 @@ async def test_run_does_not_route_errors_for_system5(
 
 
 @pytest.mark.asyncio
+async def test_run_bubbles_required_tool_choice_error_without_routing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    system = DummySystem()
+    system._publish_message_to_agent = AsyncMock()
+
+    async def fake_set_system_prompt(
+        _prompts: list[str], _memory_context: list[str] | None = None
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(system, "_set_system_prompt", fake_set_system_prompt)
+    monkeypatch.setattr(system, "_build_memory_context", lambda *_args: [])
+    monkeypatch.setattr(
+        "src.agents.system_base.mark_team_active", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        "src.agents.system_base.get_model_client",
+        lambda *_args, **_kwargs: DummyModelClient(),
+    )
+    system._agent.run = AsyncMock(
+        side_effect=RuntimeError(
+            "Tool choice is required, but model did not call a tool"
+        )
+    )
+
+    message = TextMessage(content="hello", source="User")
+    context = MessageContext(
+        sender=AgentId.from_str("User/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="run_tool_choice_retry_test",
+    )
+
+    with pytest.raises(
+        RuntimeError, match="Tool choice is required, but model did not call a tool"
+    ):
+        await system.run([message], context, tool_choice_required=True)
+
+    system._publish_message_to_agent.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_run_retries_on_messages_length_limit_without_routing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
