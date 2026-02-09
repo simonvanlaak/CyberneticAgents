@@ -10,7 +10,7 @@ import os
 import casbin
 import casbin_sqlalchemy_adapter
 
-from src.cyberagent.core.paths import get_data_dir
+from src.rbac.authz_db import resolve_authz_db_url
 
 logger = logging.getLogger(__name__)
 
@@ -28,10 +28,11 @@ def get_enforcer():
 
 def _create_enforcer():
     """Create a new enforcer instance with domain support enabled."""
-    data_dir = get_data_dir()
-    data_dir.mkdir(parents=True, exist_ok=True)
-    db_path = data_dir / "rbac.db"
-    adapter = casbin_sqlalchemy_adapter.Adapter(f"sqlite:///{db_path}")
+    db_url = resolve_authz_db_url(
+        specific_env="CYBERAGENT_RBAC_DB_URL",
+        default_filename="rbac.db",
+    )
+    adapter = casbin_sqlalchemy_adapter.Adapter(db_url)
     model_path = os.path.join(os.path.dirname(__file__), "model.conf")
     enforcer = casbin.Enforcer(model_path, adapter)
 

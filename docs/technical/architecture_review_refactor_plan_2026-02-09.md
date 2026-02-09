@@ -72,6 +72,10 @@ Critical review of the current project architecture across runtime, agent orches
 - [x] Step 2: Remove DB model -> agent message coupling.
 - [x] Step 3: Begin transaction-scoped repository migration for task lifecycle paths (initial slice in `tasks` service).
 
+### Phase 2 Progress
+- [x] Step 1: Introduce shared authz DB configuration via `CYBERAGENT_AUTHZ_DB_URL` (both enforcers support unified store).
+- [ ] Step 2: Add deterministic policy bootstrap/versioning.
+
 ## Phase 0: Stabilization (1 sprint)
 1. Fix entrypoint architecture debt:
    - Replace `main.py` imports with `src.cyberagent.cli.*` or make it a compatibility shim that delegates to `cyberagent`.

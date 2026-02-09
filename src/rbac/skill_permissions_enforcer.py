@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import logging
 import os
-from pathlib import Path
-from urllib.parse import urlparse
 
 import casbin
 import casbin_sqlalchemy_adapter
 
-from src.cyberagent.core.paths import get_data_dir
+from src.rbac.authz_db import resolve_authz_db_url
 
 logger = logging.getLogger(__name__)
 
@@ -33,22 +31,10 @@ def _create_enforcer() -> casbin.Enforcer:
     """
     Create a new Casbin enforcer for skill permissions.
     """
-    db_url = os.environ.get("CYBERAGENT_SKILL_PERMISSIONS_DB_URL")
-    if not db_url:
-        data_dir = get_data_dir()
-        data_dir.mkdir(parents=True, exist_ok=True)
-        db_path = data_dir / "skill_permissions.db"
-        db_url = f"sqlite:///{db_path}"
-    else:
-        parsed = urlparse(db_url)
-        if parsed.scheme == "sqlite":
-            raw_path = parsed.path or ""
-            if raw_path and raw_path != "/:memory:":
-                db_path = Path(raw_path)
-                if not db_path.is_absolute():
-                    db_path = Path(raw_path.lstrip("/"))
-                if db_path.parent:
-                    db_path.parent.mkdir(parents=True, exist_ok=True)
+    db_url = resolve_authz_db_url(
+        specific_env="CYBERAGENT_SKILL_PERMISSIONS_DB_URL",
+        default_filename="skill_permissions.db",
+    )
     adapter = casbin_sqlalchemy_adapter.Adapter(db_url)
     model_path = os.path.join(os.path.dirname(__file__), "skill_permissions_model.conf")
     enforcer = casbin.Enforcer(model_path, adapter)
