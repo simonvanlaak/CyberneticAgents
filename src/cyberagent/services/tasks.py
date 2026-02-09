@@ -247,6 +247,13 @@ def _resolve_task_status(raw_status: object) -> Status | None:
         return None
     if isinstance(raw_status, Status):
         return raw_status
+    raw_text = str(raw_status).strip()
+    if "." in raw_text:
+        raw_text = raw_text.split(".")[-1]
+    normalized = raw_text.lower()
+    for status in Status:
+        if status.value.lower() == normalized:
+            return status
     try:
         return Status(str(raw_status))
     except ValueError:

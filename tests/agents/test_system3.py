@@ -291,6 +291,66 @@ async def test_system3_task_review_processes_blocked_tasks() -> None:
 
 
 @pytest.mark.asyncio
+async def test_system3_task_review_processes_blocked_tasks_with_prefixed_status() -> (
+    None
+):
+    system3 = System3("System3/controller1")
+    system3._publish_message_to_agent = AsyncMock()
+    mocked_run = AsyncMock()
+
+    message = TaskReviewMessage(
+        task_id=42,
+        assignee_agent_id_str="System1/root",
+        source="System1/root",
+        content="Task result",
+    )
+    context = MessageContext(
+        sender=AgentId.from_str("System1/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="task_review_blocked_prefixed",
+    )
+
+    class DummyTask:
+        id = 42
+        assignee = "System1/root"
+        status = "Status.BLOCKED"
+
+    class DummySystem5:
+        def get_agent_id(self):
+            return AgentId.from_str("System5/root")
+
+    mocked_run.return_value = object()
+
+    with (
+        patch("src.cyberagent.services.tasks._get_task", return_value=DummyTask()),
+        patch(
+            "src.cyberagent.services.policies._get_system_policy_prompts",
+            return_value=["Policy #1"],
+        ),
+        patch.object(system3, "_get_systems_by_type", return_value=[DummySystem5()]),
+        patch.object(
+            system3,
+            "_get_structured_message",
+            return_value=CasesResponse(
+                cases=[
+                    PolicyJudgeResponse(
+                        policy_id=1,
+                        judgement=PolicyJudgement.VIOLATED,
+                        reasoning="blocked for valid reason",
+                    )
+                ]
+            ),
+        ),
+        patch.object(system3, "run", mocked_run),
+    ):
+        await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
+
+    assert mocked_run.await_count == 1
+
+
+@pytest.mark.asyncio
 async def test_system3_task_review_skips_non_review_eligible_tasks() -> None:
     system3 = System3("System3/controller1")
     system3._publish_message_to_agent = AsyncMock()

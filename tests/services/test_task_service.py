@@ -200,6 +200,18 @@ def test_is_review_eligible_for_task_when_completed_or_blocked() -> None:
     assert task_service.is_review_eligible_for_task(task) is False
 
 
+def test_is_review_eligible_for_task_supports_prefixed_status_strings() -> None:
+    from src.cyberagent.services import tasks as task_service
+    from src.cyberagent.db.models.task import Task
+
+    task = _FakeTask()
+    task.status = "Status.BLOCKED"
+    assert task_service.is_review_eligible_for_task(cast(Task, task)) is True
+
+    task.status = "Status.PENDING"
+    assert task_service.is_review_eligible_for_task(cast(Task, task)) is False
+
+
 def test_finalize_task_review_approves_only_when_all_cases_satisfied() -> None:
     from src.cyberagent.services import tasks as task_service
     from src.cyberagent.db.models.task import Task
