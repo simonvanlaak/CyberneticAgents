@@ -231,3 +231,67 @@ async def test_system1_blocked_marks_task_and_escalates_to_system3(
     assert published_args[0].task_id == 9
     assert published_args[0].content == "Missing API key"
     assert str(published_args[1]) == "System3/root"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "raw_output",
+    [
+        "I need more details before I can complete this task.",
+        '{"status":"blocked","result":"Missing context"',
+        '{"result":"Need clarification on user identity links."}',
+    ],
+)
+async def test_system1_ambiguous_output_marks_task_blocked(
+    monkeypatch: pytest.MonkeyPatch, raw_output: str
+) -> None:
+    system1 = System1("System1/worker1")
+    message = TaskAssignMessage(
+        task_id=10,
+        assignee_agent_id_str="System1/worker1",
+        source="System3/root",
+        content="Collect user identity and links",
+    )
+    ctx = MessageContext(
+        sender=AgentId.from_str("System3/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="ambiguous-output",
+    )
+
+    class _DummyTask:
+        pass
+
+    task = _DummyTask()
+    captured: dict[str, object] = {"complete_called": False}
+
+    monkeypatch.setattr(
+        "src.cyberagent.services.tasks.start_task", lambda _task_id: task
+    )
+    monkeypatch.setattr(
+        "src.cyberagent.services.tasks.complete_task",
+        lambda *_: captured.__setitem__("complete_called", True),
+    )
+    monkeypatch.setattr(
+        "src.cyberagent.services.tasks.mark_task_blocked",
+        lambda _task, reason: captured.__setitem__("reason", reason),
+    )
+    monkeypatch.setattr(
+        system1,
+        "run",
+        AsyncMock(
+            return_value=TaskResult(
+                messages=[TextMessage(content=raw_output, source="System1/worker1")]
+            )
+        ),
+    )
+    system1._publish_message_to_agent = AsyncMock()  # type: ignore[attr-defined]
+
+    await system1.handle_assign_task_message(message=message, ctx=ctx)  # type: ignore[call-arg]
+
+    assert captured["complete_called"] is False
+    assert isinstance(captured.get("reason"), str)
+    published_args = system1._publish_message_to_agent.await_args.args  # type: ignore[attr-defined]
+    assert isinstance(published_args[0], CapabilityGapMessage)
+    assert str(published_args[1]) == "System3/root"

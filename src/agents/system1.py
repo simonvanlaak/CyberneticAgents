@@ -10,9 +10,34 @@ from .messages import CapabilityGapMessage, TaskAssignMessage, TaskReviewMessage
 
 
 class TaskExecutionResult(BaseModel):
-    status: Literal["done", "blocked"] = "done"
+    status: Literal["done", "blocked"]
     result: str
     reasoning: str | None = None
+
+
+def _parse_task_execution_result(raw_result: str) -> TaskExecutionResult:
+    """
+    Parse a task execution response into a strict execution contract.
+
+    Any ambiguous, malformed, or underspecified output is treated as blocked so
+    tasks are never completed by accident.
+    """
+    try:
+        execution = TaskExecutionResult.model_validate_json(raw_result)
+    except Exception:
+        return TaskExecutionResult(
+            status="blocked",
+            result=raw_result,
+            reasoning="Ambiguous or non-JSON task execution output.",
+        )
+
+    if execution.status == "done" and not execution.result.strip():
+        return TaskExecutionResult(
+            status="blocked",
+            result=raw_result,
+            reasoning="Task marked done without a concrete result.",
+        )
+    return execution
 
 
 class System1(SystemBase):
@@ -48,10 +73,7 @@ class System1(SystemBase):
             else str(latest_message)
         )
 
-        try:
-            execution = TaskExecutionResult.model_validate_json(raw_result)
-        except Exception:
-            execution = TaskExecutionResult(status="done", result=raw_result)
+        execution = _parse_task_execution_result(raw_result)
 
         if execution.status == "blocked":
             reasoning = execution.reasoning or execution.result
