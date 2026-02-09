@@ -149,6 +149,20 @@ class SystemBaseMixin:
         text = str(exc).lower()
         return "json_validate_failed" in text or "failed to generate json" in text
 
+    def _is_tool_arguments_json_error(self, exc: Exception) -> bool:
+        text = str(exc).lower()
+        return (
+            "tool_use_failed" in text
+            and "failed to parse tool call arguments as json" in text
+        )
+
+    def _build_tool_arguments_retry_instruction(self) -> str:
+        return (
+            "Retry the previous response. If you call a tool, the arguments must be "
+            "strict valid JSON with properly balanced quotes/braces, no trailing "
+            "characters, and no markdown."
+        )
+
     async def _route_internal_error_to_policy_system(
         self,
         failed_message_type: str,

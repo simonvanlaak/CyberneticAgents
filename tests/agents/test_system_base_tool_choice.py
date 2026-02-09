@@ -481,6 +481,98 @@ async def test_run_retries_on_messages_length_limit_without_routing(
 
 
 @pytest.mark.asyncio
+async def test_run_retries_on_tool_argument_json_error_without_routing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    system = DummySystem()
+    system._publish_message_to_agent = AsyncMock()
+
+    async def fake_set_system_prompt(
+        _prompts: list[str], _memory_context: list[str] | None = None
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(system, "_set_system_prompt", fake_set_system_prompt)
+    monkeypatch.setattr(system, "_build_memory_context", lambda *_args: [])
+    monkeypatch.setattr(
+        "src.agents.system_base.mark_team_active", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        "src.agents.system_base.get_model_client",
+        lambda *_args, **_kwargs: DummyModelClient(),
+    )
+    system._agent.run = AsyncMock(
+        side_effect=[
+            RuntimeError(
+                "Error code: 400 - {'error': {'message': "
+                "'Failed to parse tool call arguments as JSON', "
+                "'type': 'invalid_request_error', 'code': 'tool_use_failed'}}"
+            ),
+            TaskResult(messages=[TextMessage(content="ok", source="System4/root")]),
+        ]
+    )
+
+    message = TextMessage(content="hello", source="User")
+    context = MessageContext(
+        sender=AgentId.from_str("User/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="run_tool_args_json_retry_test",
+    )
+
+    result = await system.run([message], context)
+    assert result.messages[-1].to_text() == "ok"
+    assert system._agent.run.await_count == 2
+    second_call = system._agent.run.await_args_list[1]
+    retry_messages = second_call.kwargs["task"]
+    assert "arguments must be strict valid JSON" in retry_messages[-1].content
+    system._publish_message_to_agent.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_run_does_not_route_required_tool_choice_missing_call_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    system = DummySystem()
+    system._publish_message_to_agent = AsyncMock()
+
+    async def fake_set_system_prompt(
+        _prompts: list[str], _memory_context: list[str] | None = None
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(system, "_set_system_prompt", fake_set_system_prompt)
+    monkeypatch.setattr(system, "_build_memory_context", lambda *_args: [])
+    monkeypatch.setattr(
+        "src.agents.system_base.mark_team_active", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        "src.agents.system_base.get_model_client",
+        lambda *_args, **_kwargs: DummyModelClient(),
+    )
+    system._agent.run = AsyncMock(
+        side_effect=RuntimeError(
+            "Tool choice is required, but model did not call a tool"
+        )
+    )
+
+    message = TextMessage(content="hello", source="User")
+    context = MessageContext(
+        sender=AgentId.from_str("User/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="run_tool_choice_missing_call_test",
+    )
+
+    with pytest.raises(RuntimeError, match="Tool choice is required"):
+        await system.run([message], context, tool_choice_required=True)
+
+    system._publish_message_to_agent.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_set_system_prompt_compacts_when_budget_exceeded(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

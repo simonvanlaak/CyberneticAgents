@@ -271,12 +271,27 @@ class SystemBase(SystemBaseMixin, RoutedAgent):
                         output_content_type=output_content_type,
                         tool_choice_required=tool_choice_required,
                     )
+                elif self._is_tool_arguments_json_error(exc):
+                    logger.warning(
+                        "Tool call arguments JSON parse failed for %s. Retrying once.",
+                        self.agent_id.__str__(),
+                    )
+                    tool_retry_messages: list[BaseTextChatMessage] = [
+                        *chat_messages,
+                        TextMessage(
+                            source=self.name,
+                            content=self._build_tool_arguments_retry_instruction(),
+                        ),
+                    ]
+                    retry_result = await self._agent.run(
+                        task=tool_retry_messages,
+                        cancellation_token=ctx.cancellation_token,
+                    )
                 if retry_result is not None:
                     task_result = retry_result
                 elif self._is_required_tool_choice_missing_call_error(
                     exc=exc,
                     output_content_type=output_content_type,
-                    tool_choice_required=tool_choice_required,
                 ):
                     raise
                 elif (
@@ -370,9 +385,8 @@ class SystemBase(SystemBaseMixin, RoutedAgent):
         self,
         exc: Exception,
         output_content_type: type[BaseModel] | None,
-        tool_choice_required: bool,
     ) -> bool:
-        if output_content_type is not None or not tool_choice_required:
+        if output_content_type is not None:
             return False
         error_text = str(exc).lower()
         return (
