@@ -1,22 +1,37 @@
+from __future__ import annotations
+
+from unittest.mock import AsyncMock
+
 import pytest
-from src.registry import register_systems
-from src.cyberagent.core.runtime import get_runtime
+
+import src.registry as registry
+from src.cyberagent.core.agent_registration import reset_for_tests
 
 
 @pytest.mark.asyncio
-async def test_register_systems_idempotent():
-    """Test that register_systems can be called multiple times without error."""
-    # First registration - should succeed
-    await register_systems()
+async def test_register_systems_idempotent(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Calling register_systems repeatedly should not register twice."""
+    reset_for_tests()
+    runtime = object()
+    monkeypatch.setattr(registry, "get_runtime", lambda: runtime)
 
-    # Second registration - must be a no-op, not raise
-    await register_systems()
+    register_system1 = AsyncMock()
+    register_system3 = AsyncMock()
+    register_system4 = AsyncMock()
+    register_system5 = AsyncMock()
+    register_user_agent = AsyncMock()
 
-    # Verify that the expected agents are present
-    runtime = get_runtime()
-    expected_agents = ["System1", "System3", "System4", "System5", "UserAgent"]
+    monkeypatch.setattr(registry.System1, "register", register_system1)
+    monkeypatch.setattr(registry.System3, "register", register_system3)
+    monkeypatch.setattr(registry.System4, "register", register_system4)
+    monkeypatch.setattr(registry.System5, "register", register_system5)
+    monkeypatch.setattr(registry.UserAgent, "register", register_user_agent)
 
-    for agent_name in expected_agents:
-        assert (
-            agent_name in runtime._known_agent_names
-        ), f"Agent {agent_name} should be registered"
+    await registry.register_systems()
+    await registry.register_systems()
+
+    assert register_system1.await_count == 1
+    assert register_system3.await_count == 1
+    assert register_system4.await_count == 1
+    assert register_system5.await_count == 1
+    assert register_user_agent.await_count == 1

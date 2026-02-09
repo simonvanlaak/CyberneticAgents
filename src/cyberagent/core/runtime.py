@@ -20,6 +20,7 @@ from src.cyberagent.tools.cli_executor.docker_env_executor import (
 )
 from src.cyberagent.tools.cli_executor.factory import create_cli_executor
 from src.cyberagent.secrets import get_secret
+from src.cyberagent.core.agent_registration import clear_runtime
 
 # Singleton runtime instance
 _runtime: SingleThreadedAgentRuntime | None = None
@@ -113,6 +114,8 @@ async def stop_runtime() -> None:
     global _runtime
     if _runtime is None:
         return
-    await _runtime.stop_when_idle()
+    runtime = _runtime
+    await runtime.stop_when_idle()
     await stop_cli_executor()
+    clear_runtime(runtime)
     _runtime = None

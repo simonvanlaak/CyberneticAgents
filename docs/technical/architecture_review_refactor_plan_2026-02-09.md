@@ -67,6 +67,11 @@ Critical review of the current project architecture across runtime, agent orches
 - [x] Step 2: Remove/gate runtime startup policy reset (`enforcer.clear_policy()`).
 - [x] Step 3: Add CI guardrails for banned imports and private member usage.
 
+### Phase 1 Progress
+- [x] Step 1: Replace direct use of `runtime._known_agent_names` with runtime-scoped registration adapter.
+- [ ] Step 2: Remove DB model -> agent message coupling.
+- [ ] Step 3: Begin transaction-scoped repository migration for task/initiative/procedure run paths.
+
 ## Phase 0: Stabilization (1 sprint)
 1. Fix entrypoint architecture debt:
    - Replace `main.py` imports with `src.cyberagent.cli.*` or make it a compatibility shim that delegates to `cyberagent`.

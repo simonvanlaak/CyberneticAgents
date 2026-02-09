@@ -41,7 +41,6 @@ def test_private_autogen_access_is_allowlisted() -> None:
         re.compile(r"self\._agent\._system_messages"),
     ]
     allowlist = {
-        "src/registry.py": {"runtime._known_agent_names"},
         "src/agents/system_base.py": {
             "self._agent._reflect_on_tool_use",
             "self._agent._model_client",
