@@ -78,6 +78,11 @@ def test_handle_onboarding_creates_default_team(
     monkeypatch.setattr(
         ONBOARDING, "_trigger_onboarding_initiative", lambda *_, **__: True
     )
+    monkeypatch.setattr(
+        ONBOARDING,
+        "_run_discovery_onboarding",
+        lambda *_args, **_kwargs: "data/onboarding/summary.md",
+    )
 
     exit_code = _handle_onboarding(_default_onboarding_args())
     captured = capsys.readouterr().out
@@ -85,7 +90,7 @@ def test_handle_onboarding_creates_default_team(
     assert exit_code == 0
     assert "Created default team" in captured
     assert "Starting PKM sync and profile discovery" in captured
-    assert called.get("background") is True
+    assert called.get("background") is None
     assert called.get("interview") is True
 
     expected_name = (
@@ -126,6 +131,11 @@ def test_handle_onboarding_skips_when_team_exists(
     monkeypatch.setattr(
         ONBOARDING, "_trigger_onboarding_initiative", lambda *_, **__: True
     )
+    monkeypatch.setattr(
+        ONBOARDING,
+        "_run_discovery_onboarding",
+        lambda *_args, **_kwargs: "data/onboarding/summary.md",
+    )
 
     exit_code = _handle_onboarding(_default_onboarding_args())
     captured = capsys.readouterr().out
@@ -133,7 +143,7 @@ def test_handle_onboarding_skips_when_team_exists(
     assert exit_code == 0
     assert "Team already exists" in captured
     assert "Starting PKM sync and profile discovery" in captured
-    assert called.get("background") is True
+    assert called.get("background") is None
     assert called.get("interview") is True
 
     session = next(get_db())

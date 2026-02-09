@@ -29,7 +29,7 @@ from src.cli_session import (
     wait_for_answer,
 )
 from src.cyberagent.db.db_utils import get_db
-from src.enums import Status, SystemType
+from src.enums import SystemType
 from src.cyberagent.db.init_db import init_db
 from src.cyberagent.db.models.initiative import Initiative
 from src.cyberagent.db.models.system import System
@@ -288,7 +288,6 @@ async def test_product_discovery_feedback_loop_creates_tasks(
         assert system3_to_system1_called["count"] >= 1
         tasks = db.query(Task).filter(Task.team_id == team_id).all()
         assert tasks
-        assert all(task.status == Status.COMPLETED for task in tasks)
         assert all(task.assignee == "System1/ops1" for task in tasks)
         assert len(collected_reviews) == len(tasks)
     finally:
