@@ -179,6 +179,10 @@ def render_teams_page(st: Any) -> None:
 
     for team in teams:
         st.subheader(f"Team {team.team_name} ({team.team_id})")
+        team_policies_text = ", ".join(team.policies) if team.policies else "-"
+        team_permissions_text = ", ".join(team.permissions) if team.permissions else "-"
+        st.caption(f"Team policies: {team_policies_text}")
+        st.caption(f"Team permissions: {team_permissions_text}")
         if not team.members:
             st.caption("No team members")
             continue
@@ -189,6 +193,12 @@ def render_teams_page(st: Any) -> None:
                     "name": member.name,
                     "type": member.system_type,
                     "agent_id": member.agent_id_str,
+                    "system_policies": (
+                        ", ".join(member.policies) if member.policies else "-"
+                    ),
+                    "system_permissions": (
+                        ", ".join(member.permissions) if member.permissions else "-"
+                    ),
                 }
                 for member in team.members
             ],
