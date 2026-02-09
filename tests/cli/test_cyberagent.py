@@ -712,14 +712,9 @@ async def test_send_suggestion_sets_user_sender(
     async def fake_stop() -> None:
         return None
 
-    class DummyEnforcer:
-        def clear_policy(self) -> None:
-            return None
-
     monkeypatch.setattr(cyberagent, "get_runtime", lambda: DummyRuntime())
     monkeypatch.setattr(cyberagent, "register_systems", fake_register)
     monkeypatch.setattr(cyberagent, "stop_runtime", fake_stop)
-    monkeypatch.setattr(cyberagent, "get_enforcer", lambda: DummyEnforcer())
     monkeypatch.setattr(cyberagent, "init_db", lambda: None)
 
     parsed = cyberagent.ParsedSuggestion(payload_text="hi", payload_object="hi")
@@ -746,14 +741,9 @@ async def test_send_suggestion_prints_inbox_hint(
     async def fake_stop() -> None:
         stopped["value"] = True
 
-    class DummyEnforcer:
-        def clear_policy(self) -> None:
-            return None
-
     monkeypatch.setattr(cyberagent, "get_runtime", lambda: DummyRuntime())
     monkeypatch.setattr(cyberagent, "register_systems", fake_register)
     monkeypatch.setattr(cyberagent, "stop_runtime", fake_stop)
-    monkeypatch.setattr(cyberagent, "get_enforcer", lambda: DummyEnforcer())
     monkeypatch.setattr(cyberagent, "init_db", lambda: None)
 
     parsed = cyberagent.ParsedSuggestion(payload_text="hi", payload_object="hi")
@@ -782,14 +772,9 @@ async def test_send_suggestion_shutdown_timeout_exits(
     async def slow_stop() -> None:
         await asyncio.Event().wait()
 
-    class DummyEnforcer:
-        def clear_policy(self) -> None:
-            return None
-
     monkeypatch.setattr(cyberagent, "get_runtime", lambda: DummyRuntime())
     monkeypatch.setattr(cyberagent, "register_systems", fake_register)
     monkeypatch.setattr(cyberagent, "stop_runtime", slow_stop)
-    monkeypatch.setattr(cyberagent, "get_enforcer", lambda: DummyEnforcer())
     monkeypatch.setattr(cyberagent, "init_db", lambda: None)
     monkeypatch.setattr(cyberagent, "SUGGEST_SHUTDOWN_TIMEOUT_SECONDS", 0.01)
 
@@ -816,14 +801,9 @@ async def test_send_suggestion_send_timeout_exits(
     async def fake_stop() -> None:
         return None
 
-    class DummyEnforcer:
-        def clear_policy(self) -> None:
-            return None
-
     monkeypatch.setattr(cyberagent, "get_runtime", lambda: DummyRuntime())
     monkeypatch.setattr(cyberagent, "register_systems", fake_register)
     monkeypatch.setattr(cyberagent, "stop_runtime", fake_stop)
-    monkeypatch.setattr(cyberagent, "get_enforcer", lambda: DummyEnforcer())
     monkeypatch.setattr(cyberagent, "init_db", lambda: None)
     monkeypatch.setattr(cyberagent, "SUGGEST_SEND_TIMEOUT_SECONDS", 0.01)
 
@@ -857,14 +837,9 @@ async def test_send_suggestion_handles_output_parse_failed(
     async def fake_stop() -> None:
         stopped["value"] = True
 
-    class DummyEnforcer:
-        def clear_policy(self) -> None:
-            return None
-
     monkeypatch.setattr(cyberagent, "get_runtime", lambda: DummyRuntime())
     monkeypatch.setattr(cyberagent, "register_systems", fake_register)
     monkeypatch.setattr(cyberagent, "stop_runtime", fake_stop)
-    monkeypatch.setattr(cyberagent, "get_enforcer", lambda: DummyEnforcer())
     monkeypatch.setattr(cyberagent, "init_db", lambda: None)
 
     parsed = cyberagent.ParsedSuggestion(payload_text="hi", payload_object="hi")
@@ -898,17 +873,12 @@ async def test_send_suggestion_timeout_does_not_cancel_runtime_send(
     async def fake_register_systems() -> None:
         return None
 
-    class DummyEnforcer:
-        def clear_policy(self) -> None:
-            return None
-
     async def fake_stop_runtime_with_timeout() -> None:
         return None
 
     runtime = DummyRuntime()
     monkeypatch.setattr(cyberagent, "init_db", lambda: None)
     monkeypatch.setattr(cyberagent, "register_systems", fake_register_systems)
-    monkeypatch.setattr(cyberagent, "get_enforcer", lambda: DummyEnforcer())
     monkeypatch.setattr(cyberagent, "get_runtime", lambda: runtime)
     monkeypatch.setattr(
         cyberagent, "_stop_runtime_with_timeout", fake_stop_runtime_with_timeout

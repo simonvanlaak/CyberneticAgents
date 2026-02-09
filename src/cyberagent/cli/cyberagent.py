@@ -74,7 +74,6 @@ from src.cyberagent.tools.cli_executor.skill_loader import (
     load_skill_definitions,
 )
 from src.cyberagent.tools.cli_executor.skill_runtime import DEFAULT_SKILLS_ROOT
-from src.rbac.enforcer import get_enforcer
 from src.registry import register_systems
 
 SYSTEM4_AGENT_ID = AgentId(type="System4", key="root")
@@ -137,6 +136,12 @@ def _sync_runtime_command_dependencies() -> None:
 async def _handle_start(args: argparse.Namespace) -> int:
     _sync_runtime_command_dependencies()
     return await runtime_commands._handle_start(args)
+
+
+async def run_headless_session(initial_message: str | None = None) -> None:
+    """Compatibility shim kept for legacy tests and external callers."""
+    _ = initial_message
+    return None
 
 
 def _require_existing_team() -> int | None:
@@ -642,8 +647,6 @@ def _parse_suggestion_args(args: argparse.Namespace) -> ParsedSuggestion:
 async def _send_suggestion(parsed: ParsedSuggestion) -> None:
     init_db()
     await register_systems()
-    enforcer = get_enforcer()
-    enforcer.clear_policy()
     runtime = get_runtime()
     message = UserMessage(content=parsed.payload_text, source="User")
     try:
