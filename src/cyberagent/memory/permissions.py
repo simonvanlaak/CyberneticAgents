@@ -35,6 +35,8 @@ def check_memory_permission(
         True if allowed, False otherwise.
     """
     if scope == MemoryScope.GLOBAL:
+        if action == MemoryAction.READ:
+            return True
         return system_type == SystemType.INTELLIGENCE
 
     if scope == MemoryScope.TEAM:

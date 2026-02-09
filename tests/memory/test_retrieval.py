@@ -1,7 +1,5 @@
 from datetime import datetime, timezone
 
-import pytest
-
 from src.cyberagent.memory.backends.sqlite import SqliteMemoryStore
 from src.cyberagent.memory.models import (
     MemoryAuditEvent,
@@ -50,18 +48,36 @@ def _actor() -> MemoryActorContext:
     )
 
 
-def test_retrieval_denies_global_for_sys1(tmp_path) -> None:
+def test_retrieval_allows_global_for_sys1(tmp_path) -> None:
     store = SqliteMemoryStore(tmp_path / "memory.db")
-    registry = StaticScopeRegistry(store, store, store)
-    service = MemoryRetrievalService(registry=registry)
-    with pytest.raises(PermissionError):
-        service.search_entries(
-            actor=_actor(),
+    now = datetime.now(timezone.utc)
+    store.add(
+        MemoryEntry(
+            id="global-1",
             scope=MemoryScope.GLOBAL,
             namespace="user",
-            query_text="alpha",
-            limit=5,
+            owner_agent_id="System4/root",
+            content="onboarding summary",
+            tags=["onboarding"],
+            priority=MemoryPriority.HIGH,
+            created_at=now,
+            updated_at=now,
+            expires_at=None,
+            source=MemorySource.IMPORT,
+            confidence=0.8,
+            layer=MemoryLayer.LONG_TERM,
         )
+    )
+    registry = StaticScopeRegistry(store, store, store)
+    service = MemoryRetrievalService(registry=registry)
+    result = service.search_entries(
+        actor=_actor(),
+        scope=MemoryScope.GLOBAL,
+        namespace="user",
+        query_text="onboarding",
+        limit=5,
+    )
+    assert [entry.id for entry in result.items] == ["global-1"]
 
 
 def test_retrieval_and_injection_respects_budget(tmp_path) -> None:

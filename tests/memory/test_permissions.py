@@ -85,7 +85,7 @@ def test_team_scope_blocks_cross_team_access() -> None:
     )
 
 
-def test_global_scope_requires_sys4() -> None:
+def test_global_scope_read_allowed_for_all_system_types() -> None:
     assert (
         check_memory_permission(
             actor_team_id=1,
@@ -103,6 +103,39 @@ def test_global_scope_requires_sys4() -> None:
             system_type=SystemType.CONTROL,
             scope=MemoryScope.GLOBAL,
             action=MemoryAction.READ,
+        )
+        is True
+    )
+    assert (
+        check_memory_permission(
+            actor_team_id=1,
+            target_team_id=None,
+            system_type=SystemType.OPERATION,
+            scope=MemoryScope.GLOBAL,
+            action=MemoryAction.READ,
+        )
+        is True
+    )
+
+
+def test_global_scope_write_requires_sys4() -> None:
+    assert (
+        check_memory_permission(
+            actor_team_id=1,
+            target_team_id=None,
+            system_type=SystemType.INTELLIGENCE,
+            scope=MemoryScope.GLOBAL,
+            action=MemoryAction.WRITE,
+        )
+        is True
+    )
+    assert (
+        check_memory_permission(
+            actor_team_id=1,
+            target_team_id=None,
+            system_type=SystemType.POLICY,
+            scope=MemoryScope.GLOBAL,
+            action=MemoryAction.WRITE,
         )
         is False
     )
