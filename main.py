@@ -11,7 +11,7 @@ import sys
 
 import dotenv
 
-from src.cli.headless import run_headless_session
+from src.cyberagent.cli.headless import run_headless_session
 
 dotenv.load_dotenv()
 
@@ -37,7 +37,7 @@ async def main() -> None:
 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "status":
-        from src.cli.status import main as status_main
+        from src.cyberagent.cli.status import main as status_main
 
         raise SystemExit(status_main(sys.argv[2:]))
     asyncio.run(main())

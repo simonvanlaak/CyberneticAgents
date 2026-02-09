@@ -60,6 +60,13 @@ Critical review of the current project architecture across runtime, agent orches
 
 ## Refactor Plan (Phased)
 
+## Execution Tracking
+
+### Phase 0 Progress
+- [x] Step 1: Fix `main.py` imports to use `src.cyberagent.cli.*`.
+- [ ] Step 2: Remove/gate runtime startup policy reset (`enforcer.clear_policy()`).
+- [ ] Step 3: Add CI guardrails for banned imports and private member usage.
+
 ## Phase 0: Stabilization (1 sprint)
 1. Fix entrypoint architecture debt:
    - Replace `main.py` imports with `src.cyberagent.cli.*` or make it a compatibility shim that delegates to `cyberagent`.
