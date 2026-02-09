@@ -538,6 +538,11 @@ def test_technical_onboarding_requires_groq_key(
 ) -> None:
     monkeypatch.delenv("GROQ_API_KEY", raising=False)
     monkeypatch.setenv("LLM_PROVIDER", "groq")
+    monkeypatch.setattr(
+        onboarding_cli,
+        "_load_secret_from_1password",
+        lambda **_: None,
+    )
     monkeypatch.setattr(onboarding_cli, "_is_path_writable", lambda *_: True)
     monkeypatch.setattr(onboarding_cli, "_check_path_writable", lambda *_: True)
     monkeypatch.setattr(onboarding_cli, "check_docker_socket_access", lambda: True)

@@ -10,6 +10,7 @@ from src.agents.messages import StrategyRequestMessage, UserMessage
 from src.agents.system1 import System1
 from src.agents.system3 import (
     System3,
+    TaskAssignmentResponse,
     TaskCreateResponse,
     TasksAssignResponse,
     TasksCreateResponse,
@@ -187,7 +188,10 @@ async def test_product_discovery_feedback_loop_creates_tasks(
                 .all()
             )
             db.close()
-            assignments = [(system1_id, row.id) for row in rows]
+            assignments = [
+                TaskAssignmentResponse(system_id=system1_id, task_id=row.id)
+                for row in rows
+            ]
             response = TasksAssignResponse(assignments=assignments)
             return TaskResult(
                 messages=[StructuredMessage(content=response, source=system3.name)]
