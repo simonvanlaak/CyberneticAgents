@@ -132,6 +132,30 @@ def test_render_case_judgement_invalid_json_uses_code() -> None:
     assert fake_st.code_values == ["not-json"]
 
 
+def test_render_case_judgement_includes_policy_content(monkeypatch) -> None:
+    fake_st = _FakeStreamlit()
+
+    policy = type(
+        "Policy",
+        (),
+        {"name": "evidence_requirements", "content": "Include sources."},
+    )()
+    monkeypatch.setattr(
+        dashboard.policy_service, "get_policy_by_id", lambda _policy_id: policy
+    )
+
+    dashboard._render_case_judgement(
+        fake_st,
+        '[{"policy_id":2,"judgement":"Violated","reasoning":"No source provided."}]',
+    )
+
+    assert len(fake_st.dataframe_data) == 1
+    rows = fake_st.dataframe_data[0]
+    assert isinstance(rows, list)
+    assert rows[0]["policy_name"] == "evidence_requirements"
+    assert rows[0]["policy_content"] == "Include sources."
+
+
 def test_render_inbox_page_excludes_answered_questions_by_default(
     monkeypatch,
 ) -> None:

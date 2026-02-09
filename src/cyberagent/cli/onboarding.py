@@ -9,7 +9,6 @@ from pathlib import Path
 import subprocess
 import sys
 import urllib.request
-
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.cyberagent.cli.agent_message_queue import enqueue_agent_message
@@ -187,11 +186,17 @@ def handle_onboarding(
         repo_url=str(getattr(args, "repo_url", "")).strip(),
         profile_links=list(getattr(args, "profile_links", []) or []),
     )
-    summary_path = _run_discovery_onboarding(args, team.id)
-    if summary_path is None:
-        print(get_message("onboarding", "discovery_failed"))
-        print(get_message("onboarding", "discovery_failed_hint"))
-        return 1
+    foreground_discovery = os.environ.get(
+        "CYBERAGENT_ONBOARDING_DISCOVERY_FOREGROUND", ""
+    )
+    if foreground_discovery.strip().lower() in {"1", "true", "yes"}:
+        summary_path = _run_discovery_onboarding(args, team.id)
+        if summary_path is None:
+            print(get_message("onboarding", "discovery_failed"))
+            print(get_message("onboarding", "discovery_failed_hint"))
+            return 1
+    else:
+        _start_discovery_background(args, team.id)
     if auto_execute:
         if not _trigger_onboarding_initiative(
             team.id,
@@ -476,12 +481,8 @@ def _build_onboarding_prompt(summary_path: Path, summary_text: str) -> str:
     return build_onboarding_prompt(summary_path=summary_path, summary_text=summary_text)
 
 
-def _run_discovery_onboarding(args: argparse.Namespace, team_id: int) -> Path | None:
-    return run_discovery_onboarding(args, team_id=team_id)
-
-
-def _start_discovery_background(args: argparse.Namespace, team_id: int) -> None:
-    start_discovery_background(args, team_id)
+_run_discovery_onboarding = run_discovery_onboarding
+_start_discovery_background = start_discovery_background
 
 
 def _trigger_onboarding_initiative(

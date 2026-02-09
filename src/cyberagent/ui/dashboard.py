@@ -17,6 +17,7 @@ try:
     from src.cyberagent.ui.dashboard_log_badge import count_warnings_errors
     from src.cyberagent.core.paths import get_logs_dir
     from src.cli_session import list_inbox_entries, resolve_pending_question
+    from src.cyberagent.services import policies as policy_service
 except ModuleNotFoundError:
     from kanban_data import (
         KANBAN_STATUSES,
@@ -29,6 +30,7 @@ except ModuleNotFoundError:
     from dashboard_log_badge import count_warnings_errors
     from src.cyberagent.core.paths import get_logs_dir
     from cli_session import list_inbox_entries, resolve_pending_question
+    from src.cyberagent.services import policies as policy_service
 
 
 def _load_streamlit() -> Any:
@@ -134,7 +136,38 @@ def _render_case_judgement(st: Any, case_judgement: str | None) -> None:
     if len(parsed) == 0:
         st.caption("No case judgement recorded.")
         return
-    st.dataframe(parsed, width="stretch", hide_index=True)
+    st.dataframe(
+        _enrich_case_judgement_with_policy_content(parsed),
+        width="stretch",
+        hide_index=True,
+    )
+
+
+def _enrich_case_judgement_with_policy_content(
+    rows: list[dict[str, object]],
+) -> list[dict[str, object]]:
+    enriched_rows: list[dict[str, object]] = []
+    policy_cache: dict[int, tuple[str, str]] = {}
+    for row in rows:
+        enriched = dict(row)
+        policy_id = row.get("policy_id")
+        if not isinstance(policy_id, int):
+            enriched_rows.append(enriched)
+            continue
+        if policy_id not in policy_cache:
+            policy = policy_service.get_policy_by_id(policy_id)
+            if policy is None:
+                policy_cache[policy_id] = ("-", "-")
+            else:
+                policy_cache[policy_id] = (
+                    str(getattr(policy, "name", "-")),
+                    str(getattr(policy, "content", "-")),
+                )
+        policy_name, policy_content = policy_cache[policy_id]
+        enriched["policy_name"] = policy_name
+        enriched["policy_content"] = policy_content
+        enriched_rows.append(enriched)
+    return enriched_rows
 
 
 def _render_task_details_page(st: Any, title_col: Any) -> None:

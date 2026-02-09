@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 
+import pytest
+
 from src.cyberagent.cli import onboarding as onboarding_cli
 from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.models.procedure import Procedure
@@ -35,37 +37,35 @@ def _default_onboarding_args() -> argparse.Namespace:
     )
 
 
-def test_onboarding_starts_background_discovery_before_initiative_trigger(
-    monkeypatch,
+def test_handle_onboarding_stops_when_foreground_discovery_fails(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _clear_teams()
-    sequence: list[str] = []
-
-    def _fake_background(*_args, **_kwargs):
-        sequence.append("discovery_background")
-
-    def _fake_trigger(*_args, **_kwargs):
-        sequence.append("trigger")
-        return True
-
     monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
     monkeypatch.setattr(
-        onboarding_cli, "start_onboarding_interview", lambda **_kw: None
+        onboarding_cli,
+        "_run_discovery_onboarding",
+        lambda *_args, **_kwargs: None,
     )
-    monkeypatch.setattr(onboarding_cli, "_start_discovery_background", _fake_background)
-    monkeypatch.setattr(onboarding_cli, "_trigger_onboarding_initiative", _fake_trigger)
+    monkeypatch.setenv("CYBERAGENT_ONBOARDING_DISCOVERY_FOREGROUND", "1")
     monkeypatch.setattr(
-        onboarding_cli, "_start_runtime_after_onboarding", lambda *_: None
+        onboarding_cli, "start_onboarding_interview", lambda **_kwargs: None
     )
-    monkeypatch.setattr(
-        onboarding_cli, "_start_dashboard_after_onboarding", lambda *_: None
-    )
+    start_calls: list[int] = []
+
+    def _fake_start(team_id: int) -> int | None:
+        start_calls.append(team_id)
+        return 1234
+
+    monkeypatch.setattr(onboarding_cli, "_start_runtime_after_onboarding", _fake_start)
 
     exit_code = onboarding_cli.handle_onboarding(
         _default_onboarding_args(),
         'cyberagent suggest "Describe the task"',
         "cyberagent inbox",
     )
+    captured = capsys.readouterr().out
 
-    assert exit_code == 0
-    assert sequence == ["discovery_background", "trigger"]
+    assert exit_code == 1
+    assert "couldn't complete" in captured.lower()
+    assert start_calls == []
