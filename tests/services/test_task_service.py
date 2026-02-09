@@ -109,6 +109,18 @@ def test_approve_task_updates_status() -> None:
     assert task.updated is True
 
 
+def test_approve_task_rejects_invalid_transition() -> None:
+    from src.cyberagent.services import tasks as task_service
+    from src.cyberagent.db.models.task import Task
+    from src.enums import Status
+
+    task = cast(Task, _FakeTask())
+    task.status = Status.PENDING
+
+    with pytest.raises(ValueError, match="Invalid task status transition"):
+        task_service.approve_task(task)
+
+
 def test_get_task_by_id_returns_task(monkeypatch: pytest.MonkeyPatch) -> None:
     from src.cyberagent.services import tasks as task_service
 
@@ -138,6 +150,18 @@ def test_mark_task_blocked_updates_status_and_reasoning() -> None:
     assert task.status is not None
     assert task.reasoning == "Missing external API credentials"
     assert task.updated is True
+
+
+def test_complete_task_rejects_invalid_transition() -> None:
+    from src.cyberagent.services import tasks as task_service
+    from src.cyberagent.db.models.task import Task
+    from src.enums import Status
+
+    task = cast(Task, _FakeTask())
+    task.status = Status.PENDING
+
+    with pytest.raises(ValueError, match="Invalid task status transition"):
+        task_service.complete_task(task, "done")
 
 
 def test_set_task_case_judgement_updates_policy_judgement_fields() -> None:

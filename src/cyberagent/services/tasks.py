@@ -6,6 +6,15 @@ from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.models.task import Task, get_task as _get_task
 from src.enums import Status
 
+ALLOWED_TASK_TRANSITIONS: dict[Status, set[Status]] = {
+    Status.PENDING: {Status.IN_PROGRESS, Status.REJECTED},
+    Status.IN_PROGRESS: {Status.COMPLETED, Status.BLOCKED, Status.REJECTED},
+    Status.BLOCKED: {Status.IN_PROGRESS, Status.REJECTED},
+    Status.COMPLETED: {Status.APPROVED, Status.REJECTED},
+    Status.APPROVED: set(),
+    Status.REJECTED: set(),
+}
+
 
 def start_task(task_id: int) -> Task:
     """
@@ -23,7 +32,7 @@ def start_task(task_id: int) -> Task:
     task = _get_task(task_id)
     if task is None:
         raise ValueError(f"Task with id {task_id} not found")
-    task.set_status(Status.IN_PROGRESS)
+    _transition_task(task, Status.IN_PROGRESS)
     _persist_task(task)
     return task
 
@@ -37,7 +46,7 @@ def complete_task(task: Task, result: str) -> None:
         result: Result text.
     """
     task.result = result
-    task.set_status(Status.COMPLETED)
+    _transition_task(task, Status.COMPLETED)
     _persist_task(task)
 
 
@@ -50,7 +59,7 @@ def mark_task_blocked(task: Task, reasoning: str) -> None:
         reasoning: Human-readable reason for the blocked status.
     """
     task.reasoning = reasoning
-    task.set_status(Status.BLOCKED)
+    _transition_task(task, Status.BLOCKED)
     _persist_task(task)
 
 
@@ -134,7 +143,7 @@ def approve_task(task: Task) -> None:
     Args:
         task: Task to update.
     """
-    task.set_status(Status.APPROVED)
+    _transition_task(task, Status.APPROVED)
     _persist_task(task)
 
 
@@ -184,3 +193,20 @@ def _persist_task(task: Task) -> None:
         return
     if hasattr(task, "update"):
         task.update()
+
+
+def _transition_task(task: Task, next_status: Status) -> None:
+    """Validate and apply a task status transition."""
+    raw_current = getattr(task, "status", None)
+    if raw_current is None:
+        task.set_status(next_status)
+        return
+    current = raw_current if isinstance(raw_current, Status) else Status(raw_current)
+    if current == next_status:
+        return
+    allowed = ALLOWED_TASK_TRANSITIONS.get(current, set())
+    if next_status not in allowed:
+        raise ValueError(
+            f"Invalid task status transition: {current.value} -> {next_status.value}"
+        )
+    task.set_status(next_status)
