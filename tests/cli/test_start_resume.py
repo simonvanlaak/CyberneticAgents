@@ -29,6 +29,9 @@ def test_start_queues_in_progress_initiatives(
             recorded["env"] = env
             self.pid = 7788
 
+        def poll(self) -> None:
+            return None
+
     called: dict[str, int] = {}
 
     def _fake_queue(team_id: int) -> int:

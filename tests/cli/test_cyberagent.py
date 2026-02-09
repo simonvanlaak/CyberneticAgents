@@ -63,6 +63,9 @@ def test_start_command_uses_background_spawn(monkeypatch: pytest.MonkeyPatch) ->
         def __init__(self, cmd: Sequence[str], **kwargs: Any) -> None:
             self.pid = 1
 
+        def poll(self) -> None:
+            return None
+
     monkeypatch.setattr(cyberagent, "run_headless_session", fake_headless_session)
     monkeypatch.setattr(subprocess, "Popen", DummyProcess)
     exit_code = cyberagent.main(["start", "--message", "ready"])
@@ -658,6 +661,9 @@ def test_start_spawns_serve_process(
             recorded["cmd"] = cmd
             recorded["env"] = env
             self.pid = 4242
+
+        def poll(self) -> None:
+            return None
 
     monkeypatch.setenv("CYBERAGENT_TEST_NO_RUNTIME", "")
     monkeypatch.setattr(subprocess, "Popen", DummyProcess)
