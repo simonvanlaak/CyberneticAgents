@@ -65,6 +65,7 @@ def _seed_task(
     status: Status,
     assignee: str | None,
     result: str | None = None,
+    reasoning: str | None = None,
     case_judgement: str | None = None,
 ) -> None:
     session = next(get_db())
@@ -77,6 +78,7 @@ def _seed_task(
             assignee=assignee,
             status=status,
             result=result,
+            reasoning=reasoning,
             case_judgement=case_judgement,
         )
         session.add(task)
@@ -239,6 +241,7 @@ def test_load_task_detail_returns_full_payload() -> None:
         status=Status.APPROVED,
         assignee="System1/root",
         result="Completed result",
+        reasoning="Blocked waiting for external dependency.",
         case_judgement='[{"policy_id":2,"judgement":"Vague","reasoning":"needs clarification"}]',
     )
 
@@ -255,5 +258,6 @@ def test_load_task_detail_returns_full_payload() -> None:
     assert detail.strategy_id == strategy_id
     assert detail.initiative_id == initiative_id
     assert detail.result == "Completed result"
+    assert detail.reasoning == "Blocked waiting for external dependency."
     assert detail.case_judgement is not None
     assert '"judgement":"Vague"' in detail.case_judgement

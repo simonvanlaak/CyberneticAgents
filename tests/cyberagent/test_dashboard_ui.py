@@ -296,3 +296,73 @@ def test_render_inbox_page_rejects_empty_answer(monkeypatch) -> None:
 
     assert called["resolve"] is False
     assert fake_st.error_messages == ["Answer cannot be empty for question #22."]
+
+
+def test_render_task_details_shows_status_reasoning(monkeypatch) -> None:
+    writes: list[str] = []
+
+    class _TitleCol:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    class _TaskDetailStreamlit:
+        def __init__(self) -> None:
+            self.session_state = {
+                "dashboard_selected_task_id": 101,
+                "dashboard_page": "Task Details",
+            }
+
+        def title(self, _text: str) -> None:
+            return None
+
+        def info(self, _text: str) -> None:
+            return None
+
+        def error(self, _text: str) -> None:
+            return None
+
+        def subheader(self, _text: str) -> None:
+            return None
+
+        def markdown(self, _text: str) -> None:
+            return None
+
+        def write(self, text: str) -> None:
+            writes.append(text)
+
+        def button(self, _text: str) -> bool:
+            return False
+
+        def rerun(self) -> None:
+            return None
+
+    task = type(
+        "Task",
+        (),
+        {
+            "id": 101,
+            "name": "Task needing unblock",
+            "status": "blocked",
+            "reasoning": "Waiting for OAuth credentials from ops.",
+            "assignee": "System1/root",
+            "team_name": "team-a",
+            "team_id": 1,
+            "purpose_name": "purpose-a",
+            "strategy_name": "strategy-a",
+            "initiative_name": "initiative-a",
+            "initiative_id": 5,
+            "content": "Do work",
+            "result": None,
+            "case_judgement": None,
+        },
+    )()
+    monkeypatch.setattr(dashboard, "load_task_detail", lambda _task_id: task)
+    monkeypatch.setattr(dashboard, "_render_case_judgement", lambda *_args: None)
+
+    st = _TaskDetailStreamlit()
+    dashboard._render_task_details_page(st, _TitleCol())
+
+    assert "Waiting for OAuth credentials from ops." in writes
