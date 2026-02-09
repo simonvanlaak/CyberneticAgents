@@ -493,7 +493,9 @@ def test_discovery_repo_sync_stores_split_markdown_memory_entries(
         "_fetch_profile_links",
         lambda *_args, **_kwargs: "",
     )
-    monkeypatch.setattr(onboarding_discovery, "store_onboarding_memory", lambda *_: None)
+    monkeypatch.setattr(
+        onboarding_discovery, "store_onboarding_memory", lambda *_: None
+    )
     monkeypatch.setattr(onboarding_discovery, "enqueue_suggestion", lambda *_: None)
     monkeypatch.setattr(
         onboarding_discovery,
@@ -530,13 +532,13 @@ def test_discovery_repo_sync_stores_split_markdown_memory_entries(
 
     assert summary_path == tmp_path / "summary.md"
     pkm_overview = [
-        entry
-        for entry in captured_entries
-        if entry["tags"] == ["onboarding", "pkm"]
+        entry for entry in captured_entries if entry["tags"] == ["onboarding", "pkm"]
     ]
     assert len(pkm_overview) == 1
     pkm_file_entries = [
-        entry for entry in captured_entries if "pkm_file" in cast(list[str], entry["tags"])
+        entry
+        for entry in captured_entries
+        if "pkm_file" in cast(list[str], entry["tags"])
     ]
     assert len(pkm_file_entries) == 2
     contents = [cast(str, entry["content"]) for entry in pkm_file_entries]
@@ -576,7 +578,9 @@ def test_discovery_notion_sync_stores_split_item_memory_entries(
         "_fetch_profile_links",
         lambda *_args, **_kwargs: "",
     )
-    monkeypatch.setattr(onboarding_discovery, "store_onboarding_memory", lambda *_: None)
+    monkeypatch.setattr(
+        onboarding_discovery, "store_onboarding_memory", lambda *_: None
+    )
     monkeypatch.setattr(onboarding_discovery, "enqueue_suggestion", lambda *_: None)
     monkeypatch.setattr(
         onboarding_discovery,
@@ -613,9 +617,7 @@ def test_discovery_notion_sync_stores_split_item_memory_entries(
 
     assert summary_path == tmp_path / "summary.md"
     pkm_overview = [
-        entry
-        for entry in captured_entries
-        if entry["tags"] == ["onboarding", "pkm"]
+        entry for entry in captured_entries if entry["tags"] == ["onboarding", "pkm"]
     ]
     assert len(pkm_overview) == 1
     pkm_item_entries = [
