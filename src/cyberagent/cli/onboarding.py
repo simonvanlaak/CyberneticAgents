@@ -174,6 +174,7 @@ def handle_onboarding(
     finally:
         session.close()
     _seed_default_team_envelope(team.id, team_defaults)
+    _seed_root_team_envelope_from_defaults(team_defaults)
     _ensure_team_systems(team.id, team_defaults)
     _seed_default_procedures(team.id, procedures)
     seed_default_routing_rules(team.id, team_defaults)
@@ -381,6 +382,24 @@ def _seed_default_team_envelope(team_id: int, team_defaults: dict[str, object]) 
         return
     skill_names = [skill for skill in allowed if isinstance(skill, str)]
     teams_service.set_allowed_skills(team_id, skill_names, actor_id="onboarding")
+
+
+def _seed_root_team_envelope_from_defaults(team_defaults: dict[str, object]) -> None:
+    team_name = _get_default_team_name(team_defaults)
+    allowed = team_defaults.get("allowed_skills")
+    if not isinstance(allowed, list):
+        return
+    skill_names = [skill for skill in allowed if isinstance(skill, str)]
+    if not skill_names:
+        return
+    session = next(get_db())
+    try:
+        root_team = session.query(Team).filter(Team.name == team_name).first()
+    finally:
+        session.close()
+    if root_team is None:
+        return
+    teams_service.set_allowed_skills(root_team.id, skill_names, actor_id="onboarding")
 
 
 def _ensure_team_systems(team_id: int, team_defaults: dict[str, object]) -> None:
