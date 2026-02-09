@@ -175,9 +175,15 @@ The user interview is happening while the CyberneticAgents are getting setup and
 Cleaned up onboarding more, and integrated telegram messaging in onborading experience. Issue now is that telegram voice not could not be
 transcribed.
 
-### 2026-02-5
+### 2026-02-05
 Completed memory implementation, still needs to be manually tested. Fixed & manually verified telegram messaging and that STT works via telegram voice notes.
 Implemented Notion as Agent Skill, but still needs to be integrated into onboarding.
 Implemented message-routing agent skill that allows for the directing of user messages from different channels to specific systems.
 I changed the telegram onboarding to include setting up the telegram bot with the telegram botfather.
 I need to manually go through the onboarding again, now I got a lot of duplicate telegram messages.
+
+### 2026-02-09
+I wrote another blog post, this time about onboarding.
+I created a minimal kanban dashboard to review the current tasks, strategies, and their status.
+Debuged a lot of little issues, to ensure tasks get executed as expected.
+Swithed provider & model to openai and gpt-5 nano, to prevent issues with structured output.
