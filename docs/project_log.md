@@ -186,4 +186,5 @@ I need to manually go through the onboarding again, now I got a lot of duplicate
 I wrote another blog post, this time about onboarding.
 I created a minimal kanban dashboard to review the current tasks, strategies, and their status.
 Debuged a lot of little issues, to ensure tasks get executed as expected.
-Swithed provider & model to openai and gpt-5 nano, to prevent issues with structured output.
+Switched provider & model to openai and gpt-5 nano, to prevent issues with structured output.
+Continue with open bugs.
