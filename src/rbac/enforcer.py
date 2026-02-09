@@ -11,6 +11,7 @@ import casbin
 import casbin_sqlalchemy_adapter
 
 from src.rbac.authz_db import resolve_authz_db_url
+from src.rbac.policy_bootstrap import ensure_policy_bootstrap
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ def get_enforcer():
     global _global_enforcer
     if _global_enforcer is None:
         _global_enforcer = _create_enforcer()
+        ensure_policy_bootstrap(_global_enforcer, scope="tools")
     return _global_enforcer
 
 

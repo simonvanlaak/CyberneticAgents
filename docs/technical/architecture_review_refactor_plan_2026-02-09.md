@@ -74,7 +74,7 @@ Critical review of the current project architecture across runtime, agent orches
 
 ### Phase 2 Progress
 - [x] Step 1: Introduce shared authz DB configuration via `CYBERAGENT_AUTHZ_DB_URL` (both enforcers support unified store).
-- [ ] Step 2: Add deterministic policy bootstrap/versioning.
+- [x] Step 2: Add deterministic policy bootstrap/versioning.
 
 ### Phase 3 Progress
 - [x] Step 1: Formalize task state model with explicit transition guards in task service.
