@@ -114,7 +114,7 @@ def _render_case_judgement(st: Any, case_judgement: str | None) -> None:
     if len(parsed) == 0:
         st.caption("No case judgement recorded.")
         return
-    st.dataframe(parsed, use_container_width=True, hide_index=True)
+    st.dataframe(parsed, width="stretch", hide_index=True)
 
 
 def _render_task_details_page(st: Any, title_col: Any) -> None:
@@ -216,7 +216,7 @@ def render_board() -> None:
                 if column.button(
                     f"#{task.id} {task.name}",
                     key=f"task_open_{task.id}",
-                    use_container_width=True,
+                    width="stretch",
                 ):
                     _open_task_details(st, task.id)
                 column.caption(f"Assignee: {assignee_text}")
@@ -237,7 +237,7 @@ def render_board() -> None:
             }
             for task in filtered_tasks
         ],
-        use_container_width=True,
+        width="stretch",
         hide_index=True,
     )
 
@@ -273,7 +273,7 @@ def render_teams_page(st: Any) -> None:
                 }
                 for member in team.members
             ],
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
 
