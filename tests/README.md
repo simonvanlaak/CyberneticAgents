@@ -96,6 +96,11 @@ Pytest runs use a worker-specific SQLite database under
 enabled, the worker id is derived from `PYTEST_XDIST_WORKER` (e.g. `gw0`),
 and otherwise falls back to the current PID.
 
+Standard parallel command:
+```bash
+python -m pytest tests/ -v -n auto
+```
+
 ### Run Specific Test File
 ```bash
 python -m pytest tests/rbac/test_enforcer.py -v
