@@ -104,6 +104,21 @@ def _open_task_details(st: Any, task_id: int) -> None:
     st.rerun()
 
 
+def _select_page_with_buttons(st: Any, pages: list[str], current_page: str) -> str:
+    selected_page = current_page if current_page in pages else pages[0]
+    st.sidebar.markdown("### Pages")
+    st.sidebar.caption(f"Current: {selected_page}")
+    for page in pages:
+        label = page if page != selected_page else f"{page} (Current)"
+        if st.sidebar.button(
+            label,
+            key=f"dashboard_page_{page.lower().replace(' ', '_')}",
+            use_container_width=True,
+        ):
+            selected_page = page
+    return selected_page
+
+
 def _render_case_judgement(st: Any, case_judgement: str | None) -> None:
     if not case_judgement:
         st.caption("No case judgement recorded.")
@@ -365,8 +380,7 @@ def render_board() -> None:
     if st.session_state.get("dashboard_selected_task_id") is not None:
         pages.append("Task Details")
     current_page = st.session_state.get("dashboard_page", "Kanban")
-    default_idx = pages.index(current_page) if current_page in pages else 0
-    page = st.sidebar.selectbox("Page", pages, index=default_idx)
+    page = _select_page_with_buttons(st, pages, current_page)
     st.session_state["dashboard_page"] = page
     if page == "Teams":
         with title_col:

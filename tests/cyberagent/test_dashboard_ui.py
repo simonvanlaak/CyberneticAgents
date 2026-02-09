@@ -442,3 +442,65 @@ def test_render_memory_page_shows_entries(monkeypatch) -> None:
     assert isinstance(rows, list)
     assert rows[0]["id"] == "mem-1"
     assert st.expander_calls == ["Entry mem-1"]
+
+
+def test_select_page_with_buttons_returns_current_when_no_clicks() -> None:
+    class _Sidebar:
+        def __init__(self) -> None:
+            self.markdowns: list[str] = []
+            self.captions: list[str] = []
+
+        def markdown(self, text: str) -> None:
+            self.markdowns.append(text)
+
+        def caption(self, text: str) -> None:
+            self.captions.append(text)
+
+        def button(
+            self, _label: str, key: str | None = None, use_container_width: bool = False
+        ) -> bool:
+            _ = (key, use_container_width)
+            return False
+
+    class _St:
+        def __init__(self) -> None:
+            self.sidebar = _Sidebar()
+
+    st = _St()
+    selected = dashboard._select_page_with_buttons(
+        st,
+        pages=["Kanban", "Teams", "Inbox"],
+        current_page="Teams",
+    )
+
+    assert selected == "Teams"
+    assert st.sidebar.markdowns == ["### Pages"]
+    assert st.sidebar.captions == ["Current: Teams"]
+
+
+def test_select_page_with_buttons_updates_when_clicked() -> None:
+    class _Sidebar:
+        def markdown(self, _text: str) -> None:
+            return None
+
+        def caption(self, _text: str) -> None:
+            return None
+
+        def button(
+            self, _label: str, key: str | None = None, use_container_width: bool = False
+        ) -> bool:
+            _ = use_container_width
+            return key == "dashboard_page_inbox"
+
+    class _St:
+        def __init__(self) -> None:
+            self.sidebar = _Sidebar()
+
+    st = _St()
+    selected = dashboard._select_page_with_buttons(
+        st,
+        pages=["Kanban", "Teams", "Inbox"],
+        current_page="Kanban",
+    )
+
+    assert selected == "Inbox"
