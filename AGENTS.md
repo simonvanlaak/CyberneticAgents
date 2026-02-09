@@ -20,9 +20,10 @@ GitHub Project is the single source of truth for all planning and execution stat
 1. Create/confirm GitHub Project item.
 2. Move to `In progress`.
 3. Implement with tests.
-4. Commit atomically.
+4. Commit atomically and link commits to the issue (`#<issue_number>` in commit subject/body).
 5. Move item to `In review` and provide test instructions to the user.
-6. After user confirms completion, move item to `Done`.
+6. After user confirms completion, post a short completion comment on the issue summarizing what changed and listing commit SHAs/links.
+7. Move item to `Done`.
 
 ### Next Open Ticket Command (Required)
 - If the user says "work on the next open ticket" (or equivalent), pick the first `Backlog` item in current GitHub Project ordering.
@@ -32,12 +33,79 @@ GitHub Project is the single source of truth for all planning and execution stat
 ### User-Driven Bug Lifecycle (Required)
 1. When a user reports a bug, create a new GitHub Project ticket immediately.
 2. When the user asks to work on the next ticket, select the top item in `Backlog`.
-3. Move it to `In progress`, complete implementation, and make atomic commits.
+3. Move it to `In progress`, complete implementation, and make atomic commits linked to the issue (`#<issue_number>`).
 4. Move it to `In review`.
 5. Tell the user exactly how to test the change.
 6. Wait for user feedback:
-   - If user confirms it works, move the ticket to `Done`.
+   - If user confirms it works, add a short completion comment on the issue with what was done and commit SHAs/links, then move the ticket to `Done`.
    - If it does not work, move it back to `In progress`, fix it, and repeat.
+
+### Reusable `gh project` Commands (Required)
+Use these command templates to execute the workflow quickly and consistently.
+
+```bash
+# 0) One-time auth/scope check (required for project commands)
+gh auth status
+gh auth refresh -s project
+
+# 1) Set shared context
+OWNER="@me"
+PROJECT_NUMBER=1
+REPO="simonvanlaak/CyberneticAgents"
+
+# 2) Resolve project + status field IDs (needed for status updates)
+PROJECT_ID="$(gh project view "$PROJECT_NUMBER" --owner "$OWNER" --format json --jq '.id')"
+STATUS_FIELD_ID="$(gh project field-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --jq '.fields[] | select(.name=="Status") | .id')"
+BACKLOG_OPTION_ID="$(gh project field-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --jq '.fields[] | select(.name=="Status") | .options[] | select(.name=="Backlog") | .id')"
+IN_PROGRESS_OPTION_ID="$(gh project field-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --jq '.fields[] | select(.name=="Status") | .options[] | select(.name=="In progress") | .id')"
+IN_REVIEW_OPTION_ID="$(gh project field-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --jq '.fields[] | select(.name=="Status") | .options[] | select(.name=="In review") | .id')"
+DONE_OPTION_ID="$(gh project field-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --jq '.fields[] | select(.name=="Status") | .options[] | select(.name=="Done") | .id')"
+
+# 3A) Create a draft ticket directly in project (feature/bug/task)
+gh project item-create "$PROJECT_NUMBER" --owner "$OWNER" --title "Bug: <title>" --body "<details>"
+
+# 3B) Or create a repo issue and add it to project
+ISSUE_URL="$(gh issue create --repo "$REPO" --title "Bug: <title>" --body "<details>")"
+gh project item-add "$PROJECT_NUMBER" --owner "$OWNER" --url "$ISSUE_URL"
+
+# 4) Pick next open ticket (first Backlog item in current project ordering)
+NEXT_ITEM_ID="$(gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" --limit 200 --format json --jq '.items[] | select(.status=="Backlog") | .id' | head -n1)"
+NEXT_ITEM_TITLE="$(gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" --limit 200 --format json --jq '.items[] | select(.status=="Backlog") | .title' | head -n1)"
+echo "$NEXT_ITEM_ID | $NEXT_ITEM_TITLE"
+NEXT_ISSUE_NUMBER="$(gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" --limit 200 --format json --jq '.items[] | select(.status=="Backlog") | .content.number' | head -n1)"
+echo "Issue #$NEXT_ISSUE_NUMBER"
+
+# 5) Move item through lifecycle
+# Backlog -> In progress
+gh project item-edit --id "$NEXT_ITEM_ID" --project-id "$PROJECT_ID" --field-id "$STATUS_FIELD_ID" --single-select-option-id "$IN_PROGRESS_OPTION_ID"
+
+# In progress -> In review
+gh project item-edit --id "$NEXT_ITEM_ID" --project-id "$PROJECT_ID" --field-id "$STATUS_FIELD_ID" --single-select-option-id "$IN_REVIEW_OPTION_ID"
+
+# In review -> Done
+gh project item-edit --id "$NEXT_ITEM_ID" --project-id "$PROJECT_ID" --field-id "$STATUS_FIELD_ID" --single-select-option-id "$DONE_OPTION_ID"
+
+# Reopen failed validation (In review -> In progress)
+gh project item-edit --id "$NEXT_ITEM_ID" --project-id "$PROJECT_ID" --field-id "$STATUS_FIELD_ID" --single-select-option-id "$IN_PROGRESS_OPTION_ID"
+
+# 6) Commit with issue linkage (required)
+git commit -m "fix: <short description> (#$NEXT_ISSUE_NUMBER)"
+# Or include a closing keyword when appropriate:
+git commit -m "fix: <short description>" -m "Closes #$NEXT_ISSUE_NUMBER"
+
+# 7) On completion, add issue comment summary with commit links/SHAs (required)
+ISSUE_NUMBER="$NEXT_ISSUE_NUMBER"
+gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "Completed: <1-3 bullet summary>. Commits: <sha_or_link_1>, <sha_or_link_2>."
+
+# 8) Quick status checks
+gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" --limit 200 --format json --jq '.items[] | {id, title, status}'
+gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" --limit 200 --format json --jq '.items[] | select(.status=="Backlog") | {id, title}'
+```
+
+Notes:
+- `gh project item-edit` requires `--project-id`, `--field-id`, and the target status option ID for status changes.
+- When "next open ticket" is requested, always use the first `Backlog` result from project ordering.
+- If no `Backlog` item is found, report that and stop.
 
 ## Docs Directory Rules
 - `docs/technical/`: technical plans and security notes.
@@ -51,8 +119,11 @@ Never commit or publish real phone numbers, videos, or live configuration values
 2. Always commit your own changes immediately after tests/checks pass for that change.
 3. Never batch unrelated changes into one commit; keep scope tightly focused.
 4. Use concise, action-oriented conventional commit messages (e.g., `cli: add verbose flag to send`).
-5. Stage only the files that belong to your change.
-6. If any completed change is still uncommitted, create the atomic commit immediately before starting new work.
+5. Link each commit to its issue by including `#<issue_number>` in the commit subject or body.
+6. Prefer closing keywords (`Closes #<issue_number>`, `Fixes #<issue_number>`) on the final commit that fully resolves the issue.
+7. When an issue is complete, add a short `gh issue comment` summarizing what changed and referencing commit SHAs/links.
+8. Stage only the files that belong to your change.
+9. If any completed change is still uncommitted, create the atomic commit immediately before starting new work.
 
 ## Project Architecture
 
