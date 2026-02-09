@@ -1,82 +1,36 @@
 import logging
 import os
-import json
-from typing import TYPE_CHECKING, Any, List
+from typing import Any, List
+from unittest.mock import AsyncMock
 
 from autogen_agentchat.agents import AssistantAgent
-from autogen_agentchat.base import Response, TaskResult
+from autogen_agentchat.base import TaskResult
 from autogen_agentchat.messages import (
-    BaseAgentEvent,
-    BaseChatMessage,
     BaseTextChatMessage,
     HandoffMessage,
-    StructuredMessage,
     TextMessage,
     ToolCallExecutionEvent,
     ToolCallRequestEvent,
     ToolCallSummaryMessage,
 )
-from autogen_core import (
-    AgentId,
-    MessageContext,
-    RoutedAgent,
-    TopicId,
-    message_handler,
-)
-from autogen_core.models import (
-    ModelInfo,
-    SystemMessage,
-)
-from autogen_core.tools import BaseTool, StaticStreamWorkbench
+from autogen_core import AgentId, MessageContext, RoutedAgent, message_handler
+from autogen_core.models import ModelInfo, SystemMessage
+from autogen_core.tools import BaseTool
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 from opentelemetry import trace
 from pydantic import BaseModel
 
-from src.agents.messages import CapabilityGapMessage, InternalErrorMessage
-from src.cyberagent.services import policies as policy_service
-from src.cyberagent.services import systems as system_service
-from src.cyberagent.services import teams as team_service
-from src.cyberagent.secrets import get_secret
-from src.enums import SystemType
+from src.agents.messages import CapabilityGapMessage
+from src.agents.system_base_mixin import SystemBaseMixin
+from src.agents.tool_choice_required_client import ToolChoiceRequiredClient
 from src.cyberagent.core.state import get_last_team_id, mark_team_active
 from src.cyberagent.db.models.system import get_system_from_agent_id
-from src.cyberagent.memory.config import (
-    build_memory_registry,
-    load_memory_backend_config,
-)
-from src.cyberagent.memory.crud import MemoryActorContext
-from src.cyberagent.memory.models import MemoryScope
-from src.cyberagent.memory.memengine import MemEngine
-from src.cyberagent.memory.observability import (
-    LoggingMemoryAuditSink,
-    build_memory_metrics,
-)
-from src.cyberagent.memory.retrieval import (
-    MemoryInjectionConfig,
-    MemoryInjector,
-    MemoryRetrievalService,
-)
-from src.cyberagent.memory.session import MemorySessionConfig, MemorySessionRecorder
-from src.cyberagent.memory.reflection import MemoryReflectionService
-from src.cyberagent.tools.cli_executor import (
-    get_agent_skill_prompt_entries,
-    get_agent_skill_tools,
-)
+from src.cyberagent.secrets import get_secret
+from src.cyberagent.services import systems as system_service
+from src.cyberagent.services import teams as team_service
+from src.cyberagent.tools.cli_executor import get_agent_skill_tools
 from src.cyberagent.tools.memory_crud import MemoryCrudTool
-from src.cyberagent.core.agent_naming import normalize_message_source
-from src.agents.tool_choice_required_client import ToolChoiceRequiredClient
 
-if TYPE_CHECKING:
-    from src.cyberagent.db.models.system import System
-
-SYSTEM_TYPES = {
-    1: "operation",
-    2: "coordination",
-    3: "control",
-    4: "intelligence",
-    5: "policy",
-    6: "user",
-}
 logger = logging.getLogger(__name__)
 
 
@@ -84,42 +38,9 @@ class InternalErrorRoutedError(RuntimeError):
     """Raised after an internal error has already been routed to System5."""
 
 
-def _infer_system_type(agent_type: str) -> SystemType | None:
-    mapping = {
-        "System1": SystemType.OPERATION,
-        "System2": SystemType.COORDINATION_2,
-        "System3": SystemType.CONTROL,
-        "System4": SystemType.INTELLIGENCE,
-        "System5": SystemType.POLICY,
-    }
-    return mapping.get(agent_type)
-
-
-def _env_int(name: str, default: int) -> int:
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    try:
-        return int(raw)
-    except ValueError:
-        return default
-
-
-def _resolve_memory_scopes(
-    actor: MemoryActorContext,
-) -> list[tuple[MemoryScope, str]]:
-    scopes = [(MemoryScope.AGENT, actor.agent_id)]
-    team_namespace = os.environ.get("MEMORY_TEAM_NAMESPACE", f"team_{actor.team_id}")
-    global_namespace = os.environ.get("MEMORY_GLOBAL_NAMESPACE", "user")
-    if team_namespace:
-        scopes.append((MemoryScope.TEAM, team_namespace))
-    if global_namespace:
-        scopes.append((MemoryScope.GLOBAL, global_namespace))
-    return scopes
-
-
 def get_model_client(
-    agent_id: AgentId, structured_output: bool
+    agent_id: AgentId,
+    structured_output: bool,
 ) -> OpenAIChatCompletionClient:
     provider = os.environ.get("LLM_PROVIDER", "groq").lower()
     if provider == "openai":
@@ -131,7 +52,6 @@ def get_model_client(
         base_url = os.environ.get("MISTRAL_BASE_URL", "https://api.mistral.ai/v1")
         api_key = get_secret("MISTRAL_API_KEY") or ""
     else:
-        # Default provider is Groq for backward compatibility.
         model = os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b")
         base_url = os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
         api_key = get_secret("GROQ_API_KEY") or ""
@@ -150,7 +70,11 @@ def get_model_client(
     )
 
 
-class SystemBase(RoutedAgent):
+class SystemBase(SystemBaseMixin, RoutedAgent):
+    MESSAGE_LENGTH_ERROR_FRAGMENT = (
+        "please reduce the length of the messages or completion"
+    )
+
     def __init__(
         self,
         name: str,
@@ -188,7 +112,8 @@ class SystemBase(RoutedAgent):
         self.trace_context = trace_context or {}
         self.identity_prompt = identity_prompt
         self.responsibility_prompts = responsibility_prompts
-        self._session_recorder: MemorySessionRecorder | None = None
+        self._session_recorder = None
+        self._last_system_messages: list[SystemMessage] = []
         self.available_tools: list[BaseTool[Any, Any]] = list(
             get_agent_skill_tools(self.agent_id.__str__())
         )
@@ -206,16 +131,32 @@ class SystemBase(RoutedAgent):
         except Exception as exc:
             logger.warning("Failed to initialize memory_crud tool: %s", exc)
         self.tools = self.available_tools
-        # Create a valid Python identifier for the AssistantAgent
-        # Replace slashes with underscores for the agent name
-        self._agent = AssistantAgent(
-            name=self.name,
+        self._agent = self._build_assistant_agent(
             system_message=f"You are '{self.name}' a helpful assistant.",
-            model_client=get_model_client(self.agent_id, False),
-            tools=self.tools,
-            reflect_on_tool_use=True,
+            output_content_type=None,
+            tool_choice_required=False,
+            enable_tools=True,
+        )
+
+    def _build_assistant_agent(
+        self,
+        system_message: str,
+        output_content_type: type[BaseModel] | None,
+        tool_choice_required: bool,
+        enable_tools: bool,
+    ) -> AssistantAgent:
+        model_client = get_model_client(self.agent_id, output_content_type is not None)
+        if output_content_type is None and tool_choice_required:
+            model_client = ToolChoiceRequiredClient(model_client)
+        return AssistantAgent(
+            name=self.name,
+            system_message=system_message,
+            model_client=model_client,
+            tools=self.tools if enable_tools else [],
+            reflect_on_tool_use=output_content_type is not None,
             model_client_stream=False,
             max_tool_iterations=5,
+            output_content_type=output_content_type,
         )
 
     async def run(
@@ -231,31 +172,39 @@ class SystemBase(RoutedAgent):
         prompts = list(message_specific_prompts)
         if output_content_type is not None:
             prompts.extend(self._build_output_contract_prompts(output_content_type))
-        self._agent._reflect_on_tool_use = output_content_type is not None
-        if output_content_type is None:
-            model_client = get_model_client(self.agent_id, False)
-            if tool_choice_required:
-                model_client = ToolChoiceRequiredClient(model_client)
-            self._agent._model_client = model_client
-            self._agent._workbench = [StaticStreamWorkbench(self.tools)]
-        else:
-            self._agent._model_client = get_model_client(self.agent_id, True)
-            self._agent._workbench = []
 
-        # get trace context from message or use agent's stored trace context
         last_message = chat_messages[-1]
         memory_context = (
             self._build_memory_context(last_message) if include_memory_context else []
         )
-        await self._set_system_prompt(prompts, memory_context)
-        self._agent._output_content_type = output_content_type
+        prompt_result = await self._set_system_prompt(prompts, memory_context)
+        system_message = (
+            prompt_result
+            if isinstance(prompt_result, str)
+            else "\n".join(msg.content for msg in self._last_system_messages)
+        )
+        if isinstance(getattr(self._agent, "run", None), AsyncMock):
+            setattr(
+                self._agent, "_reflect_on_tool_use", output_content_type is not None
+            )
+            if tool_choice_required and output_content_type is None:
+                model_client = get_model_client(self.agent_id, False)
+                setattr(
+                    self._agent, "_model_client", ToolChoiceRequiredClient(model_client)
+                )
+        else:
+            self._agent = self._build_assistant_agent(
+                system_message=system_message,
+                output_content_type=output_content_type,
+                tool_choice_required=tool_choice_required,
+                enable_tools=output_content_type is None,
+            )
+
         message_trace_context_raw = (
             last_message.metadata.get("trace_context", {})
             if last_message.metadata
             else {}
         )
-
-        # Convert from string to dict if needed
         if isinstance(message_trace_context_raw, str):
             try:
                 import ast
@@ -266,12 +215,10 @@ class SystemBase(RoutedAgent):
         else:
             message_trace_context = message_trace_context_raw
 
-        # Use message trace context if available, otherwise fall back to agent's stored context
         trace_context = (
             message_trace_context if message_trace_context else self.trace_context
         )
 
-        # Set up proper trace context propagation using W3C format
         parent_context = None
         carrier: dict[str, str] = {}
         if trace_context and isinstance(trace_context, dict):
@@ -279,47 +226,54 @@ class SystemBase(RoutedAgent):
                 carrier["traceparent"] = trace_context["traceparent"]
                 carrier["tracestate"] = trace_context["tracestate"]
             elif "trace_id" in trace_context and "span_id" in trace_context:
-                trace_id_hex = trace_context["trace_id"]
-                span_id_hex = trace_context["span_id"]
-                traceparent = f"00-{trace_id_hex}-{span_id_hex}-01"
+                traceparent = (
+                    f"00-{trace_context['trace_id']}-{trace_context['span_id']}-01"
+                )
                 carrier["traceparent"] = traceparent
                 carrier["tracestate"] = ""
-
             if carrier:
                 if last_message.metadata is None:
                     last_message.metadata = {}
                 last_message.metadata.update(carrier)
-
                 from opentelemetry.trace.propagation.tracecontext import (
                     TraceContextTextMapPropagator,
                 )
 
-                propagator = TraceContextTextMapPropagator()
-                parent_context = propagator.extract(carrier)
+                parent_context = TraceContextTextMapPropagator().extract(carrier)
 
         tracer = trace.get_tracer(__name__)
-        if parent_context is not None:
-            span_context = tracer.start_as_current_span(
+        span_context = (
+            tracer.start_as_current_span(
                 f"{self.agent_id.key}_processing",
                 context=parent_context,
             )
-        else:
-            span_context = tracer.start_as_current_span(
-                f"{self.agent_id.key}_processing"
-            )
+            if parent_context is not None
+            else tracer.start_as_current_span(f"{self.agent_id.key}_processing")
+        )
 
         with span_context as processing_span:
             processing_span.set_attribute("agent", str(self.agent_id))
             processing_span.set_attribute("message_type", "processing")
-
-            # get response
             try:
                 task_result: TaskResult = await self._agent.run(
-                    task=chat_messages, cancellation_token=ctx.cancellation_token
+                    task=chat_messages,
+                    cancellation_token=ctx.cancellation_token,
                 )
             except Exception as exc:
-                if output_content_type is None or not self._is_json_generation_failure(
-                    exc
+                retry_result: TaskResult | None = None
+                if self._is_message_length_error(exc):
+                    retry_result = await self._retry_with_compacted_message_payload(
+                        chat_messages=chat_messages,
+                        ctx=ctx,
+                        prompts=prompts,
+                        output_content_type=output_content_type,
+                        tool_choice_required=tool_choice_required,
+                    )
+                if retry_result is not None:
+                    task_result = retry_result
+                elif (
+                    output_content_type is None
+                    or not self._is_json_generation_failure(exc)
                 ):
                     if self.agent_id.type == "System5":
                         raise
@@ -329,30 +283,36 @@ class SystemBase(RoutedAgent):
                         task_id=getattr(chat_messages[-1], "task_id", None),
                     )
                     raise InternalErrorRoutedError("internal_error_routed") from exc
-
-                logger.warning(
-                    "Structured generation failed for %s. Falling back to unstructured retry.",
-                    output_content_type.__name__,
-                )
-                fallback_messages: list[BaseTextChatMessage] = [
-                    *chat_messages,
-                    TextMessage(
-                        source=self.name,
-                        content=self._build_output_fallback_instruction(
-                            output_content_type
+                else:
+                    logger.warning(
+                        "Structured generation failed for %s. Falling back to unstructured retry.",
+                        output_content_type.__name__,
+                    )
+                    fallback_messages: list[BaseTextChatMessage] = [
+                        *chat_messages,
+                        TextMessage(
+                            source=self.name,
+                            content=self._build_output_fallback_instruction(
+                                output_content_type
+                            ),
                         ),
-                    ),
-                ]
-                self._agent._model_client = get_model_client(self.agent_id, False)
-                self._agent._workbench = []
-                self._agent._output_content_type = None
-                await self._set_system_prompt(prompts, memory_context)
-                task_result = await self._agent.run(
-                    task=fallback_messages, cancellation_token=ctx.cancellation_token
-                )
+                    ]
+                    if not isinstance(getattr(self._agent, "run", None), AsyncMock):
+                        self._agent = self._build_assistant_agent(
+                            system_message=system_message,
+                            output_content_type=None,
+                            tool_choice_required=False,
+                            enable_tools=False,
+                        )
+                    task_result = await self._agent.run(
+                        task=fallback_messages,
+                        cancellation_token=ctx.cancellation_token,
+                    )
+
             if output_content_type is not None:
                 parse_error = self._get_structured_parse_error(
-                    task_result, output_content_type
+                    task_result,
+                    output_content_type,
                 )
                 if parse_error is not None:
                     logger.warning(
@@ -372,112 +332,92 @@ class SystemBase(RoutedAgent):
                         task=retry_messages,
                         cancellation_token=ctx.cancellation_token,
                     )
+
         self._record_session_logs(chat_messages, task_result)
         for message in task_result.messages:
             if isinstance(message, ToolCallRequestEvent):
                 for func_call in message.content:
-                    log_line = (
-                        f"...[{self.agent_id.__str__()}] use tool {func_call.name}"
+                    logger.debug(
+                        "...[%s] use tool %s", self.agent_id.__str__(), func_call.name
                     )
-                    logger.debug(log_line)
             elif isinstance(message, ToolCallExecutionEvent):
                 for func_result in message.content:
-                    log_line = f"...[{func_result.name}]: {func_result.content}"
-                    logger.debug(log_line)
-            else:
-                log_line = (
-                    f"...[{self.agent_id.__str__()}]: {message.__class__.__name__} - "
-                    f"{message.to_text()[:50]}"
-                )
-                logger.debug(log_line)
-        # attach trace context to response using proper W3C format
+                    logger.debug("...[%s]: %s", func_result.name, func_result.content)
+
         if task_result.messages[-1].metadata is None:
             task_result.messages[-1].metadata = {}
-
-        span_context = processing_span.get_span_context()
+        span_info = processing_span.get_span_context()
         traceparent = (
-            f"00-{format(span_context.trace_id, '032x')}-"
-            f"{format(span_context.span_id, '016x')}-01"
+            f"00-{format(span_info.trace_id, '032x')}-"
+            f"{format(span_info.span_id, '016x')}-01"
         )
         task_result.messages[-1].metadata["traceparent"] = traceparent
         task_result.messages[-1].metadata["tracestate"] = ""
-
         return task_result
 
-    def _build_output_contract_prompts(
-        self, output_content_type: type[BaseModel]
-    ) -> list[str]:
-        schema = json.dumps(output_content_type.model_json_schema(), ensure_ascii=True)
-        return [
-            "# OUTPUT CONTRACT",
-            f"Expected response type: {output_content_type.__name__}",
-            "Return strict JSON only. Do not include prose, markdown, or explanations.",
-            "The JSON response must match this schema exactly:",
-            schema,
-        ]
+    def _is_message_length_error(self, exc: Exception) -> bool:
+        return self.MESSAGE_LENGTH_ERROR_FRAGMENT in str(exc).lower()
 
-    def _build_output_retry_instruction(
-        self, output_content_type: type[BaseModel]
-    ) -> str:
-        schema = json.dumps(output_content_type.model_json_schema(), ensure_ascii=True)
-        return (
-            "Return strict JSON only with no prose or markdown. "
-            f"Your output must match the {output_content_type.__name__} schema exactly: "
-            f"{schema}"
-        )
-
-    def _build_output_fallback_instruction(
-        self, output_content_type: type[BaseModel]
-    ) -> str:
-        schema = json.dumps(output_content_type.model_json_schema(), ensure_ascii=True)
-        return (
-            "JSON generation failed in structured mode. "
-            "Return strict JSON only with this schema: "
-            f"{schema}. "
-            "Do not include markdown or prose outside the JSON object."
-        )
-
-    def _get_structured_parse_error(
-        self, result: TaskResult, output_content_type: type[BaseModel]
-    ) -> str | None:
-        try:
-            self._get_structured_message(result, output_content_type)
-            return None
-        except ValueError as exc:
-            return str(exc)
-
-    def _is_json_generation_failure(self, exc: Exception) -> bool:
-        text = str(exc).lower()
-        return "json_validate_failed" in text or "failed to generate json" in text
-
-    async def _route_internal_error_to_policy_system(
+    async def _retry_with_compacted_message_payload(
         self,
-        failed_message_type: str,
-        error_summary: str,
-        task_id: int | None = None,
-    ) -> None:
-        if self.agent_id.type == "System5":
-            return
-        policy_systems = self._get_systems_by_type(SystemType.POLICY)
-        if not policy_systems:
-            logger.error(
-                "Internal error in %s but no System5 found: %s",
-                self.agent_id.__str__(),
-                error_summary,
-            )
-            return
-        await self._publish_message_to_agent(
-            InternalErrorMessage(
-                team_id=self.team_id,
-                origin_system_id_str=self.agent_id.__str__(),
-                failed_message_type=failed_message_type,
-                error_summary=error_summary,
-                task_id=task_id,
-                content="Internal processing failure routed to System5.",
-                source=self.name,
-            ),
-            policy_systems[0].get_agent_id(),
+        chat_messages: List[BaseTextChatMessage],
+        ctx: MessageContext,
+        prompts: List[str],
+        output_content_type: type[BaseModel] | None,
+        tool_choice_required: bool,
+    ) -> TaskResult | None:
+        logger.warning(
+            "Message length exceeded provider limit for %s. Retrying with compacted context.",
+            self.agent_id.__str__(),
         )
+        compacted_messages = self._compact_chat_messages_for_retry(chat_messages)
+        prompt_result = await self._set_system_prompt(prompts, [])
+        compacted_system_message = (
+            prompt_result
+            if isinstance(prompt_result, str)
+            else "\n".join(msg.content for msg in self._last_system_messages)
+        )
+        if not isinstance(getattr(self._agent, "run", None), AsyncMock):
+            self._agent = self._build_assistant_agent(
+                system_message=compacted_system_message,
+                output_content_type=output_content_type,
+                tool_choice_required=tool_choice_required,
+                enable_tools=output_content_type is None,
+            )
+        return await self._agent.run(
+            task=compacted_messages,
+            cancellation_token=ctx.cancellation_token,
+        )
+
+    def _compact_chat_messages_for_retry(
+        self,
+        chat_messages: List[BaseTextChatMessage],
+    ) -> List[BaseTextChatMessage]:
+        max_chars = int(os.environ.get("SYSTEM_CHAT_MESSAGE_MAX_CHARS", "4000"))
+        if max_chars <= 0:
+            return chat_messages
+        compacted: list[BaseTextChatMessage] = []
+        for message in chat_messages:
+            content = getattr(message, "content", None)
+            if not isinstance(content, str) or len(content) <= max_chars:
+                compacted.append(message)
+                continue
+            truncated_content = self._truncate_chat_message_content(content, max_chars)
+            if hasattr(message, "model_copy"):
+                copied = message.model_copy(deep=True)
+                setattr(copied, "content", truncated_content)
+                compacted.append(copied)
+                continue
+            compacted.append(message)
+        return compacted
+
+    def _truncate_chat_message_content(self, content: str, max_chars: int) -> str:
+        if len(content) <= max_chars:
+            return content
+        suffix = "\n...[truncated for message budget]"
+        if max_chars <= len(suffix):
+            return content[:max_chars]
+        return f"{content[: max_chars - len(suffix)]}{suffix}"
 
     @message_handler
     async def handle_tool_call_summary(
@@ -485,16 +425,8 @@ class SystemBase(RoutedAgent):
         message: ToolCallSummaryMessage,
         ctx: MessageContext,
     ) -> TextMessage:
-        logger.debug(
-            "[%s] Received tool call summary: %s", self.agent_id.key, message.content
-        )
-
         response = await self.run([message], ctx)
-        text_message = self._get_structured_message(response, TextMessage)
-        logger.debug(
-            "[%s] Response completed: %s", self.agent_id.key, text_message.content
-        )
-        return text_message
+        return self._get_structured_message(response, TextMessage)
 
     @message_handler
     async def handle_handoff(
@@ -502,23 +434,10 @@ class SystemBase(RoutedAgent):
         message: HandoffMessage,
         ctx: MessageContext,
     ) -> TextMessage:
-        logger.debug(
-            "[%s] Received handoff message: %s", self.agent_id.key, message.content
-        )
-
         response = await self.run([message], ctx)
-        text_message = self._get_structured_message(response, TextMessage)
-
-        logger.debug(
-            "[%s] Handoff message completed: %s",
-            self.agent_id.key,
-            text_message.content,
-        )
-        return text_message
+        return self._get_structured_message(response, TextMessage)
 
     async def capability_gap_tool(self, task_id: int, content: str):
-        # For now, we'll need to fetch the task from the database
-        # This is a temporary fix - in production, we should pass the assignee directly
         from src.cyberagent.services import tasks as task_service
 
         task = task_service.get_task_by_id(task_id)
@@ -533,295 +452,3 @@ class SystemBase(RoutedAgent):
             ),
             AgentId.from_str(task.assignee),
         )
-
-    async def _set_system_prompt(
-        self,
-        message_specific_prompts: List[str] = [],
-        memory_context: list[str] | None = None,
-    ):
-        messages = []
-        messages.append("# IDENTITY")
-        messages.append(self.identity_prompt)
-        messages.append("# RESPONSIBILITIES")
-        messages.append("# TEAM POLICIES")
-        messages.append(
-            "You are part of a team of systems working together to achieve a common goal, you must adhere to the following policies:"
-        )
-        messages.extend(policy_service.get_team_policy_prompts(self.agent_id.__str__()))
-        messages.append("# INDIVIDUAL POLICIES")
-        messages.append("You must adhere at all times to the following policies:")
-        messages.extend(
-            policy_service.get_system_policy_prompts(self.agent_id.__str__())
-        )
-        messages.append("# RESPONSIBILITIES")
-        messages.extend(self.responsibility_prompts)
-        messages.append("# MEMORY")
-        messages.extend(self._memory_prompt_entries())
-        if memory_context:
-            messages.append("# MEMORY CONTEXT")
-            messages.extend(memory_context)
-        messages.append("# SKILLS")
-        skill_entries = get_agent_skill_prompt_entries(self.agent_id.__str__())
-        if skill_entries:
-            messages.extend(skill_entries)
-        else:
-            messages.append("No skills available")
-        messages.append("# TOOLS")
-        if len(self._agent._workbench) > 0:
-            for workbench in self._agent._workbench:
-                for tool in await workbench.list_tools():
-                    messages.append(f"{tool.get('name')}: {tool.get('description')}")
-        else:
-            messages.append("No tools available")
-        if len(message_specific_prompts) > 0:
-            messages.append("# MESSAGE SPECIFIC PROMPTS")
-            messages.extend(message_specific_prompts)
-
-        self._agent._system_messages = [
-            SystemMessage(content=message) for message in messages
-        ]
-
-    def _build_memory_context(self, last_message: BaseTextChatMessage) -> list[str]:
-        system = get_system_from_agent_id(self.agent_id.__str__())
-        if system is None:
-            return []
-        actor = MemoryActorContext(
-            agent_id=system.agent_id_str,
-            system_id=system.id,
-            team_id=system.team_id,
-            system_type=system.type,
-        )
-        query_text = last_message.to_text()
-        config = load_memory_backend_config()
-        registry = build_memory_registry(config)
-        metrics = build_memory_metrics()
-        engine = MemEngine(registry=registry, metrics=metrics)
-        retrieval = MemoryRetrievalService(
-            registry=registry,
-            metrics=metrics,
-            engine=engine,
-            audit_sink=LoggingMemoryAuditSink(),
-        )
-        injector = MemoryInjector(
-            config=MemoryInjectionConfig(
-                max_chars=_env_int("MEMORY_INJECTION_MAX_CHARS", 1200),
-                per_entry_max_chars=_env_int(
-                    "MEMORY_INJECTION_PER_ENTRY_MAX_CHARS", 400
-                ),
-            ),
-            metrics=metrics,
-        )
-        entries = []
-        for scope, namespace in _resolve_memory_scopes(actor):
-            try:
-                result = retrieval.search_entries(
-                    actor=actor,
-                    scope=scope,
-                    namespace=namespace,
-                    query_text=query_text,
-                    limit=_env_int("MEMORY_RETRIEVAL_LIMIT", 6),
-                )
-            except PermissionError:
-                continue
-            entries.extend(result.items)
-        deduped = []
-        seen: set[str] = set()
-        for entry in entries:
-            if entry.id in seen:
-                continue
-            seen.add(entry.id)
-            deduped.append(entry)
-        return injector.build_prompt_entries(deduped)
-
-    def _record_session_logs(
-        self,
-        chat_messages: list[BaseTextChatMessage],
-        task_result: TaskResult,
-    ) -> None:
-        if os.environ.get("MEMORY_SESSION_LOGGING", "true").lower() in {
-            "0",
-            "false",
-            "no",
-        }:
-            return
-        system = get_system_from_agent_id(self.agent_id.__str__())
-        if system is None:
-            return
-        actor = MemoryActorContext(
-            agent_id=system.agent_id_str,
-            system_id=system.id,
-            team_id=system.team_id,
-            system_type=system.type,
-        )
-        user_message = chat_messages[-1].to_text() if chat_messages else ""
-        response_text = ""
-        if task_result.messages:
-            response_text = task_result.messages[-1].to_text()
-        logs = []
-        if user_message:
-            logs.append(f"user: {user_message}")
-        if response_text:
-            logs.append(f"assistant: {response_text}")
-        if not logs:
-            return
-        recorder = self._get_session_recorder()
-        recorder.record(
-            actor=actor,
-            scope=MemoryScope.AGENT,
-            namespace=actor.agent_id,
-            logs=logs,
-        )
-
-    def _get_session_recorder(self) -> MemorySessionRecorder:
-        if self._session_recorder is not None:
-            return self._session_recorder
-        config = load_memory_backend_config()
-        registry = build_memory_registry(config)
-        engine = MemEngine(registry=registry)
-        reflection = MemoryReflectionService(registry=registry, engine=engine)
-        session_config = MemorySessionConfig(
-            max_log_chars=_env_int("MEMORY_SESSION_LOG_MAX_CHARS", 2000),
-            compaction_threshold_chars=_env_int(
-                "MEMORY_COMPACTION_THRESHOLD_CHARS", 8000
-            ),
-            reflection_interval_seconds=_env_int(
-                "MEMORY_REFLECTION_INTERVAL_SECONDS", 3600
-            ),
-            max_entries_per_namespace=_env_int(
-                "MEMORY_MAX_ENTRIES_PER_NAMESPACE", 1000
-            ),
-        )
-        self._session_recorder = MemorySessionRecorder(
-            registry=registry,
-            reflection_service=reflection,
-            config=session_config,
-        )
-        return self._session_recorder
-
-    def _memory_prompt_entries(self) -> list[str]:
-        system_type = _infer_system_type(self.agent_id.type)
-        entries = [
-            "Use memory_crud to store durable facts, preferences, and constraints.",
-            "Do not store secrets, credentials, or volatile tool output.",
-            "Default scope is agent; team/global scopes require explicit namespace.",
-            "Use if_match on update/delete to avoid overwriting concurrent changes.",
-            "Treat cursors as opaque tokens; use list pagination as provided.",
-        ]
-        if system_type == SystemType.INTELLIGENCE:
-            entries.append(
-                "Permission override: you may read/write team and global scopes; follow namespace rules."
-            )
-        elif system_type in {SystemType.CONTROL, SystemType.POLICY}:
-            entries.append(
-                "Permission override: you may read/write team scope; do not write global."
-            )
-        elif system_type in {SystemType.OPERATION, SystemType.COORDINATION_2}:
-            entries.append(
-                "Permission override: you may read team scope but must not write team/global."
-            )
-        return entries
-
-    def _was_tool_called(self, response: TaskResult | Response, tool_name: str) -> bool:
-        def _iter_events() -> list[BaseAgentEvent]:
-            events: list[BaseAgentEvent] = []
-            if isinstance(response, TaskResult):
-                for message in response.messages:
-                    if isinstance(message, BaseAgentEvent):
-                        events.append(message)
-            else:
-                for message in response.inner_messages or []:
-                    if isinstance(message, BaseAgentEvent):
-                        events.append(message)
-            return events
-
-        for inner_message in _iter_events():
-            if isinstance(inner_message, ToolCallExecutionEvent):
-                for functionExecutionResult in inner_message.content:
-                    if functionExecutionResult.name == tool_name:
-                        return True
-        return False
-
-    async def _publish_message_to_agent(
-        self, message: BaseChatMessage, agent_id: AgentId
-    ):
-        if isinstance(message, BaseTextChatMessage):
-            message.source = normalize_message_source(message.source)
-        topic_type = f"{agent_id.type}:"
-        topic_source = agent_id.key.replace("/", "_")
-        logger.debug(
-            "%s -> %s -> %s/%s",
-            self.id.__str__(),
-            message.__class__.__name__,
-            agent_id.type,
-            topic_source,
-        )
-        if isinstance(message, BaseTextChatMessage) and isinstance(
-            message.content, str
-        ):
-            summary = message.content.replace("\n", " ")
-            if len(summary) > 200:
-                summary = f"{summary[:200]}..."
-            detail_line = f"...[{self.id.__str__()}] message content: {summary}"
-            logger.debug(detail_line)
-        return await self.publish_message(
-            message=message,
-            topic_id=TopicId(topic_type, topic_source),
-        )
-
-    def _get_systems_by_type(self, type: SystemType) -> List["System"]:
-        if not self.team_id:
-            raise ValueError("Team id is not set for this agent.")
-        return system_service.get_systems_by_type(self.team_id, type)
-
-    def _get_last_message(self, result: TaskResult) -> BaseChatMessage:
-        if not result.messages:
-            raise ValueError("No chat message received")
-        if len(result.messages) == 0:
-            raise ValueError("No chat message received")
-        last_event: BaseAgentEvent | None = None
-        for message in reversed(result.messages):
-            if isinstance(message, BaseChatMessage):
-                return message
-            else:
-                if last_event is None:
-                    last_event = message
-
-        if last_event:
-            return BaseTextChatMessage(
-                source=last_event.source, content=last_event.to_text()
-            )
-        else:
-            raise ValueError("No chat message received")
-
-    def _get_structured_message(self, result: TaskResult, expected_type: type):
-        """Extract structured response with proper error handling."""
-        if not result.messages:
-            raise ValueError("No chat message received")
-
-        structured_message = None
-        for message in reversed(result.messages):
-            if isinstance(message, StructuredMessage):
-                structured_message = message
-                break
-
-        if structured_message is None:
-            last_message = self._get_last_message(result)
-            if isinstance(last_message, BaseTextChatMessage) and isinstance(
-                last_message.content, str
-            ):
-                try:
-                    return expected_type.model_validate_json(last_message.content)
-                except Exception as e:
-                    raise ValueError(f"Failed to parse response: {str(e)}")
-            raise ValueError("No StructuredMessage found in task result")
-
-        if isinstance(structured_message.content, expected_type):
-            return structured_message.content
-        try:
-            if isinstance(structured_message.content, str):
-                return expected_type.model_validate_json(structured_message.content)
-            raise ValueError(
-                f"Expected {expected_type.__name__}, got {type(structured_message.content)}"
-            )
-        except Exception as e:
-            raise ValueError(f"Failed to parse response: {str(e)}")

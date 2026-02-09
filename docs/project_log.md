@@ -182,9 +182,11 @@ Implemented message-routing agent skill that allows for the directing of user me
 I changed the telegram onboarding to include setting up the telegram bot with the telegram botfather.
 I need to manually go through the onboarding again, now I got a lot of duplicate telegram messages.
 
-### 2026-02-09
+### 2026-02-08
 I wrote another blog post, this time about onboarding.
 I created a minimal kanban dashboard to review the current tasks, strategies, and their status.
 Debuged a lot of little issues, to ensure tasks get executed as expected.
 Switched provider & model to openai and gpt-5 nano, to prevent issues with structured output.
 Continue with open bugs.
+
+### 2026-02-09

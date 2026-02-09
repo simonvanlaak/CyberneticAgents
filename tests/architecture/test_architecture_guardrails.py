@@ -24,13 +24,8 @@ def test_no_legacy_src_cli_imports() -> None:
     assert not violations, "Legacy src.cli imports found:\n" + "\n".join(violations)
 
 
-def test_private_autogen_access_is_allowlisted() -> None:
-    """
-    Guardrail: private AutoGen internals may only be used in known bridge files.
-
-    This allows the current transitional compatibility surface while preventing
-    any new private-member usage from spreading.
-    """
+def test_no_private_autogen_access() -> None:
+    """Guardrail: private AutoGen internals are banned in source files."""
 
     private_patterns = [
         re.compile(r"runtime\._known_agent_names"),
@@ -40,31 +35,16 @@ def test_private_autogen_access_is_allowlisted() -> None:
         re.compile(r"self\._agent\._output_content_type"),
         re.compile(r"self\._agent\._system_messages"),
     ]
-    allowlist = {
-        "src/agents/system_base.py": {
-            "self._agent._reflect_on_tool_use",
-            "self._agent._model_client",
-            "self._agent._workbench",
-            "self._agent._output_content_type",
-            "self._agent._system_messages",
-        },
-    }
     violations: list[str] = []
 
     for path in _iter_source_files():
-        rel = path.relative_to(REPO_ROOT).as_posix()
-        allowed_tokens = allowlist.get(rel, set())
         for index, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             for pattern in private_patterns:
                 if not pattern.search(line):
                     continue
-                token = pattern.pattern.replace("\\", "")
-                if token in allowed_tokens:
-                    continue
+                rel = path.relative_to(REPO_ROOT).as_posix()
                 violations.append(f"{rel}:{index}: {line.strip()}")
 
-    assert (
-        not violations
-    ), "New private AutoGen member usage detected outside allowlist:\n" + "\n".join(
+    assert not violations, "Private AutoGen member usage detected:\n" + "\n".join(
         violations
     )

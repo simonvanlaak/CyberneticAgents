@@ -4,6 +4,7 @@ from types import ModuleType
 import pytest
 
 from src.agents import system_base as system_base_module
+from src.agents import system_base_mixin as system_base_mixin_module
 from src.agents.system_base import SystemBase
 from src.cyberagent.memory.config import (
     build_memory_registry,
@@ -86,6 +87,20 @@ def _configure_system(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
     monkeypatch.setattr(system_base_module, "AssistantAgent", DummyAssistantAgent)
     monkeypatch.setattr(
         system_base_module,
+        "get_system_from_agent_id",
+        lambda agent_id: type(
+            "S",
+            (),
+            {
+                "id": 1,
+                "agent_id_str": "root_sys4",
+                "team_id": 1,
+                "type": SystemType.INTELLIGENCE,
+            },
+        )(),
+    )
+    monkeypatch.setattr(
+        system_base_mixin_module,
         "get_system_from_agent_id",
         lambda agent_id: type(
             "S",

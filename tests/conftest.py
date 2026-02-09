@@ -20,11 +20,13 @@ _WORKER_ID = get_pytest_worker_id(os.environ, os.getpid())
 _TEST_DB_ROOT = (Path(".pytest_db") / _WORKER_ID).resolve()
 TEST_DB_PATH = (_TEST_DB_ROOT / "test.db").resolve()
 TEST_SKILL_DB_PATH = (_TEST_DB_ROOT / "skill_permissions.db").resolve()
+TEST_MEMORY_DB_PATH = (_TEST_DB_ROOT / "memory.db").resolve()
 
 
 @pytest.fixture(scope="session", autouse=True)
 def _initialize_test_db() -> None:
     os.environ["CYBERAGENT_DISABLE_BACKGROUND_DISCOVERY"] = "1"
+    os.environ["MEMORY_SQLITE_PATH"] = str(TEST_MEMORY_DB_PATH)
     tmp_root = TEST_DB_PATH.parent
     tmp_root.mkdir(parents=True, exist_ok=True)
     db_path = TEST_DB_PATH
@@ -71,12 +73,16 @@ def _clear_active_team_env(monkeypatch: pytest.MonkeyPatch) -> None:
         "CYBERAGENT_SKILL_PERMISSIONS_DB_URL",
         f"sqlite:///{TEST_SKILL_DB_PATH}",
     )
+    monkeypatch.setenv("MEMORY_SQLITE_PATH", str(TEST_MEMORY_DB_PATH))
     if TEST_SKILL_DB_PATH.exists():
         os.chmod(TEST_SKILL_DB_PATH, 0o666)
         TEST_SKILL_DB_PATH.unlink()
     skill_permissions_enforcer._global_enforcer = None
     if TEST_DB_PATH.exists():
         os.chmod(TEST_DB_PATH, 0o666)
+    if TEST_MEMORY_DB_PATH.exists():
+        os.chmod(TEST_MEMORY_DB_PATH, 0o666)
+        TEST_MEMORY_DB_PATH.unlink()
     session = next(get_db())
     try:
         for table in reversed(init_db.Base.metadata.sorted_tables):
