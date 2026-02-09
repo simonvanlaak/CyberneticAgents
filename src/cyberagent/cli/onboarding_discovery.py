@@ -784,6 +784,8 @@ def build_onboarding_interview_prompt(
             "Start the onboarding interview now.",
             f"The first question has already been sent: {first_question}",
             "Wait for the user response before sending the next question.",
+            "Ask no more than 10 questions total in this onboarding interview,",
+            "including the first question that was already sent.",
             "Before each question, check memory for new onboarding entries.",
             "Log user responses into memory as you learn them.",
             "If the user mentions a specific company, city, product, or industry",

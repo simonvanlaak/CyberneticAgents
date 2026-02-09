@@ -732,3 +732,15 @@ def test_build_onboarding_prompt_truncates_large_summary_text() -> None:
 
     assert "Summary truncated for prompt" in prompt
     assert str(summary_path) in prompt
+
+
+def test_build_onboarding_interview_prompt_includes_question_cap() -> None:
+    prompt = onboarding_discovery.build_onboarding_interview_prompt(
+        user_name="Simon",
+        pkm_source="github",
+        repo_url="https://github.com/example/repo",
+        profile_links=["https://example.com/profile"],
+        first_question="What is your primary outcome?",
+    )
+
+    assert "Ask no more than 10 questions total" in prompt
