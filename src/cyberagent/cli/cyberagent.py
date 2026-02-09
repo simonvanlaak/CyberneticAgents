@@ -8,7 +8,6 @@ import shutil
 import subprocess
 import sys
 import time
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -39,6 +38,23 @@ from src.cyberagent.cli import log_filters
 from src.cyberagent.cli import onboarding as onboarding_cli
 from src.cyberagent.cli.cli_log_state import check_recent_runtime_errors
 from src.cyberagent.cli.cyberagent_helpers import handle_help, handle_login
+from src.cyberagent.cli.constants import (
+    DASHBOARD_COMMAND,
+    INBOX_COMMAND,
+    INBOX_HINT_COMMAND,
+    KEYRING_SERVICE,
+    ONBOARDING_COMMAND,
+    ParsedSuggestion,
+    SERVE_COMMAND,
+    START_COMMAND,
+    STATUS_COMMAND,
+    SUGGEST_COMMAND,
+    SUGGEST_SEND_TIMEOUT_SECONDS,
+    SUGGEST_SHUTDOWN_TIMEOUT_SECONDS,
+    TEST_START_ENV,
+    WATCH_COMMAND,
+    WATCH_HINT_COMMAND,
+)
 from src.cyberagent.cli.headless import run_headless_session
 from src.cyberagent.cli.message_catalog import get_message
 from src.cyberagent.cli.runtime_resume import queue_in_progress_initiatives
@@ -63,30 +79,10 @@ from src.cyberagent.tools.cli_executor.skill_runtime import DEFAULT_SKILLS_ROOT
 from src.rbac.enforcer import get_enforcer
 from src.registry import register_systems
 
-KEYRING_SERVICE = "cyberagent-cli"
 SYSTEM4_AGENT_ID = AgentId(type="System4", key="root")
 LOGS_DIR = get_logs_dir()
 RUNTIME_PID_FILE = LOGS_DIR / "cyberagent.pid"
 CLI_LOG_STATE_FILE = LOGS_DIR / "cli_last_seen.json"
-SERVE_COMMAND = "serve"
-DASHBOARD_COMMAND = "dashboard"
-TEST_START_ENV = "CYBERAGENT_TEST_NO_RUNTIME"
-SUGGEST_COMMAND = 'cyberagent suggest "Describe the task"'
-START_COMMAND = "cyberagent start"
-ONBOARDING_COMMAND = "cyberagent onboarding"
-INBOX_COMMAND = "cyberagent inbox"
-WATCH_COMMAND = "cyberagent watch"
-STATUS_COMMAND = "cyberagent status"
-INBOX_HINT_COMMAND = "cyberagent inbox"
-WATCH_HINT_COMMAND = "cyberagent watch"
-SUGGEST_SHUTDOWN_TIMEOUT_SECONDS = 1.0
-SUGGEST_SEND_TIMEOUT_SECONDS = 30.0
-
-
-@dataclass(frozen=True)
-class ParsedSuggestion:
-    payload_text: str
-    payload_object: Any
 
 
 def build_parser() -> argparse.ArgumentParser:
