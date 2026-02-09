@@ -66,7 +66,12 @@ def check_tool_permission(agent_id: str, tool_name: str) -> bool:
     """
     try:
         enforcer = get_enforcer()
-        return enforcer.enforce(agent_id, tool_name, "allow")
+        namespace = get_namespace(agent_id)
+        permissions = enforcer.get_implicit_permissions_for_user(agent_id, namespace)
+        for permission in permissions:
+            if len(permission) >= 3 and permission[2] == tool_name:
+                return True
+        return False
     except Exception as exc:
         logger.error("RBAC check failed: %s", exc)
         return False

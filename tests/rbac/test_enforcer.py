@@ -78,3 +78,15 @@ def test_namespace_helpers(fresh_enforcer) -> None:
     delete_result = cast(list[list[str]], rbac_enforcer.delete_system_id(system_id))
     assert delete_result
     assert delete_result[0][0] == system_id
+
+
+def test_check_tool_permission_supports_domain_role_grants(fresh_enforcer) -> None:
+    system_id = "alpha_control_sys3"
+    namespace = "alpha"
+    role = "ops_role"
+    tool_name = "web_fetch"
+
+    fresh_enforcer.add_role_for_user_in_domain(system_id, role, namespace)
+    fresh_enforcer.add_policy(role, namespace, tool_name, "*")
+
+    assert rbac_enforcer.check_tool_permission(system_id, tool_name) is True
