@@ -20,6 +20,6 @@ async def test_memory_prompt_restricts_system1_team_writes() -> None:
     content = "\n".join(message.content for message in system1._agent._system_messages)
     assert "# MEMORY" in content
     assert (
-        "Permission override: you may read team scope but must not write team/global"
+        "Permission override: you may read team and global scopes but must not write team/global"
         in content
     )

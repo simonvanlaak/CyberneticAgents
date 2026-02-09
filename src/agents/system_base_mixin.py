@@ -447,7 +447,7 @@ class SystemBaseMixin:
             )
         elif system_type in {SystemType.OPERATION, SystemType.COORDINATION_2}:
             entries.append(
-                "Permission override: you may read team scope but must not write team/global."
+                "Permission override: you may read team and global scopes but must not write team/global."
             )
         return entries
 
