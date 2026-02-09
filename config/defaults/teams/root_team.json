@@ -1,49 +1,50 @@
 {
-    "team": {"name": "root"},
-    "purpose": {"name": "Onboarding SOP"},
-    "strategy": {"name": "Onboarding SOP"},
-    "procedures": ["First Run Discovery"],
-    "auto_execute_procedure": "First Run Discovery",
-    "allowed_skills": ["speech-to-text", "message-routing"],
-    "routing_rules": [
-        {
-            "name": "Default DLQ",
-            "channel": "*",
-            "filters": {},
-            "priority": 0,
-            "targets": [
-                {"system_id": "System4/root"}
-            ]
-        }
-    ],
-    "systems": [
-        {
-            "name": "System1/root",
-            "type": "OPERATION",
-            "agent_id": "System1/root",
-            "skill_grants": [],
-            "config": {}
-        },
-        {
-            "name": "System3/root",
-            "type": "CONTROL",
-            "agent_id": "System3/root",
-            "skill_grants": ["message-routing"],
-            "config": {}
-        },
-        {
-            "name": "System4/root",
-            "type": "INTELLIGENCE",
-            "agent_id": "System4/root",
-            "skill_grants": [],
-            "config": {}
-        },
-        {
-            "name": "System5/root",
-            "type": "POLICY",
-            "agent_id": "System5/root",
-            "skill_grants": [],
-            "config": {}
-        }
-    ]
+  "team": { "name": "root" },
+  "purpose": {
+    "name": "Viability",
+    "content": "Achieve and maintain long-term viability by consistently creating more value for the user than total cost. Value includes measurable progress on user-prioritized outcomes, quality of decisions, speed, reliability, and reduced cognitive load. Cost includes direct spend, time, coordination overhead, opportunity cost, and risk exposure. To remain viable, the system must continuously discover, validate, and update understanding of user needs, constraints, and changing context; convert that understanding into strategies and initiatives; and evaluate outcomes against value-minus-cost signals over time."
+  },
+  "strategy": { "name": "Onboarding SOP" },
+  "procedures": ["First Run Discovery"],
+  "auto_execute_procedure": "First Run Discovery",
+  "allowed_skills": ["speech-to-text", "message-routing", "memory_crud"],
+  "routing_rules": [
+    {
+      "name": "Default DLQ",
+      "channel": "*",
+      "filters": {},
+      "priority": 0,
+      "targets": [{ "system_id": "System4/root" }]
+    }
+  ],
+  "systems": [
+    {
+      "name": "System1/root",
+      "type": "OPERATION",
+      "agent_id": "System1/root",
+      "skill_grants": ["memory_crud"],
+      "config": {}
+    },
+    {
+      "name": "System3/root",
+      "type": "CONTROL",
+      "agent_id": "System3/root",
+      "skill_grants": ["message-routing", "memory_crud"],
+      "config": {}
+    },
+    {
+      "name": "System4/root",
+      "type": "INTELLIGENCE",
+      "agent_id": "System4/root",
+      "skill_grants": ["memory_crud"],
+      "config": {}
+    },
+    {
+      "name": "System5/root",
+      "type": "POLICY",
+      "agent_id": "System5/root",
+      "skill_grants": ["memory_crud"],
+      "config": {}
+    }
+  ]
 }

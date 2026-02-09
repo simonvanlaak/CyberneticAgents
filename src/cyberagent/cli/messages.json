@@ -42,6 +42,7 @@
     ],
     "runtime_already_running": "Runtime already running (pid {pid}).",
     "runtime_starting": "Runtime starting in background (pid {pid}).",
+    "dashboard_starting": "Dashboard starting in background (pid {pid}).",
     "db_write_failed": "Failed to write {context} data to the database ({location}).",
     "db_write_hint": "{hint}",
     "db_write_hint_default": "Check disk space and file permissions.",

@@ -24,8 +24,7 @@ from src.cyberagent.services import systems as systems_service, teams as teams_s
 from src.cyberagent.tools.cli_executor.skill_loader import SkillDefinition
 from src.cyberagent.cli import onboarding_memory
 from src.cyberagent.memory.models import MemoryScope
-from src.enums import ProcedureStatus
-from src.enums import SystemType
+from src.enums import ProcedureStatus, SystemType
 
 
 def _clear_teams() -> None:
@@ -52,20 +51,34 @@ def _default_onboarding_args() -> argparse.Namespace:
     )
 
 
+def _mock_onboarding_flow(
+    monkeypatch: pytest.MonkeyPatch,
+    summary_path: Path | None,
+    *,
+    technical_checks_ok: bool = True,
+    trigger_ok: bool = True,
+) -> None:
+    monkeypatch.setattr(
+        onboarding_cli, "run_technical_onboarding_checks", lambda: technical_checks_ok
+    )
+    monkeypatch.setattr(
+        onboarding_cli,
+        "_run_discovery_onboarding",
+        lambda *_args, **_kwargs: summary_path,
+    )
+    monkeypatch.setattr(
+        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: trigger_ok
+    )
+
+
 def test_handle_onboarding_creates_default_team(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _clear_teams()
     monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
     summary_path = tmp_path / "summary.md"
     summary_path.write_text("summary", encoding="utf-8")
-    monkeypatch.setattr(
-        onboarding_cli, "_run_discovery_onboarding", lambda *_: summary_path
-    )
-    monkeypatch.setattr(
-        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: True
-    )
+    _mock_onboarding_flow(monkeypatch, summary_path)
     start_calls: list[int] = []
 
     def _fake_start(team_id: int) -> int | None:
@@ -73,6 +86,15 @@ def test_handle_onboarding_creates_default_team(
         return 1234
 
     monkeypatch.setattr(onboarding_cli, "_start_runtime_after_onboarding", _fake_start)
+    dashboard_calls: list[int] = []
+
+    def _fake_dashboard_start(team_id: int) -> int | None:
+        dashboard_calls.append(team_id)
+        return 5678
+
+    monkeypatch.setattr(
+        onboarding_cli, "_start_dashboard_after_onboarding", _fake_dashboard_start
+    )
 
     exit_code = onboarding_cli.handle_onboarding(
         _default_onboarding_args(),
@@ -84,14 +106,16 @@ def test_handle_onboarding_creates_default_team(
 
     assert exit_code == 0
     assert "Created default team" in captured
-    assert "cyberagent inbox" in captured
+    assert "cyberagent inbox" not in captured
     assert len(start_calls) == 1
+    assert len(dashboard_calls) == 1
 
     session = next(get_db())
     try:
         team = session.query(Team).filter(Team.name == "root").first()
         assert team is not None
         assert start_calls[0] == team.id
+        assert dashboard_calls[0] == team.id
     finally:
         session.close()
 
@@ -138,15 +162,9 @@ def test_handle_onboarding_skips_when_team_exists(
         session.close()
 
     monkeypatch = pytest.MonkeyPatch()
-    monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
     summary_path = tmp_path / "summary.md"
     summary_path.write_text("summary", encoding="utf-8")
-    monkeypatch.setattr(
-        onboarding_cli, "_run_discovery_onboarding", lambda *_: summary_path
-    )
-    monkeypatch.setattr(
-        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: True
-    )
+    _mock_onboarding_flow(monkeypatch, summary_path)
     start_calls: list[int] = []
 
     def _fake_start(team_id: int) -> int | None:
@@ -164,7 +182,7 @@ def test_handle_onboarding_skips_when_team_exists(
 
     assert exit_code == 0
     assert "Team already exists" in captured
-    assert "cyberagent inbox" in captured
+    assert "cyberagent inbox" not in captured
     assert len(start_calls) == 1
 
     session = next(get_db())
@@ -181,10 +199,7 @@ def test_handle_onboarding_requires_technical_checks(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _clear_teams()
-
-    monkeypatch.setattr(
-        onboarding_cli, "run_technical_onboarding_checks", lambda: False
-    )
+    _mock_onboarding_flow(monkeypatch, None, technical_checks_ok=False)
     start_calls: list[int] = []
 
     def _fake_start(team_id: int) -> int | None:
@@ -209,15 +224,9 @@ def test_handle_onboarding_stops_when_discovery_fails(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
     _clear_teams()
-    monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
-    monkeypatch.setattr(
-        onboarding_cli, "_start_discovery_background", lambda *_args, **_kwargs: None
-    )
+    _mock_onboarding_flow(monkeypatch, None)
     monkeypatch.setattr(
         onboarding_cli, "start_onboarding_interview", lambda **_kwargs: None
-    )
-    monkeypatch.setattr(
-        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: True
     )
     start_calls: list[int] = []
 
@@ -234,24 +243,19 @@ def test_handle_onboarding_stops_when_discovery_fails(
     )
     captured = capsys.readouterr().out
 
-    assert exit_code == 0
+    assert exit_code == 1
     assert "Starting PKM sync and profile discovery" in captured
-    assert start_calls == [1]
+    assert "couldn't complete" in captured.lower()
+    assert start_calls == []
 
 
 def test_handle_onboarding_stops_when_trigger_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _clear_teams()
-    monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
-    monkeypatch.setattr(
-        onboarding_cli, "_start_discovery_background", lambda *_args, **_kwargs: None
-    )
+    _mock_onboarding_flow(monkeypatch, Path("summary.md"), trigger_ok=False)
     monkeypatch.setattr(
         onboarding_cli, "start_onboarding_interview", lambda **_kwargs: None
-    )
-    monkeypatch.setattr(
-        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: False
     )
     start_calls: list[int] = []
 
@@ -371,7 +375,7 @@ def test_handle_onboarding_seeds_default_sops(
     monkeypatch.undo()
 
     assert exit_code == 0
-    assert "cyberagent inbox" in captured
+    assert "cyberagent inbox" not in captured
 
     session = next(get_db())
     try:
@@ -491,7 +495,13 @@ def test_handle_onboarding_triggers_onboarding_sop(
         assert team is not None
         purpose = (
             session.query(Purpose)
-            .filter(Purpose.team_id == team.id, Purpose.name == "Onboarding SOP")
+            .filter(
+                Purpose.team_id == team.id,
+                Purpose.name
+                == onboarding_cli._get_default_purpose_name(
+                    onboarding_cli.load_root_team_defaults()
+                ),
+            )
             .first()
         )
         assert purpose is not None
@@ -533,7 +543,9 @@ def test_handle_onboarding_requeues_existing_initiative_run_on_restart(
         onboarding_cli, "_start_runtime_after_onboarding", lambda *_: None
     )
     monkeypatch.setattr(
-        onboarding_cli, "_start_discovery_background", lambda *_args, **_kwargs: None
+        onboarding_cli,
+        "_run_discovery_onboarding",
+        lambda *_args, **_kwargs: tmp_path / "summary.md",
     )
     monkeypatch.setattr(
         onboarding_cli, "start_onboarding_interview", lambda **_kwargs: None
@@ -558,15 +570,6 @@ def test_handle_onboarding_requeues_existing_initiative_run_on_restart(
     assert all(message.message_type == "initiative_assign" for message in queued)
     initiative_ids = [int(message.payload["initiative_id"]) for message in queued]
     assert len(set(initiative_ids)) == 1
-
-
-def test_build_onboarding_prompt_includes_summary_path() -> None:
-    prompt = onboarding_cli._build_onboarding_prompt(
-        summary_path=Path("data/onboarding/20260204_120000/summary.md"),
-        summary_text="Summary content here.",
-    )
-    assert "Onboarding Summary" in prompt
-    assert "data/onboarding/20260204_120000/summary.md" in prompt
 
 
 def test_technical_onboarding_requires_groq_key(
