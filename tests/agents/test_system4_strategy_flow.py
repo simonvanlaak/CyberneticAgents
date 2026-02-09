@@ -7,7 +7,7 @@ from autogen_agentchat.base import TaskResult
 from autogen_agentchat.messages import TextMessage
 from autogen_core import AgentId, CancellationToken, MessageContext
 
-from src.agents.messages import InitiativeAssignMessage, StrategyRequestMessage
+from src.agents.messages import StrategyRequestMessage
 from src.agents.system4 import InitiativeCreateResponse, StrategyCreateResponse, System4
 
 
@@ -62,11 +62,9 @@ async def test_system4_strategy_request_triggers_system3_assignment(monkeypatch)
     )
 
     dummy_initiative = SimpleNamespace(
+        id=1,
         name="Initiative 1",
         description="First initiative",
-        get_assign_message=lambda: InitiativeAssignMessage(
-            initiative_id=1, source="Initiative 1", content="Start initiative 1."
-        ),
     )
     system4._select_next_initiative = AsyncMock(return_value=dummy_initiative)
 
@@ -156,11 +154,9 @@ async def test_system4_strategy_request_includes_response_format(monkeypatch):
         lambda team_id: SimpleNamespace(id=1),
     )
     dummy_initiative = SimpleNamespace(
+        id=1,
         name="Initiative 1",
         description="First initiative",
-        get_assign_message=lambda: InitiativeAssignMessage(
-            initiative_id=1, source="Initiative 1", content="Start initiative 1."
-        ),
     )
     system4._select_next_initiative = AsyncMock(return_value=dummy_initiative)
     system4._publish_message_to_agent = AsyncMock()
@@ -230,11 +226,6 @@ async def test_system4_strategy_request_falls_back_to_first_initiative(monkeypat
 
         def add(self) -> None:
             return None
-
-        def get_assign_message(self):
-            return InitiativeAssignMessage(
-                initiative_id=1, source=self.name, content="Start initiative 1."
-            )
 
     monkeypatch.setattr("src.agents.system4.Strategy", DummyStrategy)
     monkeypatch.setattr("src.agents.system4.Initiative", DummyInitiative)

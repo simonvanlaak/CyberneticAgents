@@ -9,7 +9,6 @@ from sqlalchemy import Enum, ForeignKey, Integer, String
 from sqlalchemy.orm import mapped_column, relationship
 from sqlalchemy.orm.base import Mapped
 
-from src.agents.messages import InitiativeAssignMessage
 from src.cyberagent.db.db_utils import get_db
 from src.enums import Status
 from src.cyberagent.db.init_db import Base
@@ -42,16 +41,6 @@ class Initiative(Base):
     strategy = relationship("Strategy", back_populates="initiatives")
     tasks = relationship("Task", back_populates="initiative")
     procedure = relationship("Procedure")
-
-    def get_assign_message(self) -> InitiativeAssignMessage:
-        self.status = Status(Status.PENDING)
-        source = f"initiative_{self.id}" if self.id is not None else "initiative"
-
-        return InitiativeAssignMessage(
-            initiative_id=self.id,
-            source=source,
-            content=f"Start initiative {self.id}.",
-        )
 
     def to_prompt(self) -> List[str]:
         return [json.dumps(model_to_dict(self), indent=4, default=str)]

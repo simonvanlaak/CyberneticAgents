@@ -8,6 +8,7 @@ from autogen_core.tools import FunctionTool
 from pydantic import BaseModel
 
 from src.agent_utils import get_user_agent_id
+from src.agents.message_builders import build_initiative_assign_message
 from src.agents.messages import (
     ConfirmationMessage,
     InitiativeAssignMessage,
@@ -38,8 +39,6 @@ class InitiativeLike(Protocol):
     description: str
 
     def to_prompt(self) -> List[str]: ...
-
-    def get_assign_message(self) -> InitiativeAssignMessage: ...
 
 
 class StrategyLike(Protocol):
@@ -361,7 +360,7 @@ class System4(SystemBase):
             raise ValueError("No initiatives available to assign.")
 
         await self._publish_message_to_agent(
-            initiative.get_assign_message(),
+            build_initiative_assign_message(initiative.id),
             get_system_by_type(self.team_id, SystemType.CONTROL).get_agent_id(),
         )
         return ConfirmationMessage(
@@ -440,7 +439,7 @@ class System4(SystemBase):
         initiative = await self._select_next_initiative(
             message, ctx, message_specific_prompts, current_strategy
         )
-        return initiative.get_assign_message()
+        return build_initiative_assign_message(initiative.id)
 
     @message_handler
     async def handle_research_request_message(
@@ -475,7 +474,9 @@ class System4(SystemBase):
         if system3 is None:
             raise ValueError(f"System {system3_id} not found.")
         await self._publish_message_to_agent(
-            initiative_service.get_initiative_by_id(initiative_id).get_assign_message(),
+            build_initiative_assign_message(
+                initiative_service.get_initiative_by_id(initiative_id).id
+            ),
             system3.get_agent_id(),
         )
 
