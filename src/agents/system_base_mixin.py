@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from typing import TYPE_CHECKING, List
+from typing import TYPE_CHECKING, Any, List
 
 from autogen_agentchat.base import Response, TaskResult
 from autogen_agentchat.messages import (
@@ -81,6 +81,17 @@ def _resolve_memory_scopes(actor: MemoryActorContext) -> list[tuple[MemoryScope,
 
 class SystemBaseMixin:
     MESSAGE_BUDGET_TRUNCATION_NOTE = "[Prompt compacted for provider message budget]"
+    agent_id: AgentId
+    team_id: int
+    name: str
+    id: AgentId
+    identity_prompt: str
+    responsibility_prompts: list[str]
+    tools: list[Any]
+    _agent: Any
+    _last_system_messages: list[SystemMessage]
+    _session_recorder: MemorySessionRecorder | None
+    publish_message: Any
 
     def _build_output_contract_prompts(
         self,
