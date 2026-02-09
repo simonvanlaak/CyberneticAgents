@@ -6,21 +6,46 @@ When answering questions, respond with high-confidence answers only: verify in c
 
 Always keep this file up-to-date with newest requirements for the agent.
 
+## Task/Project Management (Required)
+1. GitHub Project is the single source of truth for task and project management.
+2. Create a GitHub Project item for every bug, PRD, technical plan, and implementation task as soon as it is identified.
+3. Always keep ticket status up to date in GitHub Project as work progresses.
+4. The moment development starts on a ticket, move it to `In progress`.
+5. As soon as the work is completed/merged, move it to `Done`.
+6. Do not use local markdown tracking files as the primary task tracker when a GitHub Project item can be used.
+
 ## PRD Workflow (Required)
-1. Discuss scope and goals of a new feature and create a PRD in `docs/product_requirements/`.
-2. Once agreed, create a rough technical plan in `docs/technical/`.
-3. Implement the plan.
-4. After completion, write the feature description in `docs/features/` and delete the PRD and technical plan.
+1. Discuss scope and goals of a new feature and create a GitHub Project item for the PRD.
+2. Create the PRD in `docs/product_requirements/` and include the GitHub Project item reference.
+3. Once agreed, create a rough technical plan in `docs/technical/` and link it to the same project item (or a child item).
+4. Implement the plan.
+5. After completion, write the feature description in `docs/features/` and delete temporary planning docs that are no longer needed.
+
+## GitHub Project Workflow (Required)
+1. Create a GitHub Project item for every new bug, PRD, or technical plan as soon as it is identified.
+2. Keep every item status current at all times.
+3. When work on an item starts (including active development), immediately move the project item status to `In progress`.
+4. When work is finished and merged (or otherwise completed), immediately move the project item status to `Done`.
+5. Keep `docs/` and GitHub Project items in sync:
+   - Planning/spec docs must reference their GitHub Project item.
+   - Task status updates must happen in GitHub Project, not in docs files.
+6. During migration or cleanup, move existing PRDs, bugs, and similar tracking docs from `docs/` into GitHub Project items and keep status aligned.
+
+## Next Open Ticket Command (Required)
+- If the user says "work on the next open ticket" (or equivalent), select the top-most item in GitHub Project with status `Backlog`.
+- "Top-most" means the first item in the current GitHub Project backlog ordering.
+- Immediately move that item to `In progress` before starting implementation work.
+- If no `Backlog` item exists, report that clearly and stop.
 
 ## Docs Directory Rules
 - `docs/product_requirements/`: PRDs for new features.
-- `docs/technical/`: technical plans, bugs, and security notes.
+- `docs/technical/`: technical plans and security notes.
 - `docs/features/`: completed feature write-ups.
-- `docs/technical/bugs/` and `docs/technical/security/` file naming is mandatory:
+- `docs/technical/security/` file naming is mandatory:
   - Every file must start with a date in `YYYY-MM-DD` format.
   - After the date, include a descriptive name.
   - Example: `2026-02-09-task-review-not-completing.md`.
-- Lifecycle rule for `docs/technical/bugs/` and `docs/technical/security/`:
+- Lifecycle rule for `docs/technical/security/`:
   - Delete the file once the issue is resolved.
 
 ## Security
