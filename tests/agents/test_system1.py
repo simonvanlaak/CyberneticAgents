@@ -226,11 +226,17 @@ async def test_system1_blocked_marks_task_and_escalates_to_system3(
 
     assert captured["complete_called"] is False
     assert captured["reason"] == "Missing API key"
-    published_args = system1._publish_message_to_agent.await_args.args  # type: ignore[attr-defined]
-    assert isinstance(published_args[0], CapabilityGapMessage)
-    assert published_args[0].task_id == 9
-    assert published_args[0].content == "Missing API key"
-    assert str(published_args[1]) == "System3/root"
+    assert system1._publish_message_to_agent.await_count == 2  # type: ignore[attr-defined]
+    first_args = system1._publish_message_to_agent.await_args_list[0].args  # type: ignore[attr-defined]
+    second_args = system1._publish_message_to_agent.await_args_list[1].args  # type: ignore[attr-defined]
+    assert isinstance(first_args[0], TaskReviewMessage)
+    assert first_args[0].task_id == 9
+    assert first_args[0].content == "Missing API key"
+    assert str(first_args[1]) == "System3/root"
+    assert isinstance(second_args[0], CapabilityGapMessage)
+    assert second_args[0].task_id == 9
+    assert second_args[0].content == "Missing API key"
+    assert str(second_args[1]) == "System3/root"
 
 
 @pytest.mark.asyncio
@@ -292,6 +298,64 @@ async def test_system1_ambiguous_output_marks_task_blocked(
 
     assert captured["complete_called"] is False
     assert isinstance(captured.get("reason"), str)
-    published_args = system1._publish_message_to_agent.await_args.args  # type: ignore[attr-defined]
-    assert isinstance(published_args[0], CapabilityGapMessage)
-    assert str(published_args[1]) == "System3/root"
+    assert system1._publish_message_to_agent.await_count == 2  # type: ignore[attr-defined]
+    published_types = [
+        type(call.args[0]).__name__
+        for call in system1._publish_message_to_agent.await_args_list  # type: ignore[attr-defined]
+    ]
+    assert TaskReviewMessage.__name__ in published_types
+    assert CapabilityGapMessage.__name__ in published_types
+
+
+@pytest.mark.asyncio
+async def test_system1_blocked_also_requests_task_review(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    system1 = System1("System1/worker1")
+    message = TaskAssignMessage(
+        task_id=17,
+        assignee_agent_id_str="System1/worker1",
+        source="System3/root",
+        content="Collect user identity and links",
+    )
+    ctx = MessageContext(
+        sender=AgentId.from_str("System3/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="blocked-review-request",
+    )
+
+    class _DummyTask:
+        pass
+
+    monkeypatch.setattr(
+        "src.cyberagent.services.tasks.start_task", lambda _task_id: _DummyTask()
+    )
+    monkeypatch.setattr(
+        "src.cyberagent.services.tasks.mark_task_blocked",
+        lambda *_: None,
+    )
+    monkeypatch.setattr(
+        system1,
+        "run",
+        AsyncMock(
+            return_value=TaskResult(
+                messages=[
+                    TextMessage(
+                        content='{"status":"blocked","result":"Need clarification.","reasoning":"Ambiguous output"}',
+                        source="System1/worker1",
+                    )
+                ]
+            )
+        ),
+    )
+    system1._publish_message_to_agent = AsyncMock()  # type: ignore[attr-defined]
+
+    await system1.handle_assign_task_message(message=message, ctx=ctx)  # type: ignore[call-arg]
+
+    published_types = [
+        type(call.args[0]).__name__
+        for call in system1._publish_message_to_agent.await_args_list  # type: ignore[attr-defined]
+    ]
+    assert TaskReviewMessage.__name__ in published_types
