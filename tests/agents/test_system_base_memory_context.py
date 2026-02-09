@@ -1,4 +1,5 @@
 import sys
+import sqlite3
 from types import ModuleType
 
 import pytest
@@ -147,3 +148,29 @@ def test_build_memory_context_includes_memory_result(
     fake_message = type("Msg", (), {"to_text": lambda self: "unrelated"})()
     context = system._build_memory_context(fake_message)  # type: ignore[arg-type]
     assert any("mem-1" in entry for entry in context)
+
+
+def test_build_memory_context_ignores_sqlite_open_failures(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    _configure_system(monkeypatch, tmp_path)
+
+    class FailingStore:
+        def query(self, _query):  # type: ignore[no-untyped-def]
+            raise sqlite3.OperationalError("unable to open database file")
+
+    class FailingRegistry:
+        def resolve(self, _scope):  # type: ignore[no-untyped-def]
+            return FailingStore()
+
+    monkeypatch.setattr(
+        system_base_mixin_module,
+        "build_memory_registry",
+        lambda _config: FailingRegistry(),
+    )
+    system = DummySystem()
+    fake_message = type("Msg", (), {"to_text": lambda self: "health check"})()
+
+    context = system._build_memory_context(fake_message)  # type: ignore[arg-type]
+
+    assert context == []

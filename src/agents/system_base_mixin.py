@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import sqlite3
 from typing import TYPE_CHECKING, Any, List
 
 from autogen_agentchat.base import Response, TaskResult
@@ -325,6 +326,14 @@ class SystemBaseMixin:
                     limit=_env_int("MEMORY_RETRIEVAL_LIMIT", 6),
                 )
             except PermissionError:
+                continue
+            except (sqlite3.Error, OSError) as exc:
+                logger.warning(
+                    "Memory retrieval skipped for %s/%s: %s",
+                    scope.value,
+                    namespace,
+                    exc,
+                )
                 continue
             entries.extend(result.items)
         deduped = []
