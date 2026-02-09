@@ -1,5 +1,6 @@
 import json
-from typing import List
+from datetime import datetime, timezone
+from typing import Any, List, cast
 
 from autogen_core import AgentId, MessageContext, message_handler
 from autogen_core.tools import FunctionTool
@@ -56,6 +57,8 @@ class TasksAssignResponse(BaseModel):
 
 
 class System3(SystemBase):
+    REVIEW_PARSE_FAILURE_MAX_RETRIES = 2
+
     def __init__(self, name: str, trace_context: dict | None = None):
         super().__init__(
             name,
@@ -80,6 +83,70 @@ class System3(SystemBase):
                 self.execute_procedure_tool,
                 "Execute an approved procedure by materializing an initiative and tasks.",
             )
+        )
+
+    def _extract_parse_failure_retry_count(self, task: Any) -> int:
+        raw_case_judgement = getattr(task, "case_judgement", None)
+        if not isinstance(raw_case_judgement, str) or not raw_case_judgement.strip():
+            return 0
+        try:
+            payload = json.loads(raw_case_judgement)
+        except json.JSONDecodeError:
+            return 0
+        if not isinstance(payload, list):
+            return 0
+        max_retry = 0
+        for entry in payload:
+            if not isinstance(entry, dict):
+                continue
+            if entry.get("kind") != "review_parse_failure":
+                continue
+            retry_raw = entry.get("retry_count")
+            if isinstance(retry_raw, int):
+                max_retry = max(max_retry, retry_raw)
+        return max_retry
+
+    async def _handle_review_parse_failure(
+        self,
+        *,
+        task: Any,
+        system_5_id: AgentId,
+        phase: str,
+        error: Exception,
+    ) -> None:
+        previous_retry_count = self._extract_parse_failure_retry_count(task)
+        retry_count = previous_retry_count + 1
+        retry_exhausted = retry_count >= self.REVIEW_PARSE_FAILURE_MAX_RETRIES
+        failure_case = [
+            {
+                "kind": "review_parse_failure",
+                "phase": phase,
+                "reason": str(error),
+                "retry_count": retry_count,
+                "retry_exhausted": retry_exhausted,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        ]
+        task_service.set_task_case_judgement(cast(Any, task), failure_case)
+        task_id = int(getattr(task, "id"))
+        retry_fragment = (
+            "Max retries reached; manual intervention required."
+            if retry_exhausted
+            else "Requesting review retry."
+        )
+        await self._publish_message_to_agent(
+            PolicySuggestionMessage(
+                policy_id=None,
+                task_id=task_id,
+                content=(
+                    "Task review parse failure for "
+                    f"task {task_id} (phase={phase}, retry {retry_count}/"
+                    f"{self.REVIEW_PARSE_FAILURE_MAX_RETRIES}). "
+                    f"{retry_fragment}"
+                ),
+                source=self.name,
+            ),
+            system_5_id,
         )
 
     @message_handler
@@ -321,6 +388,14 @@ class System3(SystemBase):
                         response, CasesResponse
                     )
                 except Exception as exc:
+                    if isinstance(exc, ValueError):
+                        await self._handle_review_parse_failure(
+                            task=task,
+                            system_5_id=system_5_id,
+                            phase="primary",
+                            error=exc,
+                        )
+                        return
                     if not self._is_json_generation_failure(exc):
                         raise
                     fallback_prompts = [
@@ -338,9 +413,18 @@ class System3(SystemBase):
                         None,
                         include_memory_context=False,
                     )
-                    cases_response = self._get_structured_message(
-                        fallback_response, CasesResponse
-                    )
+                    try:
+                        cases_response = self._get_structured_message(
+                            fallback_response, CasesResponse
+                        )
+                    except ValueError as fallback_exc:
+                        await self._handle_review_parse_failure(
+                            task=task,
+                            system_5_id=system_5_id,
+                            phase="fallback",
+                            error=fallback_exc,
+                        )
+                        return
 
                 for case in cases_response.cases:
                     all_cases.append(

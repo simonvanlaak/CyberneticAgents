@@ -14,7 +14,6 @@ from src.agents.system3 import (
     TasksCreateResponse,
 )
 from src.agents.messages import (
-    InternalErrorMessage,
     InitiativeAssignMessage,
     PolicySuggestionMessage,
     TaskReviewMessage,
@@ -383,7 +382,7 @@ async def test_system3_task_review_persists_case_judgements() -> None:
 
 
 @pytest.mark.asyncio
-async def test_system3_task_review_routes_internal_error_to_system5_on_parse_failure():
+async def test_system3_task_review_persists_failure_marker_and_escalates_on_parse_failure():
     system3 = System3("System3/controller1")
     system3._publish_message_to_agent = AsyncMock()
 
@@ -430,11 +429,80 @@ async def test_system3_task_review_routes_internal_error_to_system5_on_parse_fai
         await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
 
     approve_task.assert_not_called()
-    set_cases.assert_not_called()
+    set_cases.assert_called_once()
+    stored_cases = set_cases.call_args.args[1]
+    assert len(stored_cases) == 1
+    assert stored_cases[0]["kind"] == "review_parse_failure"
+    assert stored_cases[0]["phase"] == "fallback"
+    assert stored_cases[0]["retry_count"] == 1
     system3._publish_message_to_agent.assert_awaited_once()
     await_args = system3._publish_message_to_agent.await_args
     assert await_args is not None
     published_message = await_args.args[0]
-    assert isinstance(published_message, InternalErrorMessage)
+    assert isinstance(published_message, PolicySuggestionMessage)
     assert published_message.task_id == 42
-    assert published_message.origin_system_id_str == "System3/controller1"
+    assert "retry 1/" in published_message.content.lower()
+
+
+@pytest.mark.asyncio
+async def test_system3_task_review_parse_failure_marks_retry_exhausted_after_max() -> (
+    None
+):
+    system3 = System3("System3/controller1")
+    system3._publish_message_to_agent = AsyncMock()
+
+    message = TaskReviewMessage(
+        task_id=42,
+        assignee_agent_id_str="System1/root",
+        source="System1/root",
+        content="Task result",
+    )
+    context = MessageContext(
+        sender=AgentId.from_str("System1/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="task_review_error_route_max_retry",
+    )
+
+    class DummyTask:
+        id = 42
+        assignee = "System1/root"
+        case_judgement = (
+            '[{"kind":"review_parse_failure","phase":"fallback","retry_count":1}]'
+        )
+
+    class DummySystem5:
+        def get_agent_id(self):
+            return AgentId.from_str("System5/root")
+
+    mocked_run = AsyncMock(
+        side_effect=[
+            RuntimeError("json_validate_failed: Failed to generate JSON"),
+            TaskResult(messages=[TextMessage(content="not-json", source="System3")]),
+        ]
+    )
+
+    with (
+        patch("src.cyberagent.services.tasks._get_task", return_value=DummyTask()),
+        patch(
+            "src.cyberagent.services.policies._get_system_policy_prompts",
+            return_value=['{"id":1,"content":"p1","system_id":1,"team_id":1}'],
+        ),
+        patch.object(system3, "_get_systems_by_type", return_value=[DummySystem5()]),
+        patch.object(system3, "run", mocked_run),
+        patch("src.cyberagent.services.tasks.set_task_case_judgement") as set_cases,
+        patch("src.cyberagent.services.tasks.approve_task") as approve_task,
+    ):
+        await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
+
+    approve_task.assert_not_called()
+    set_cases.assert_called_once()
+    stored_cases = set_cases.call_args.args[1]
+    assert stored_cases[0]["retry_count"] == 2
+    assert stored_cases[0]["retry_exhausted"] is True
+    await_args = system3._publish_message_to_agent.await_args
+    assert await_args is not None
+    published_message = await_args.args[0]
+    assert isinstance(published_message, PolicySuggestionMessage)
+    assert "manual intervention" in published_message.content.lower()
