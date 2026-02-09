@@ -92,6 +92,9 @@ class ResearchResultsResponse(BaseModel):
 
 
 class System4(SystemBase):
+    _TOOL_CHOICE_REQUIRED_FRAGMENT = "tool choice is required"
+    _TOOL_NOT_CALLED_FRAGMENT = "did not call a tool"
+
     def __init__(self, name: str, trace_context: dict | None = None):
         # Convert the name to the correct AgentId format
         # If name is just "root", we need to create "System4/root"
@@ -195,11 +198,7 @@ class System4(SystemBase):
                 tool_choice_required=True,
             )
         except Exception as exc:
-            error_text = str(exc)
-            if (
-                "Tool choice is required" in error_text
-                and "did not call a tool" in error_text
-            ):
+            if self._is_wrapped_required_tool_choice_missing_call_error(exc):
                 await self.run(
                     [message],
                     ctx,
@@ -208,6 +207,23 @@ class System4(SystemBase):
                 )
             else:
                 raise
+
+    def _is_wrapped_required_tool_choice_missing_call_error(
+        self, exc: Exception
+    ) -> bool:
+        current: BaseException | None = exc
+        visited: set[int] = set()
+        while current is not None and id(current) not in visited:
+            visited.add(id(current))
+            error_text = str(current).lower()
+            if (
+                self._TOOL_CHOICE_REQUIRED_FRAGMENT in error_text
+                and self._TOOL_NOT_CALLED_FRAGMENT in error_text
+            ):
+                return True
+            next_exc = current.__cause__ or current.__context__
+            current = next_exc
+        return False
 
     def create_procedure_tool(
         self,

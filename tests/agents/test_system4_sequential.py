@@ -23,6 +23,7 @@ from src.agents.messages import (
     StrategyRequestMessage,
     UserMessage,
 )
+from src.agents.system_base import InternalErrorRoutedError
 
 
 class TestSystem4SequentialProcessing:
@@ -241,6 +242,39 @@ async def test_handle_user_message_retries_without_required_tool_choice() -> Non
         is_rpc=False,
         cancellation_token=CancellationToken(),
         message_id="test-message",
+    )
+
+    await system4.handle_user_message(message=message, ctx=ctx)  # type: ignore[call-arg]
+
+    assert system4.run.await_count == 2
+    first_call = system4.run.await_args_list[0]
+    second_call = system4.run.await_args_list[1]
+    assert first_call.kwargs["tool_choice_required"] is True
+    assert second_call.kwargs["tool_choice_required"] is False
+
+
+@pytest.mark.asyncio
+async def test_handle_user_message_retries_when_error_is_wrapped() -> None:
+    system4 = System4("System4/intelligence1")
+
+    try:
+        try:
+            raise RuntimeError("Tool choice is required, but model did not call a tool")
+        except RuntimeError as inner_exc:
+            raise InternalErrorRoutedError("internal_error_routed") from inner_exc
+    except InternalErrorRoutedError as wrapped_exc:
+        first_exc = wrapped_exc
+
+    system4.run = AsyncMock(side_effect=[first_exc, None])
+    message = UserMessage(content="Need help with planning", source="User")
+    from autogen_core import CancellationToken, MessageContext, TopicId
+
+    ctx = MessageContext(
+        sender=AgentId.from_str("User/root"),
+        topic_id=TopicId(type="UserAgent", source="root"),
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="test-message-wrapped",
     )
 
     await system4.handle_user_message(message=message, ctx=ctx)  # type: ignore[call-arg]
