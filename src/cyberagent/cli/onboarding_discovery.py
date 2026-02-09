@@ -28,6 +28,7 @@ from src.cyberagent.cli.onboarding_secrets import (
 )
 from src.cyberagent.cli.message_catalog import get_message
 from src.cyberagent.cli.onboarding_memory import (
+    fetch_onboarding_memory_contents,
     store_onboarding_memory,
     store_onboarding_memory_entry,
 )
@@ -166,10 +167,15 @@ def _run_discovery_pipeline(
         if success:
             markdown_summary, pkm_file_excerpts = _summarize_markdown_repo(repo_path)
             if team_id is not None and markdown_summary.strip():
-                _store_markdown_memory_entries(
+                markers = _store_markdown_memory_entries(
                     team_id=team_id,
                     markdown_summary=markdown_summary,
                     pkm_file_excerpts=pkm_file_excerpts,
+                )
+                _verify_pkm_memory_import(
+                    team_id=team_id,
+                    source="obsidian",
+                    expected_markers=markers,
                 )
         elif allow_prompt:
             if not _prompt_continue_without_pkm(
@@ -185,10 +191,15 @@ def _run_discovery_pipeline(
         if success:
             markdown_summary = notion_summary
             if team_id is not None and markdown_summary.strip():
-                _store_notion_memory_entries(
+                markers = _store_notion_memory_entries(
                     team_id=team_id,
                     notion_summary=markdown_summary,
                     notion_item_summaries=notion_item_summaries,
+                )
+                _verify_pkm_memory_import(
+                    team_id=team_id,
+                    source="notion",
+                    expected_markers=markers,
                 )
         elif allow_prompt:
             if not _prompt_continue_without_pkm(
@@ -489,26 +500,32 @@ def _store_markdown_memory_entries(
     team_id: int,
     markdown_summary: str,
     pkm_file_excerpts: list[tuple[str, str]],
-) -> None:
-    store_onboarding_memory_entry(
+) -> list[str]:
+    markers: list[str] = []
+    if store_onboarding_memory_entry(
         team_id=team_id,
         content=markdown_summary,
         tags=["onboarding", "pkm"],
         source=MemorySource.IMPORT,
         priority=MemoryPriority.HIGH,
         layer=MemoryLayer.LONG_TERM,
-    )
+    ):
+        markers.append(markdown_summary.splitlines()[0].strip())
     for relative_path, excerpt in pkm_file_excerpts:
         if not excerpt:
             continue
-        store_onboarding_memory_entry(
+        content = f"PKM file: {relative_path}\n\n{excerpt}"
+        if not store_onboarding_memory_entry(
             team_id=team_id,
-            content=f"PKM file: {relative_path}\n\n{excerpt}",
+            content=content,
             tags=["onboarding", "pkm", "pkm_file"],
             source=MemorySource.IMPORT,
             priority=MemoryPriority.HIGH,
             layer=MemoryLayer.LONG_TERM,
-        )
+        ):
+            continue
+        markers.append(f"PKM file: {relative_path}")
+    return markers
 
 
 def _summarize_notion_results(results: list[dict[str, Any]]) -> tuple[str, list[str]]:
@@ -538,26 +555,69 @@ def _store_notion_memory_entries(
     team_id: int,
     notion_summary: str,
     notion_item_summaries: list[str],
-) -> None:
-    store_onboarding_memory_entry(
+) -> list[str]:
+    markers: list[str] = []
+    if store_onboarding_memory_entry(
         team_id=team_id,
         content=notion_summary,
         tags=["onboarding", "pkm"],
         source=MemorySource.IMPORT,
         priority=MemoryPriority.HIGH,
         layer=MemoryLayer.LONG_TERM,
-    )
+    ):
+        markers.append(notion_summary.splitlines()[0].strip())
     for item_summary in notion_item_summaries:
         if not item_summary.strip():
             continue
-        store_onboarding_memory_entry(
+        normalized_item_summary = item_summary.strip()
+        if not store_onboarding_memory_entry(
             team_id=team_id,
-            content=item_summary.strip(),
+            content=normalized_item_summary,
             tags=["onboarding", "pkm", "pkm_notion_item"],
             source=MemorySource.IMPORT,
             priority=MemoryPriority.HIGH,
             layer=MemoryLayer.LONG_TERM,
+        ):
+            continue
+        markers.append(normalized_item_summary)
+    return markers
+
+
+def _verify_pkm_memory_import(
+    *,
+    team_id: int,
+    source: str,
+    expected_markers: list[str],
+) -> None:
+    normalized_markers = [
+        marker.strip() for marker in expected_markers if marker.strip()
+    ]
+    if not normalized_markers:
+        return
+    memory_contents = fetch_onboarding_memory_contents(team_id)
+    if not memory_contents:
+        print(
+            "PKM memory verification "
+            f"({source}): unable to read onboarding memory entries."
         )
+        return
+    matched = 0
+    missing: list[str] = []
+    for marker in normalized_markers:
+        if any(marker in content for content in memory_contents):
+            matched += 1
+        else:
+            missing.append(marker)
+    print(
+        f"PKM memory verification ({source}): "
+        f"{matched}/{len(normalized_markers)} entries verified."
+    )
+    if not missing:
+        return
+    preview = ", ".join(missing[:3])
+    if len(missing) > 3:
+        preview = f"{preview}, ..."
+    print(f"PKM memory verification missing markers: {preview}")
 
 
 def _extract_notion_title(item: dict[str, Any]) -> str:

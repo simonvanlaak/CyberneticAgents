@@ -28,19 +28,19 @@ from src.cyberagent.cli.message_catalog import get_message
 from src.enums import SystemType
 
 
-def store_onboarding_memory(team_id: int, summary_path: Path | None) -> None:
+def store_onboarding_memory(team_id: int, summary_path: Path | None) -> bool:
     if summary_path is None or not summary_path.exists():
-        return
+        return False
     try:
         summary_text = summary_path.read_text(encoding="utf-8").strip()
     except OSError:
-        return
+        return False
     if not summary_text:
-        return
+        return False
 
     actor = _build_system4_actor(team_id)
     if actor is None:
-        return
+        return False
     tool = _build_memory_tool(actor)
     args = MemoryCrudArgs(
         action="create",
@@ -62,6 +62,8 @@ def store_onboarding_memory(team_id: int, summary_path: Path | None) -> None:
     response = _run_memory_tool(tool, args)
     if response.errors:
         print(get_message("onboarding_memory", "unable_store_summary"))
+        return False
+    return True
 
 
 def store_onboarding_memory_entry(
@@ -74,7 +76,7 @@ def store_onboarding_memory_entry(
     layer: MemoryLayer,
     namespace: str = "user",
     confidence: float = 0.6,
-) -> None:
+) -> bool:
     """
     Store an incremental onboarding memory entry for live interview enrichment.
 
@@ -89,10 +91,10 @@ def store_onboarding_memory_entry(
         confidence: Confidence level between 0 and 1.
     """
     if not content.strip():
-        return
+        return False
     actor = _build_system4_actor(team_id)
     if actor is None:
-        return
+        return False
     tool = _build_memory_tool(actor)
     args = MemoryCrudArgs(
         action="create",
@@ -114,6 +116,52 @@ def store_onboarding_memory_entry(
     response = _run_memory_tool(tool, args)
     if response.errors:
         print(get_message("onboarding_memory", "unable_store_summary"))
+        return False
+    return True
+
+
+def fetch_onboarding_memory_contents(
+    team_id: int,
+    *,
+    namespace: str = "user",
+    limit: int = 500,
+) -> list[str]:
+    """
+    List onboarding memory content currently stored in global/user namespace.
+
+    Args:
+        team_id: Team identifier.
+        namespace: Memory namespace to inspect.
+        limit: Maximum number of entries to inspect.
+    """
+    if limit <= 0:
+        return []
+    actor = _build_system4_actor(team_id)
+    if actor is None:
+        return []
+    tool = _build_memory_tool(actor)
+    contents: list[str] = []
+    cursor: str | None = None
+    while len(contents) < limit:
+        batch_limit = min(100, limit - len(contents))
+        args = MemoryCrudArgs(
+            action="list",
+            scope=MemoryScope.GLOBAL.value,
+            namespace=namespace,
+            limit=batch_limit,
+            cursor=cursor,
+        )
+        response = _run_memory_tool(tool, args)
+        if response.errors:
+            return contents
+        for item in response.items:
+            content = item.get("content")
+            if isinstance(content, str) and content.strip():
+                contents.append(content)
+        if not response.has_more or not response.next_cursor:
+            break
+        cursor = response.next_cursor
+    return contents
 
 
 def _build_system4_actor(team_id: int) -> MemoryActorContext | None:

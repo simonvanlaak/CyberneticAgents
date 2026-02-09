@@ -457,7 +457,7 @@ def test_fetch_profile_links_calls_callback(
 
 
 def test_discovery_repo_sync_stores_split_markdown_memory_entries(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     args = _default_args()
     repo_dir = tmp_path / "repo"
@@ -513,7 +513,7 @@ def test_discovery_repo_sync_stores_split_markdown_memory_entries(
         layer: object,
         namespace: str = "user",
         confidence: float = 0.6,
-    ) -> None:
+    ) -> bool:
         captured_entries.append(
             {
                 "team_id": team_id,
@@ -523,9 +523,17 @@ def test_discovery_repo_sync_stores_split_markdown_memory_entries(
                 "confidence": confidence,
             }
         )
+        return True
 
     monkeypatch.setattr(
         onboarding_discovery, "store_onboarding_memory_entry", _capture_store_entry
+    )
+    monkeypatch.setattr(
+        onboarding_discovery,
+        "fetch_onboarding_memory_contents",
+        lambda *_args, **_kwargs: [
+            cast(str, entry["content"]) for entry in captured_entries
+        ],
     )
 
     summary_path = onboarding_discovery.run_discovery_onboarding(args, team_id=1)
@@ -544,6 +552,8 @@ def test_discovery_repo_sync_stores_split_markdown_memory_entries(
     contents = [cast(str, entry["content"]) for entry in pkm_file_entries]
     assert any("PKM file: notes/alpha.md" in content for content in contents)
     assert any("PKM file: notes/beta.md" in content for content in contents)
+    captured = capsys.readouterr().out
+    assert "PKM memory verification (obsidian): 3/3 entries verified." in captured
 
 
 def test_discovery_notion_sync_stores_split_item_memory_entries(
