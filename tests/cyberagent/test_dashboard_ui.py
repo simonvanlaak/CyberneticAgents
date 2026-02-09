@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from src.cli_session import AnsweredQuestion, InboxEntry
 from src.cyberagent.ui import dashboard
+from src.cyberagent.ui.memory_data import MemoryEntryView
 from src.cyberagent.ui.teams_data import TeamMemberView, TeamWithMembersView
 
 
@@ -18,6 +19,7 @@ class _FakeStreamlit:
         self.checkbox_values: dict[str, bool] = {}
         self.text_input_values: dict[str, str] = {}
         self.button_values: dict[str, bool] = {}
+        self.write_values: list[object] = []
 
     def subheader(self, text: str) -> None:
         self.subheaders.append(text)
@@ -36,6 +38,9 @@ class _FakeStreamlit:
 
     def code(self, text: str) -> None:
         self.code_values.append(text)
+
+    def write(self, value: object) -> None:
+        self.write_values.append(value)
 
     def checkbox(self, label: str, value: bool = False) -> bool:
         return self.checkbox_values.get(label, value)
@@ -366,3 +371,74 @@ def test_render_task_details_shows_status_reasoning(monkeypatch) -> None:
     dashboard._render_task_details_page(st, _TitleCol())
 
     assert "Waiting for OAuth credentials from ops." in writes
+
+
+def test_render_memory_page_shows_entries(monkeypatch) -> None:
+    class _FakeSidebar:
+        def selectbox(self, _label: str, options: list[object], format_func=None):
+            _ = format_func
+            return options[0]
+
+        def text_input(self, _label: str, value: str = "") -> str:
+            return value
+
+        def number_input(
+            self,
+            _label: str,
+            min_value: int = 0,
+            max_value: int = 1000,
+            value: int = 0,
+            step: int = 1,
+        ) -> int:
+            _ = (min_value, max_value, step)
+            return value
+
+    class _MemoryStreamlit(_FakeStreamlit):
+        def __init__(self) -> None:
+            super().__init__()
+            self.sidebar = _FakeSidebar()
+            self.expander_calls: list[str] = []
+
+        class _ExpanderCtx:
+            def __enter__(self):
+                return None
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        def expander(self, label: str):
+            self.expander_calls.append(label)
+            return self._ExpanderCtx()
+
+    monkeypatch.setattr(
+        dashboard,
+        "load_memory_entries",
+        lambda **_kwargs: (
+            [
+                MemoryEntryView(
+                    id="mem-1",
+                    scope="global",
+                    namespace="user",
+                    owner_agent_id="System4/root",
+                    content_preview="PKM file: notes/alpha.md",
+                    content_full="PKM file: notes/alpha.md\n\nAlpha",
+                    tags=["onboarding", "pkm", "pkm_file"],
+                    source="import",
+                    priority="high",
+                    layer="long_term",
+                    confidence=0.8,
+                    created_at="2026-02-09T12:00:00+00:00",
+                    updated_at="2026-02-09T12:00:00+00:00",
+                )
+            ],
+            1,
+        ),
+    )
+    st = _MemoryStreamlit()
+    dashboard.render_memory_page(st)
+
+    assert len(st.dataframe_data) == 1
+    rows = st.dataframe_data[0]
+    assert isinstance(rows, list)
+    assert rows[0]["id"] == "mem-1"
+    assert st.expander_calls == ["Entry mem-1"]

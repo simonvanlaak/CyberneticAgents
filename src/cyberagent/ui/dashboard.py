@@ -13,6 +13,7 @@ try:
         load_task_cards,
     )
     from src.cyberagent.ui.teams_data import load_teams_with_members
+    from src.cyberagent.ui.memory_data import load_memory_entries
     from src.cyberagent.ui.dashboard_log_badge import count_warnings_errors
     from src.cyberagent.core.paths import get_logs_dir
     from src.cli_session import list_inbox_entries, resolve_pending_question
@@ -24,6 +25,7 @@ except ModuleNotFoundError:
         load_task_cards,
     )
     from teams_data import load_teams_with_members
+    from memory_data import load_memory_entries
     from dashboard_log_badge import count_warnings_errors
     from src.cyberagent.core.paths import get_logs_dir
     from cli_session import list_inbox_entries, resolve_pending_question
@@ -262,6 +264,94 @@ def render_inbox_page(st: Any) -> None:
         )
 
 
+def render_memory_page(st: Any) -> None:
+    scope = st.sidebar.selectbox(
+        "Memory Scope",
+        options=[None, "agent", "team", "global"],
+        format_func=lambda value: "All scopes" if value is None else value,
+    )
+    namespace = st.sidebar.text_input("Memory Namespace", value="").strip() or None
+    source = st.sidebar.selectbox(
+        "Memory Source",
+        options=[None, "import", "tool", "manual", "reflection"],
+        format_func=lambda value: "All sources" if value is None else value,
+    )
+    tag_contains = st.sidebar.text_input("Tag Contains", value="").strip() or None
+    page_size = int(
+        st.sidebar.number_input(
+            "Memory Page Size",
+            min_value=10,
+            max_value=200,
+            value=50,
+            step=10,
+        )
+    )
+    page = int(
+        st.sidebar.number_input(
+            "Memory Page",
+            min_value=1,
+            max_value=1000,
+            value=1,
+            step=1,
+        )
+    )
+    offset = (page - 1) * page_size
+    try:
+        entries, total = load_memory_entries(
+            scope=scope,
+            namespace=namespace,
+            tag_contains=tag_contains,
+            source=source,
+            limit=page_size,
+            offset=offset,
+        )
+    except Exception as exc:
+        st.error(f"Failed to load memory entries: {exc}")
+        return
+    if not entries:
+        st.info("No memory entries match current filters.")
+        return
+    st.caption(f"Showing {len(entries)} of {total} entries.")
+    st.dataframe(
+        [
+            {
+                "id": entry.id,
+                "scope": entry.scope,
+                "namespace": entry.namespace,
+                "owner_agent_id": entry.owner_agent_id,
+                "content_preview": entry.content_preview,
+                "tags": ", ".join(entry.tags),
+                "source": entry.source,
+                "priority": entry.priority,
+                "layer": entry.layer,
+                "confidence": entry.confidence,
+                "created_at": entry.created_at,
+                "updated_at": entry.updated_at,
+            }
+            for entry in entries
+        ],
+        width="stretch",
+        hide_index=True,
+    )
+    for entry in entries:
+        with st.expander(f"Entry {entry.id}"):
+            st.write(entry.content_full)
+            st.write(
+                {
+                    "scope": entry.scope,
+                    "namespace": entry.namespace,
+                    "owner_agent_id": entry.owner_agent_id,
+                    "tags": entry.tags,
+                    "source": entry.source,
+                    "priority": entry.priority,
+                    "layer": entry.layer,
+                    "confidence": entry.confidence,
+                    "created_at": entry.created_at,
+                    "updated_at": entry.updated_at,
+                }
+            )
+
+
 def render_board() -> None:
     st = _load_streamlit()
     st.set_page_config(page_title="CyberneticAgents Kanban", layout="wide")
@@ -271,7 +361,7 @@ def render_board() -> None:
     with badge_col:
         st.markdown(f"⚠️ **{warnings}**  ❌ **{errors}**")
 
-    pages = ["Kanban", "Teams", "Inbox"]
+    pages = ["Kanban", "Teams", "Inbox", "Memory"]
     if st.session_state.get("dashboard_selected_task_id") is not None:
         pages.append("Task Details")
     current_page = st.session_state.get("dashboard_page", "Kanban")
@@ -287,6 +377,11 @@ def render_board() -> None:
         with title_col:
             st.title("CyberneticAgents Inbox (Read-Only)")
         render_inbox_page(st)
+        return
+    if page == "Memory":
+        with title_col:
+            st.title("CyberneticAgents Memory (Read-Only)")
+        render_memory_page(st)
         return
     if page == "Task Details":
         _render_task_details_page(st, title_col)
