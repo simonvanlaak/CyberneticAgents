@@ -15,7 +15,7 @@ ALLOWED_TASK_TRANSITIONS: dict[Status, set[Status]] = {
     Status.REJECTED: set(),
 }
 
-REVIEW_ELIGIBLE_TASK_STATUSES: set[Status] = {Status.COMPLETED}
+REVIEW_ELIGIBLE_TASK_STATUSES: set[Status] = {Status.COMPLETED, Status.BLOCKED}
 
 
 def start_task(task_id: int) -> Task:
@@ -153,7 +153,7 @@ def is_review_eligible_for_task(task: Task) -> bool:
     """
     Return whether a task is eligible for policy review.
 
-    Only completed tasks may enter policy review.
+    Completed tasks and blocked tasks may enter policy review.
     """
     current = _resolve_task_status(getattr(task, "status", None))
     return current in REVIEW_ELIGIBLE_TASK_STATUSES
@@ -171,6 +171,8 @@ def finalize_task_review(task: Task, cases: list[dict[str, object]]) -> None:
         str(case.get("judgement", "")) == "Satisfied" for case in cases
     )
     if not all_satisfied:
+        return
+    if _resolve_task_status(getattr(task, "status", None)) != Status.COMPLETED:
         return
     _transition_task(task, Status.APPROVED)
     _persist_task(task)

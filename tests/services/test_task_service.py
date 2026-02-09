@@ -184,7 +184,7 @@ def test_set_task_case_judgement_updates_policy_judgement_fields() -> None:
     assert task.updated is True
 
 
-def test_is_review_eligible_for_task_only_when_completed() -> None:
+def test_is_review_eligible_for_task_when_completed_or_blocked() -> None:
     from src.cyberagent.services import tasks as task_service
     from src.cyberagent.db.models.task import Task
     from src.enums import Status
@@ -194,6 +194,9 @@ def test_is_review_eligible_for_task_only_when_completed() -> None:
     assert task_service.is_review_eligible_for_task(task) is True
 
     task.status = Status.BLOCKED
+    assert task_service.is_review_eligible_for_task(task) is True
+
+    task.status = Status.PENDING
     assert task_service.is_review_eligible_for_task(task) is False
 
 
@@ -236,6 +239,27 @@ def test_finalize_task_review_does_not_approve_when_any_case_not_satisfied() -> 
 
     assert task.status == Status.COMPLETED
     assert task.policy_judgement == "Violated"
+    assert task.updated is True
+
+
+def test_finalize_task_review_does_not_approve_blocked_tasks() -> None:
+    from src.cyberagent.services import tasks as task_service
+    from src.cyberagent.db.models.task import Task
+    from src.enums import Status
+
+    task = cast(Task, _FakeTask())
+    task.status = Status.BLOCKED
+
+    task_service.finalize_task_review(
+        task,
+        [
+            {"policy_id": 1, "judgement": "Satisfied", "reasoning": "ok"},
+            {"policy_id": 2, "judgement": "Satisfied", "reasoning": "still ok"},
+        ],
+    )
+
+    assert task.status == Status.BLOCKED
+    assert task.policy_judgement == "Satisfied"
     assert task.updated is True
 
 

@@ -8,6 +8,8 @@ from autogen_agentchat.base import TaskResult
 from autogen_agentchat.messages import TextMessage
 
 from src.agents.system3 import (
+    CasesResponse,
+    PolicyJudgeResponse,
     System3,
     TaskAssignmentResponse,
     TasksAssignResponse,
@@ -18,7 +20,7 @@ from src.agents.messages import (
     PolicySuggestionMessage,
     TaskReviewMessage,
 )
-from src.enums import Status
+from src.enums import PolicyJudgement, Status
 
 
 class TestSystem3Basic:
@@ -230,7 +232,7 @@ async def test_system3_task_review_escalates_when_no_policies():
 
 
 @pytest.mark.asyncio
-async def test_system3_task_review_skips_blocked_tasks() -> None:
+async def test_system3_task_review_processes_blocked_tasks() -> None:
     system3 = System3("System3/controller1")
     system3._publish_message_to_agent = AsyncMock()
     mocked_run = AsyncMock()
@@ -252,17 +254,40 @@ async def test_system3_task_review_skips_blocked_tasks() -> None:
     class DummyTask:
         id = 42
         assignee = "System1/root"
-        status = Status.COMPLETED
         status = Status.BLOCKED
+
+    class DummySystem5:
+        def get_agent_id(self):
+            return AgentId.from_str("System5/root")
+
+    mocked_run.return_value = object()
 
     with (
         patch("src.cyberagent.services.tasks._get_task", return_value=DummyTask()),
+        patch(
+            "src.cyberagent.services.policies._get_system_policy_prompts",
+            return_value=["Policy #1"],
+        ),
+        patch.object(system3, "_get_systems_by_type", return_value=[DummySystem5()]),
+        patch.object(
+            system3,
+            "_get_structured_message",
+            return_value=CasesResponse(
+                cases=[
+                    PolicyJudgeResponse(
+                        policy_id=1,
+                        judgement=PolicyJudgement.VIOLATED,
+                        reasoning="blocked for valid reason",
+                    )
+                ]
+            ),
+        ),
         patch.object(system3, "run", mocked_run),
     ):
         await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
 
-    assert mocked_run.await_count == 0
-    assert system3._publish_message_to_agent.await_count == 0
+    assert mocked_run.await_count == 1
+    assert system3._publish_message_to_agent.await_count == 1
 
 
 @pytest.mark.asyncio
