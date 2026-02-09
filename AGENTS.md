@@ -52,7 +52,11 @@ Always keep this file up-to-date with newest requirements for the agent.
 Never commit or publish real phone numbers, videos, or live configuration values. Use obviously fake placeholders in docs, tests, and examples.
 
 ## Commit Guidelines
-Follow concise, action-oriented commit messages (e.g., CLI: add verbose flag to send). And conventional commits. Make commits contain a small amount of code changes following the atomic commit principle.
+1. Every completed code/doc change must be committed in an atomic commit before moving to the next ticket/task.
+2. Always commit your own changes immediately after tests/checks pass for that change.
+3. Never batch unrelated changes into one commit; keep scope tightly focused.
+4. Use concise, action-oriented conventional commit messages (e.g., `cli: add verbose flag to send`).
+5. Stage only the files that belong to your change.
 
 ## Project Architecture
 

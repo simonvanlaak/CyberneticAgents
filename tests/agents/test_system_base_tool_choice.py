@@ -127,8 +127,9 @@ async def test_run_wraps_model_client_when_tool_choice_required(
     system = DummySystem()
 
     async def fake_set_system_prompt(
-        _prompts: list[str], _memory_context: list[str] | None = None
+        _prompts: list[str], memory_context: list[str] | None = None
     ) -> None:
+        _ = memory_context
         return None
 
     monkeypatch.setattr(system, "_set_system_prompt", fake_set_system_prompt)
@@ -210,8 +211,9 @@ async def test_run_retries_once_when_structured_output_is_invalid(
     system = DummySystem()
 
     async def fake_set_system_prompt(
-        _prompts: list[str], _memory_context: list[str] | None = None
+        _prompts: list[str], memory_context: list[str] | None = None
     ) -> None:
+        _ = memory_context
         return None
 
     monkeypatch.setattr(system, "_set_system_prompt", fake_set_system_prompt)
@@ -381,3 +383,71 @@ async def test_run_does_not_route_errors_for_system5(
         await system.run([message], context)
 
     system._publish_message_to_agent.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_run_retries_on_messages_length_limit_without_routing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    system = DummySystem()
+    system._publish_message_to_agent = AsyncMock()
+
+    async def fake_set_system_prompt(
+        _prompts: list[str], _memory_context: list[str] | None = None
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(system, "_set_system_prompt", fake_set_system_prompt)
+    monkeypatch.setattr(system, "_build_memory_context", lambda *_args: [])
+    monkeypatch.setattr(
+        "src.agents.system_base.mark_team_active", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        "src.agents.system_base.get_model_client",
+        lambda *_args, **_kwargs: DummyModelClient(),
+    )
+    system._agent.run = AsyncMock(
+        side_effect=[
+            RuntimeError(
+                "Error code: 400 - {'error': {'message': "
+                "'Please reduce the length of the messages or completion.', "
+                "'type': 'invalid_request_error', 'param': 'messages'}}"
+            ),
+            TaskResult(messages=[TextMessage(content="ok", source="System4/root")]),
+        ]
+    )
+
+    monkeypatch.setenv("SYSTEM_CHAT_MESSAGE_MAX_CHARS", "80")
+    message = TextMessage(content="X" * 200, source="User")
+    context = MessageContext(
+        sender=AgentId.from_str("User/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="run_messages_length_retry_test",
+    )
+
+    result = await system.run([message], context)
+    assert result.messages[-1].to_text() == "ok"
+    assert system._agent.run.await_count == 2
+    second_call = system._agent.run.await_args_list[1]
+    retry_messages = second_call.kwargs["task"]
+    assert retry_messages[0].content.endswith("[truncated for message budget]")
+    system._publish_message_to_agent.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_set_system_prompt_compacts_when_budget_exceeded(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    system = DummySystem()
+    monkeypatch.setenv("SYSTEM_PROMPT_MAX_CHARS", "300")
+    monkeypatch.setenv("SYSTEM_PROMPT_ENTRY_MAX_CHARS", "120")
+
+    prompt = await system._set_system_prompt(
+        message_specific_prompts=["A" * 600, "B" * 600],
+        memory_context=["C" * 600],
+    )
+
+    assert len(prompt) <= 300
+    assert SystemBase.MESSAGE_BUDGET_TRUNCATION_NOTE in prompt

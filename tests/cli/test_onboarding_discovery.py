@@ -707,3 +707,18 @@ def test_run_cli_tool_returns_timeout_error(
 
     assert result["success"] is False
     assert result["error"] == "Timeout"
+
+
+def test_build_onboarding_prompt_truncates_large_summary_text() -> None:
+    summary_path = Path("data/onboarding/20260209_120000/summary.md")
+    oversized_summary = "A" * (
+        onboarding_discovery.ONBOARDING_PROMPT_SUMMARY_CHAR_LIMIT + 200
+    )
+
+    prompt = onboarding_discovery.build_onboarding_prompt(
+        summary_path=summary_path,
+        summary_text=oversized_summary,
+    )
+
+    assert "Summary truncated for prompt" in prompt
+    assert str(summary_path) in prompt

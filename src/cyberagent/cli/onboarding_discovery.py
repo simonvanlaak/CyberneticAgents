@@ -42,6 +42,7 @@ from src.cyberagent.tools.cli_executor.factory import create_cli_executor
 logger = logging.getLogger(__name__)
 MARKDOWN_PKM_FILE_LIMIT = 1000
 MARKDOWN_PKM_LINES_PER_FILE = 20
+ONBOARDING_PROMPT_SUMMARY_CHAR_LIMIT = 12000
 
 
 def run_discovery_onboarding(args: object, team_id: int | None = None) -> Path | None:
@@ -684,6 +685,12 @@ def _resolve_agent_id(team_id: int | None) -> str | None:
 
 
 def build_onboarding_prompt(summary_path: Path, summary_text: str) -> str:
+    prompt_summary = summary_text
+    if len(prompt_summary) > ONBOARDING_PROMPT_SUMMARY_CHAR_LIMIT:
+        prompt_summary = (
+            prompt_summary[:ONBOARDING_PROMPT_SUMMARY_CHAR_LIMIT].rstrip()
+            + "\n\n[Summary truncated for prompt. See summary file for full content.]"
+        )
     return "\n".join(
         [
             "## ONBOARDING DISCOVERY",
@@ -696,7 +703,7 @@ def build_onboarding_prompt(summary_path: Path, summary_text: str) -> str:
             f"Summary file: {summary_path}",
             "",
             "# Onboarding Summary",
-            summary_text,
+            prompt_summary,
         ]
     )
 
