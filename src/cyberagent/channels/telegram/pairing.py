@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 import logging
 import os
+from pathlib import Path
 import secrets
 from typing import Iterable
 
@@ -65,8 +66,41 @@ def store_admin_chat_ids(admin_ids: set[int]) -> bool:
     stored = store_secret_in_1password(PAIRING_ADMIN_SECRET, serialized)
     os.environ[PAIRING_ADMIN_SECRET] = serialized
     if not stored:
+        _persist_admin_ids_to_env_file(serialized)
         logger.warning("Failed to store Telegram admin chat ids in 1Password.")
     return stored
+
+
+def _persist_admin_ids_to_env_file(serialized: str) -> None:
+    env_path = _find_env_file(Path.cwd()) or (Path.cwd() / ".env")
+    lines: list[str] = []
+    if env_path.exists():
+        try:
+            lines = env_path.read_text(encoding="utf-8").splitlines()
+        except OSError:
+            return
+
+    prefix = f"{PAIRING_ADMIN_SECRET}="
+    replaced = False
+    for index, line in enumerate(lines):
+        if line.startswith(prefix):
+            lines[index] = f"{PAIRING_ADMIN_SECRET}={serialized}"
+            replaced = True
+            break
+    if not replaced:
+        lines.append(f"{PAIRING_ADMIN_SECRET}={serialized}")
+    try:
+        env_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    except OSError:
+        return
+
+
+def _find_env_file(start: Path) -> Path | None:
+    for path in [start, *start.parents]:
+        candidate = path / ".env"
+        if candidate.exists():
+            return candidate
+    return None
 
 
 def bootstrap_admin(

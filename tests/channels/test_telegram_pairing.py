@@ -1,4 +1,5 @@
 import asyncio
+import os
 from typing import cast
 
 import pytest
@@ -195,3 +196,23 @@ def test_webhook_blocks_non_admin_when_admin_set(
     assert client.messages
     assert "private" in client.messages[0][1].lower()
     loop.close()
+
+
+def test_store_admin_chat_ids_falls_back_to_env_file(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("TELEGRAM_PAIRING_ADMIN_CHAT_IDS", raising=False)
+    monkeypatch.setattr(
+        pairing_module, "store_secret_in_1password", lambda *_args, **_kwargs: False
+    )
+
+    stored = pairing_module.store_admin_chat_ids({333, 111})
+
+    assert stored is False
+    assert os.environ.get("TELEGRAM_PAIRING_ADMIN_CHAT_IDS") == "111,333"
+    env_path = tmp_path / ".env"
+    assert env_path.exists()
+    assert "TELEGRAM_PAIRING_ADMIN_CHAT_IDS=111,333" in env_path.read_text(
+        encoding="utf-8"
+    )

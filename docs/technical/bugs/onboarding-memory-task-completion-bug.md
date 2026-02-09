@@ -42,33 +42,31 @@ This is why a clarification request can still become a completed task result.
 
 ### A) Add a structured execution contract for System1
 - Introduce a typed response model for task execution output:
-  - `status: done | needs_input | blocked`
+  - `status: done | blocked`
   - `result: str`
-  - `follow_up_question: str | None` (required when `needs_input`)
-  - `blocking_reason: str | None` (required when `blocked`)
+  - `reasoning: str | None` (required when `blocked`)
 - Parse this as structured output from `System1` instead of relying on free-form text.
 
 ### B) Replace unconditional completion in System1
 - In `System1.handle_assign_task_message(...)`:
   - `done` -> call `task_service.complete_task(...)`
-  - `needs_input` -> do **not** complete; keep task active and escalate question upstream
   - `blocked` -> do **not** complete; escalate blocker/capability gap upstream
+- Treat missing-input/clarification-required outcomes as `blocked` (single non-done path).
 
 ### C) Add explicit task-state transitions in task service
 - Extend `src/cyberagent/services/tasks.py` with non-completion transitions (for example):
-  - `mark_task_needs_input(task, question)`
   - `mark_task_blocked(task, reason)`
 - Keep state transition logic centralized in task service.
 
 ### D) Add a defensive gate in System3 review
-- In `System3.handle_task_review_message(...)`, avoid approval/progression when the execution status is `needs_input` or `blocked`.
+- In `System3.handle_task_review_message(...)`, avoid approval/progression when the execution status is `blocked`.
 - Route follow-up to user/System5 as appropriate.
 
 ### E) Follow strict TDD for this fix
 - Write failing tests first, then implement:
-  - `tests/agents/test_system1.py`: verify `needs_input`/`blocked` never call `complete_task(...)`
-  - `tests/services/test_task_service.py`: verify new transitions and persisted state
-  - `tests/agents/test_system3.py`: verify non-`done` outcomes are not approved/progressed
+  - `tests/agents/test_system1.py`: verify malformed/non-JSON/free-text and `blocked` outputs never call `complete_task(...)`
+  - `tests/services/test_task_service.py`: verify blocked transition persistence (`mark_task_blocked`)
+  - `tests/agents/test_system3.py`: verify blocked outcomes are not approved/progressed
 
 ## Expected outcome after fix
 - Onboarding/user context is actually retrievable by operational agents.
