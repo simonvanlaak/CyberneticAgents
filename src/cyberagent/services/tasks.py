@@ -15,6 +15,8 @@ ALLOWED_TASK_TRANSITIONS: dict[Status, set[Status]] = {
     Status.REJECTED: set(),
 }
 
+REVIEW_ELIGIBLE_TASK_STATUSES: set[Status] = {Status.COMPLETED}
+
 
 def start_task(task_id: int) -> Task:
     """
@@ -147,6 +149,33 @@ def approve_task(task: Task) -> None:
     _persist_task(task)
 
 
+def is_review_eligible_for_task(task: Task) -> bool:
+    """
+    Return whether a task is eligible for policy review.
+
+    Only completed tasks may enter policy review.
+    """
+    current = _resolve_task_status(getattr(task, "status", None))
+    return current in REVIEW_ELIGIBLE_TASK_STATUSES
+
+
+def finalize_task_review(task: Task, cases: list[dict[str, object]]) -> None:
+    """
+    Persist review cases and finalize task status from review outcomes.
+
+    A task is approved only when all review cases are judged as ``Satisfied``.
+    Otherwise task status remains unchanged for policy follow-up handling.
+    """
+    set_task_case_judgement(task, cases)
+    all_satisfied = len(cases) > 0 and all(
+        str(case.get("judgement", "")) == "Satisfied" for case in cases
+    )
+    if not all_satisfied:
+        return
+    _transition_task(task, Status.APPROVED)
+    _persist_task(task)
+
+
 def set_task_case_judgement(task: Task, cases: list[dict[str, object]]) -> None:
     """
     Persist policy review case judgements on a task.
@@ -197,11 +226,10 @@ def _persist_task(task: Task) -> None:
 
 def _transition_task(task: Task, next_status: Status) -> None:
     """Validate and apply a task status transition."""
-    raw_current = getattr(task, "status", None)
-    if raw_current is None:
+    current = _resolve_task_status(getattr(task, "status", None))
+    if current is None:
         task.set_status(next_status)
         return
-    current = raw_current if isinstance(raw_current, Status) else Status(raw_current)
     if current == next_status:
         return
     allowed = ALLOWED_TASK_TRANSITIONS.get(current, set())
@@ -210,3 +238,14 @@ def _transition_task(task: Task, next_status: Status) -> None:
             f"Invalid task status transition: {current.value} -> {next_status.value}"
         )
     task.set_status(next_status)
+
+
+def _resolve_task_status(raw_status: object) -> Status | None:
+    if raw_status is None:
+        return None
+    if isinstance(raw_status, Status):
+        return raw_status
+    try:
+        return Status(str(raw_status))
+    except ValueError:
+        return None

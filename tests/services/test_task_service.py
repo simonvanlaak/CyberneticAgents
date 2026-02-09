@@ -184,6 +184,61 @@ def test_set_task_case_judgement_updates_policy_judgement_fields() -> None:
     assert task.updated is True
 
 
+def test_is_review_eligible_for_task_only_when_completed() -> None:
+    from src.cyberagent.services import tasks as task_service
+    from src.cyberagent.db.models.task import Task
+    from src.enums import Status
+
+    task = cast(Task, _FakeTask())
+    task.status = Status.COMPLETED
+    assert task_service.is_review_eligible_for_task(task) is True
+
+    task.status = Status.BLOCKED
+    assert task_service.is_review_eligible_for_task(task) is False
+
+
+def test_finalize_task_review_approves_only_when_all_cases_satisfied() -> None:
+    from src.cyberagent.services import tasks as task_service
+    from src.cyberagent.db.models.task import Task
+    from src.enums import Status
+
+    task = cast(Task, _FakeTask())
+    task.status = Status.COMPLETED
+
+    task_service.finalize_task_review(
+        task,
+        [
+            {"policy_id": 1, "judgement": "Satisfied", "reasoning": "ok"},
+            {"policy_id": 2, "judgement": "Satisfied", "reasoning": "still ok"},
+        ],
+    )
+
+    assert task.status == Status.APPROVED
+    assert task.policy_judgement == "Satisfied"
+    assert task.updated is True
+
+
+def test_finalize_task_review_does_not_approve_when_any_case_not_satisfied() -> None:
+    from src.cyberagent.services import tasks as task_service
+    from src.cyberagent.db.models.task import Task
+    from src.enums import Status
+
+    task = cast(Task, _FakeTask())
+    task.status = Status.COMPLETED
+
+    task_service.finalize_task_review(
+        task,
+        [
+            {"policy_id": 1, "judgement": "Satisfied", "reasoning": "ok"},
+            {"policy_id": 2, "judgement": "Violated", "reasoning": "bad"},
+        ],
+    )
+
+    assert task.status == Status.COMPLETED
+    assert task.policy_judgement == "Violated"
+    assert task.updated is True
+
+
 def test_persist_task_uses_session_merge_for_sqlalchemy_task(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

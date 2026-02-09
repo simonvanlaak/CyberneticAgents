@@ -78,8 +78,8 @@ Critical review of the current project architecture across runtime, agent orches
 
 ### Phase 3 Progress
 - [x] Step 1: Formalize task state model with explicit transition guards in task service.
-- [ ] Step 2: Centralize all task transitions behind task application service (remove direct status mutation in agents).
-- [ ] Step 3: Enforce review-entry contract for review-eligible statuses only.
+- [x] Step 2: Centralize all task transitions behind task application service (remove direct status mutation in agents).
+- [x] Step 3: Enforce review-entry contract for review-eligible statuses only.
 
 ## Phase 0: Stabilization (1 sprint)
 1. Fix entrypoint architecture debt:

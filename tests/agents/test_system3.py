@@ -198,6 +198,7 @@ async def test_system3_task_review_escalates_when_no_policies():
     class DummyTask:
         id = 42
         assignee = "System1/root"
+        status = Status.COMPLETED
 
     class DummySystem5:
         def get_agent_id(self):
@@ -245,7 +246,43 @@ async def test_system3_task_review_skips_blocked_tasks() -> None:
     class DummyTask:
         id = 42
         assignee = "System1/root"
+        status = Status.COMPLETED
         status = Status.BLOCKED
+
+    with (
+        patch("src.cyberagent.services.tasks._get_task", return_value=DummyTask()),
+        patch.object(system3, "run", mocked_run),
+    ):
+        await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
+
+    assert mocked_run.await_count == 0
+    assert system3._publish_message_to_agent.await_count == 0
+
+
+@pytest.mark.asyncio
+async def test_system3_task_review_skips_non_review_eligible_tasks() -> None:
+    system3 = System3("System3/controller1")
+    system3._publish_message_to_agent = AsyncMock()
+    mocked_run = AsyncMock()
+
+    message = TaskReviewMessage(
+        task_id=42,
+        assignee_agent_id_str="System1/root",
+        source="System1/root",
+        content="Task result",
+    )
+    context = MessageContext(
+        sender=AgentId.from_str("System1/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="task_review_pending",
+    )
+
+    class DummyTask:
+        id = 42
+        assignee = "System1/root"
+        status = Status.PENDING
 
     with (
         patch("src.cyberagent.services.tasks._get_task", return_value=DummyTask()),
@@ -280,6 +317,7 @@ async def test_system3_task_review_falls_back_on_json_validate_failure():
     class DummyTask:
         id = 42
         assignee = "System1/root"
+        status = Status.COMPLETED
 
     class DummySystem5:
         def get_agent_id(self):
@@ -304,8 +342,7 @@ async def test_system3_task_review_falls_back_on_json_validate_failure():
         ),
         patch.object(system3, "_get_systems_by_type", return_value=[DummySystem5()]),
         patch.object(system3, "run", mocked_run),
-        patch("src.cyberagent.services.tasks.approve_task") as approve_task,
-        patch("src.cyberagent.services.tasks.set_task_case_judgement"),
+        patch("src.cyberagent.services.tasks.finalize_task_review") as finalize_review,
     ):
         await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
 
@@ -313,7 +350,7 @@ async def test_system3_task_review_falls_back_on_json_validate_failure():
     first_call = mocked_run.await_args_list[0]
     assert first_call.args[3].__name__ == "CasesResponse"
     assert first_call.kwargs["include_memory_context"] is False
-    approve_task.assert_called_once()
+    finalize_review.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -338,6 +375,7 @@ async def test_system3_task_review_persists_case_judgements() -> None:
     class DummyTask:
         id = 42
         assignee = "System1/root"
+        status = Status.COMPLETED
 
     class DummySystem5:
         def get_agent_id(self):
@@ -367,14 +405,12 @@ async def test_system3_task_review_persists_case_judgements() -> None:
                 )
             ),
         ),
-        patch("src.cyberagent.services.tasks.approve_task") as approve_task,
-        patch("src.cyberagent.services.tasks.set_task_case_judgement") as set_judgement,
+        patch("src.cyberagent.services.tasks.finalize_task_review") as finalize_review,
     ):
         await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
 
-    approve_task.assert_called_once()
-    set_judgement.assert_called_once()
-    stored_cases = set_judgement.call_args.args[1]
+    finalize_review.assert_called_once()
+    stored_cases = finalize_review.call_args.args[1]
     assert stored_cases == [
         {"policy_id": 1, "judgement": "Satisfied", "reasoning": "ok"},
         {"policy_id": 2, "judgement": "Violated", "reasoning": "bad"},
@@ -403,6 +439,7 @@ async def test_system3_task_review_persists_failure_marker_and_escalates_on_pars
     class DummyTask:
         id = 42
         assignee = "System1/root"
+        status = Status.COMPLETED
 
     class DummySystem5:
         def get_agent_id(self):
@@ -424,11 +461,11 @@ async def test_system3_task_review_persists_failure_marker_and_escalates_on_pars
         patch.object(system3, "_get_systems_by_type", return_value=[DummySystem5()]),
         patch.object(system3, "run", mocked_run),
         patch("src.cyberagent.services.tasks.set_task_case_judgement") as set_cases,
-        patch("src.cyberagent.services.tasks.approve_task") as approve_task,
+        patch("src.cyberagent.services.tasks.finalize_task_review") as finalize_review,
     ):
         await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
 
-    approve_task.assert_not_called()
+    finalize_review.assert_not_called()
     set_cases.assert_called_once()
     stored_cases = set_cases.call_args.args[1]
     assert len(stored_cases) == 1
@@ -468,6 +505,7 @@ async def test_system3_task_review_parse_failure_marks_retry_exhausted_after_max
     class DummyTask:
         id = 42
         assignee = "System1/root"
+        status = Status.COMPLETED
         case_judgement = (
             '[{"kind":"review_parse_failure","phase":"fallback","retry_count":1}]'
         )
@@ -492,11 +530,11 @@ async def test_system3_task_review_parse_failure_marks_retry_exhausted_after_max
         patch.object(system3, "_get_systems_by_type", return_value=[DummySystem5()]),
         patch.object(system3, "run", mocked_run),
         patch("src.cyberagent.services.tasks.set_task_case_judgement") as set_cases,
-        patch("src.cyberagent.services.tasks.approve_task") as approve_task,
+        patch("src.cyberagent.services.tasks.finalize_task_review") as finalize_review,
     ):
         await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
 
-    approve_task.assert_not_called()
+    finalize_review.assert_not_called()
     set_cases.assert_called_once()
     stored_cases = set_cases.call_args.args[1]
     assert stored_cases[0]["retry_count"] == 2

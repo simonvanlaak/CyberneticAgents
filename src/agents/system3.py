@@ -22,7 +22,7 @@ from src.cyberagent.services import policies as policy_service
 from src.cyberagent.services import systems as system_service
 from src.cyberagent.services import tasks as task_service
 from src.cyberagent.db.models.system import get_system_from_agent_id
-from src.enums import PolicyJudgement, Status, SystemType
+from src.enums import PolicyJudgement, SystemType
 from src.cyberagent.db.init_db import init_db
 
 
@@ -334,12 +334,7 @@ class System3(SystemBase):
         task = task_service.get_task_by_id(message.task_id)
         if not task.assignee:
             raise ValueError("Task has no assignee")
-        task_status = getattr(task, "status", None)
-        status_value = getattr(task_status, "value", task_status)
-        if task_status == Status.BLOCKED or str(status_value).lower() in {
-            "blocked",
-            "status.blocked",
-        }:
+        if not task_service.is_review_eligible_for_task(task):
             return
         policy_chunk = policy_service.get_system_policy_prompts(task.assignee)
         policy_systems = self._get_systems_by_type(SystemType.POLICY)
@@ -447,8 +442,7 @@ class System3(SystemBase):
                         )
                         # response of system 5 will be handled in a different message handler
                     elif case.judgement == PolicyJudgement.SATISFIED:
-                        task_service.approve_task(task)
-                        # check if system should get another task assigned
+                        continue
                     elif case.judgement == PolicyJudgement.VAGUE:
                         await self._publish_message_to_agent(
                             PolicyVagueMessage(
@@ -462,7 +456,7 @@ class System3(SystemBase):
                         # system 5 will call this message handler again once it has clarified the policy.
                     else:
                         raise ValueError("Invalid policy judgement")
-            task_service.set_task_case_judgement(task, all_cases)
+            task_service.finalize_task_review(task, all_cases)
         except Exception as exc:
             if isinstance(exc, InternalErrorRoutedError):
                 return
