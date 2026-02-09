@@ -184,7 +184,11 @@ def handle_onboarding(
         repo_url=str(getattr(args, "repo_url", "")).strip(),
         profile_links=list(getattr(args, "profile_links", []) or []),
     )
-    _start_discovery_background(args, team.id)
+    summary_path = _run_discovery_onboarding(args, team.id)
+    if summary_path is None:
+        print(get_message("onboarding", "discovery_failed"))
+        print(get_message("onboarding", "discovery_failed_hint"))
+        return 1
     if auto_execute:
         if not _trigger_onboarding_initiative(
             team.id,
