@@ -318,13 +318,23 @@ class System3(SystemBase):
         if task.assignee is None:
             raise ValueError("Task assignee cannot be None")
 
+        capability_gap_context = {
+            "task_id": message.task_id,
+            "task_name": getattr(task, "name", ""),
+            "task_content": getattr(task, "content", ""),
+            "assignee": task.assignee,
+            "gap_summary": message.content,
+        }
         message_specific_prompts = [
             "You have received a capability gap message.",
             "A System 1 has failed to complete a task, because it is lacking specific capabilities.",
+            "## CAPABILITY GAP CONTEXT",
+            json.dumps(capability_gap_context, indent=4),
             "You need to identify an alternative System 1 that can handle the task.",
             f"If you successfully identify an alternative System 1, assign it the task using the {self.assign_task.__name__} tool.",
             f"If you fail to identify an alternative System 1, you must escalate the capability gap to System 5 using the {self.capability_gap_tool.__name__} tool.",
             f"You must call either the {self.assign_task.__name__} or the {self.capability_gap_tool.__name__} tool.",
+            f"The affected task_id is {message.task_id}. Any tool call must use this exact task_id; never use 0 or placeholders.",
         ]
         response = await self.run([message], ctx, message_specific_prompts)
         if not (

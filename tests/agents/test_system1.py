@@ -359,3 +359,50 @@ async def test_system1_blocked_also_requests_task_review(
         for call in system1._publish_message_to_agent.await_args_list  # type: ignore[attr-defined]
     ]
     assert TaskReviewMessage.__name__ in published_types
+
+
+@pytest.mark.asyncio
+async def test_system1_requests_structured_task_execution_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    system1 = System1("System1/worker1")
+    message = TaskAssignMessage(
+        task_id=23,
+        assignee_agent_id_str="System1/worker1",
+        source="System3/root",
+        content="Define scope",
+    )
+    ctx = MessageContext(
+        sender=AgentId.from_str("System3/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="structured-execution-output",
+    )
+
+    class _DummyTask:
+        pass
+
+    monkeypatch.setattr(
+        "src.cyberagent.services.tasks.start_task", lambda _task_id: _DummyTask()
+    )
+    monkeypatch.setattr("src.cyberagent.services.tasks.complete_task", lambda *_: None)
+    mocked_run = AsyncMock(
+        return_value=TaskResult(
+            messages=[
+                TextMessage(
+                    content='{"status":"done","result":"Task executed","reasoning":null}',
+                    source="System1/worker1",
+                )
+            ]
+        )
+    )
+    monkeypatch.setattr(system1, "run", mocked_run)
+    system1._publish_message_to_agent = AsyncMock()  # type: ignore[attr-defined]
+
+    await system1.handle_assign_task_message(message=message, ctx=ctx)  # type: ignore[call-arg]
+
+    assert mocked_run.await_count == 1
+    await_args = mocked_run.await_args
+    assert await_args is not None
+    assert await_args.kwargs["output_content_type"].__name__ == "TaskExecutionResult"

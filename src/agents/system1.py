@@ -65,7 +65,11 @@ class System1(SystemBase):
         else:
             self.task_requestor = AgentId.from_str(message.source)
         task = task_service.start_task(message.task_id)
-        response = await self.run([message], ctx)
+        response = await self.run(
+            [message],
+            ctx,
+            output_content_type=TaskExecutionResult,
+        )
         latest_message = self._get_last_message(response)
         raw_result = (
             latest_message.to_model_text()

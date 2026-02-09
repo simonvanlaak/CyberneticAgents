@@ -693,3 +693,58 @@ async def test_system3_capability_gap_retries_tool_args_json_error_without_routi
 
     assert system3._agent.run.await_count == 2
     system3._publish_message_to_agent.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_system3_capability_gap_prompt_includes_exact_task_context(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    system3 = System3("System3/controller1")
+
+    class DummyTask:
+        assignee = "System1/root"
+        id = 7
+        name = "Define workshop objectives and key questions"
+        content = "Outline workshop goals and key questions."
+
+    monkeypatch.setattr(
+        "src.cyberagent.services.tasks._get_task", lambda _task_id: DummyTask()
+    )
+
+    captured_prompts: list[str] = []
+
+    async def _fake_run(
+        _messages,
+        _ctx,
+        message_specific_prompts=None,
+        output_content_type=None,
+        **_kwargs,
+    ):
+        _ = output_content_type
+        if message_specific_prompts:
+            captured_prompts.extend(message_specific_prompts)
+        return TaskResult(messages=[TextMessage(content="ok", source="System3/root")])
+
+    monkeypatch.setattr(system3, "run", _fake_run)
+    monkeypatch.setattr(system3, "_was_tool_called", lambda *_args, **_kwargs: True)
+
+    message = CapabilityGapMessage(
+        task_id=7,
+        content="Ambiguous or non-JSON task execution output.",
+        assignee_agent_id_str="System1/root",
+        source="System1/root",
+    )
+    context = MessageContext(
+        sender=AgentId.from_str("System1/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="capability-gap-prompt-context",
+    )
+
+    await system3.handle_capability_gap_message(message, context)  # type: ignore[arg-type]
+
+    joined = "\n".join(captured_prompts)
+    assert "The affected task_id is 7." in joined
+    assert "never use 0 or placeholders" in joined
+    assert "Define workshop objectives and key questions" in joined
