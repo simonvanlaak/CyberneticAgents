@@ -1,20 +1,25 @@
 from __future__ import annotations
 
+from src.cli_session import InboxEntry
 from src.cyberagent.ui import dashboard
 from src.cyberagent.ui.teams_data import TeamMemberView, TeamWithMembersView
 
 
 class _FakeStreamlit:
     def __init__(self) -> None:
+        self.subheaders: list[str] = []
+        self.captions: list[str] = []
         self.dataframe_calls: list[dict[str, object]] = []
+        self.dataframe_data: list[object] = []
         self.info_messages: list[str] = []
         self.code_values: list[str] = []
+        self.checkbox_values: dict[str, bool] = {}
 
-    def subheader(self, _text: str) -> None:
-        return
+    def subheader(self, text: str) -> None:
+        self.subheaders.append(text)
 
-    def caption(self, _text: str) -> None:
-        return
+    def caption(self, text: str) -> None:
+        self.captions.append(text)
 
     def info(self, text: str) -> None:
         self.info_messages.append(text)
@@ -22,7 +27,11 @@ class _FakeStreamlit:
     def code(self, text: str) -> None:
         self.code_values.append(text)
 
+    def checkbox(self, label: str, value: bool = False) -> bool:
+        return self.checkbox_values.get(label, value)
+
     def dataframe(self, _data: object, **kwargs: object) -> None:
+        self.dataframe_data.append(_data)
         self.dataframe_calls.append(kwargs)
 
 
@@ -87,3 +96,104 @@ def test_render_case_judgement_invalid_json_uses_code() -> None:
     dashboard._render_case_judgement(fake_st, "not-json")
 
     assert fake_st.code_values == ["not-json"]
+
+
+def test_render_inbox_page_excludes_answered_questions_by_default(
+    monkeypatch,
+) -> None:
+    fake_st = _FakeStreamlit()
+    monkeypatch.setattr(
+        dashboard,
+        "list_inbox_entries",
+        lambda **_: [
+            InboxEntry(
+                entry_id=1,
+                kind="user_prompt",
+                content="hello",
+                created_at=1.0,
+                channel="cli",
+                session_id="cli-main",
+            ),
+            InboxEntry(
+                entry_id=2,
+                kind="system_question",
+                content="pending question",
+                created_at=2.0,
+                channel="cli",
+                session_id="cli-main",
+                asked_by="System4/root",
+                status="pending",
+            ),
+            InboxEntry(
+                entry_id=3,
+                kind="system_question",
+                content="answered question",
+                created_at=3.0,
+                channel="cli",
+                session_id="cli-main",
+                asked_by="System4/root",
+                status="answered",
+                answer="done",
+            ),
+            InboxEntry(
+                entry_id=4,
+                kind="system_response",
+                content="status update",
+                created_at=4.0,
+                channel="cli",
+                session_id="cli-main",
+            ),
+        ],
+    )
+
+    dashboard.render_inbox_page(fake_st)
+
+    assert fake_st.subheaders == [
+        "User Prompts",
+        "System Questions",
+        "System Responses",
+    ]
+    question_rows = fake_st.dataframe_data[1]
+    assert isinstance(question_rows, list)
+    assert [row["content"] for row in question_rows] == ["pending question"]
+
+
+def test_render_inbox_page_can_include_answered_questions(monkeypatch) -> None:
+    fake_st = _FakeStreamlit()
+    fake_st.checkbox_values["Include answered questions"] = True
+    monkeypatch.setattr(
+        dashboard,
+        "list_inbox_entries",
+        lambda **_: [
+            InboxEntry(
+                entry_id=10,
+                kind="system_question",
+                content="pending question",
+                created_at=10.0,
+                channel="cli",
+                session_id="cli-main",
+                asked_by="System4/root",
+                status="pending",
+            ),
+            InboxEntry(
+                entry_id=11,
+                kind="system_question",
+                content="answered question",
+                created_at=11.0,
+                channel="cli",
+                session_id="cli-main",
+                asked_by="System4/root",
+                status="answered",
+                answer="done",
+            ),
+        ],
+    )
+
+    dashboard.render_inbox_page(fake_st)
+
+    question_rows = fake_st.dataframe_data[0]
+    assert isinstance(question_rows, list)
+    assert [row["content"] for row in question_rows] == [
+        "pending question",
+        "answered question",
+    ]

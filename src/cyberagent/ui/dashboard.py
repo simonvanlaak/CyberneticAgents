@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import json
+import os
 from typing import Any
 
 try:
@@ -14,6 +15,7 @@ try:
     from src.cyberagent.ui.teams_data import load_teams_with_members
     from src.cyberagent.ui.dashboard_log_badge import count_warnings_errors
     from src.cyberagent.core.paths import get_logs_dir
+    from src.cli_session import list_inbox_entries
 except ModuleNotFoundError:
     from kanban_data import (
         KANBAN_STATUSES,
@@ -24,6 +26,7 @@ except ModuleNotFoundError:
     from teams_data import load_teams_with_members
     from dashboard_log_badge import count_warnings_errors
     from src.cyberagent.core.paths import get_logs_dir
+    from cli_session import list_inbox_entries
 
 
 def _load_streamlit() -> Any:
@@ -153,6 +156,77 @@ def _render_task_details_page(st: Any, title_col: Any) -> None:
         st.rerun()
 
 
+def render_inbox_page(st: Any) -> None:
+    include_answered = st.checkbox("Include answered questions", value=False)
+    entries = list_inbox_entries()
+    if not include_answered:
+        entries = [
+            entry
+            for entry in entries
+            if not (entry.kind == "system_question" and entry.status == "answered")
+        ]
+    if not entries:
+        st.info("No messages in inbox.")
+        return
+    if any(entry.channel == "telegram" for entry in entries) and not os.environ.get(
+        "TELEGRAM_BOT_TOKEN"
+    ):
+        st.caption("Telegram delivery is disabled (missing TELEGRAM_BOT_TOKEN).")
+
+    user_prompts = [entry for entry in entries if entry.kind == "user_prompt"]
+    system_questions = [entry for entry in entries if entry.kind == "system_question"]
+    system_responses = [entry for entry in entries if entry.kind == "system_response"]
+
+    if user_prompts:
+        st.subheader("User Prompts")
+        st.dataframe(
+            [
+                {
+                    "id": entry.entry_id,
+                    "content": entry.content,
+                    "channel": entry.channel,
+                    "session_id": entry.session_id,
+                }
+                for entry in user_prompts
+            ],
+            width="stretch",
+            hide_index=True,
+        )
+    if system_questions:
+        st.subheader("System Questions")
+        st.dataframe(
+            [
+                {
+                    "id": entry.entry_id,
+                    "content": entry.content,
+                    "asked_by": entry.asked_by or "System4",
+                    "status": entry.status or "pending",
+                    "answer": entry.answer or "",
+                    "channel": entry.channel,
+                    "session_id": entry.session_id,
+                }
+                for entry in system_questions
+            ],
+            width="stretch",
+            hide_index=True,
+        )
+    if system_responses:
+        st.subheader("System Responses")
+        st.dataframe(
+            [
+                {
+                    "id": entry.entry_id,
+                    "content": entry.content,
+                    "channel": entry.channel,
+                    "session_id": entry.session_id,
+                }
+                for entry in system_responses
+            ],
+            width="stretch",
+            hide_index=True,
+        )
+
+
 def render_board() -> None:
     st = _load_streamlit()
     st.set_page_config(page_title="CyberneticAgents Kanban", layout="wide")
@@ -162,7 +236,7 @@ def render_board() -> None:
     with badge_col:
         st.markdown(f"⚠️ **{warnings}**  ❌ **{errors}**")
 
-    pages = ["Kanban", "Teams"]
+    pages = ["Kanban", "Teams", "Inbox"]
     if st.session_state.get("dashboard_selected_task_id") is not None:
         pages.append("Task Details")
     current_page = st.session_state.get("dashboard_page", "Kanban")
@@ -173,6 +247,11 @@ def render_board() -> None:
         with title_col:
             st.title("CyberneticAgents Teams (Read-Only)")
         render_teams_page(st)
+        return
+    if page == "Inbox":
+        with title_col:
+            st.title("CyberneticAgents Inbox (Read-Only)")
+        render_inbox_page(st)
         return
     if page == "Task Details":
         _render_task_details_page(st, title_col)
