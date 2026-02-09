@@ -1,5 +1,6 @@
 import logging
 import os
+import json
 from typing import TYPE_CHECKING, Any, List
 
 from autogen_agentchat.agents import AssistantAgent
@@ -302,6 +303,9 @@ class SystemBase(RoutedAgent):
         include_memory_context: bool = True,
     ) -> TaskResult:
         mark_team_active(self.team_id)
+        prompts = list(message_specific_prompts)
+        if output_content_type is not None:
+            prompts.extend(self._build_output_contract_prompts(output_content_type))
         self._agent._reflect_on_tool_use = output_content_type is not None
         if output_content_type is None:
             model_client = get_model_client(self.agent_id, False)
@@ -318,7 +322,7 @@ class SystemBase(RoutedAgent):
         memory_context = (
             self._build_memory_context(last_message) if include_memory_context else []
         )
-        await self._set_system_prompt(message_specific_prompts, memory_context)
+        await self._set_system_prompt(prompts, memory_context)
         self._agent._output_content_type = output_content_type
         message_trace_context_raw = (
             last_message.metadata.get("trace_context", {})
@@ -387,6 +391,28 @@ class SystemBase(RoutedAgent):
             task_result: TaskResult = await self._agent.run(
                 task=chat_messages, cancellation_token=ctx.cancellation_token
             )
+            if output_content_type is not None:
+                parse_error = self._get_structured_parse_error(
+                    task_result, output_content_type
+                )
+                if parse_error is not None:
+                    logger.warning(
+                        "Structured output parse failed for %s. Retrying once.",
+                        output_content_type.__name__,
+                    )
+                    retry_messages: list[BaseTextChatMessage] = [
+                        *chat_messages,
+                        TextMessage(
+                            source=self.name,
+                            content=self._build_output_retry_instruction(
+                                output_content_type
+                            ),
+                        ),
+                    ]
+                    task_result = await self._agent.run(
+                        task=retry_messages,
+                        cancellation_token=ctx.cancellation_token,
+                    )
         self._record_session_logs(chat_messages, task_result)
         for message in task_result.messages:
             if isinstance(message, ToolCallRequestEvent):
@@ -418,6 +444,37 @@ class SystemBase(RoutedAgent):
         task_result.messages[-1].metadata["tracestate"] = ""
 
         return task_result
+
+    def _build_output_contract_prompts(
+        self, output_content_type: type[BaseModel]
+    ) -> list[str]:
+        schema = json.dumps(output_content_type.model_json_schema(), ensure_ascii=True)
+        return [
+            "# OUTPUT CONTRACT",
+            f"Expected response type: {output_content_type.__name__}",
+            "Return strict JSON only. Do not include prose, markdown, or explanations.",
+            "The JSON response must match this schema exactly:",
+            schema,
+        ]
+
+    def _build_output_retry_instruction(
+        self, output_content_type: type[BaseModel]
+    ) -> str:
+        schema = json.dumps(output_content_type.model_json_schema(), ensure_ascii=True)
+        return (
+            "Return strict JSON only with no prose or markdown. "
+            f"Your output must match the {output_content_type.__name__} schema exactly: "
+            f"{schema}"
+        )
+
+    def _get_structured_parse_error(
+        self, result: TaskResult, output_content_type: type[BaseModel]
+    ) -> str | None:
+        try:
+            self._get_structured_message(result, output_content_type)
+            return None
+        except ValueError as exc:
+            return str(exc)
 
     @message_handler
     async def handle_tool_call_summary(

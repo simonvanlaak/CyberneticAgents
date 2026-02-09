@@ -18,6 +18,7 @@ from autogen_core.tools import Tool, ToolSchema
 
 from src.agents.system_base import ToolChoiceRequiredClient, SystemBase
 from src.enums import SystemType
+from pydantic import BaseModel
 
 
 class DummyModelClient(ChatCompletionClient):
@@ -95,6 +96,10 @@ class DummySystem(SystemBase):
         return []
 
 
+class DummyStructuredResponse(BaseModel):
+    value: str
+
+
 @pytest.mark.asyncio
 async def test_tool_choice_required_client_forces_required() -> None:
     client = DummyModelClient()
@@ -140,3 +145,95 @@ async def test_run_wraps_model_client_when_tool_choice_required(
 
     await system.run([message], context, tool_choice_required=True)
     assert isinstance(system._agent._model_client, ToolChoiceRequiredClient)
+
+
+@pytest.mark.asyncio
+async def test_run_adds_output_contract_prompt_for_structured_output(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    system = DummySystem()
+    captured_prompts: list[str] = []
+
+    async def fake_set_system_prompt(
+        prompts: list[str], _memory_context: list[str] | None = None
+    ) -> None:
+        captured_prompts.extend(prompts)
+
+    monkeypatch.setattr(system, "_set_system_prompt", fake_set_system_prompt)
+    monkeypatch.setattr(system, "_build_memory_context", lambda *_args: [])
+    monkeypatch.setattr(
+        "src.agents.system_base.mark_team_active", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        "src.agents.system_base.get_model_client",
+        lambda *_args, **_kwargs: DummyModelClient(),
+    )
+    system._agent.run = AsyncMock(
+        return_value=TaskResult(
+            messages=[TextMessage(content='{"value":"ok"}', source="System4/root")]
+        )
+    )
+
+    message = TextMessage(content="hello", source="User")
+    context = MessageContext(
+        sender=AgentId.from_str("User/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="structured_contract_test",
+    )
+
+    await system.run([message], context, output_content_type=DummyStructuredResponse)
+    assert any("OUTPUT CONTRACT" in prompt for prompt in captured_prompts)
+    assert any(
+        "DummyStructuredResponse" in prompt or "value" in prompt
+        for prompt in captured_prompts
+    )
+
+
+@pytest.mark.asyncio
+async def test_run_retries_once_when_structured_output_is_invalid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    system = DummySystem()
+
+    async def fake_set_system_prompt(
+        _prompts: list[str], _memory_context: list[str] | None = None
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(system, "_set_system_prompt", fake_set_system_prompt)
+    monkeypatch.setattr(system, "_build_memory_context", lambda *_args: [])
+    monkeypatch.setattr(
+        "src.agents.system_base.mark_team_active", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        "src.agents.system_base.get_model_client",
+        lambda *_args, **_kwargs: DummyModelClient(),
+    )
+    system._agent.run = AsyncMock(
+        side_effect=[
+            TaskResult(
+                messages=[TextMessage(content="not-json", source="System4/root")]
+            ),
+            TaskResult(
+                messages=[TextMessage(content='{"value":"ok"}', source="System4/root")]
+            ),
+        ]
+    )
+
+    message = TextMessage(content="hello", source="User")
+    context = MessageContext(
+        sender=AgentId.from_str("User/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="structured_retry_test",
+    )
+
+    await system.run([message], context, output_content_type=DummyStructuredResponse)
+    assert system._agent.run.await_count == 2
+    second_call = system._agent.run.await_args_list[1]
+    retry_messages = second_call.kwargs["task"]
+    assert len(retry_messages) == 2
+    assert "Return strict JSON" in retry_messages[-1].content
