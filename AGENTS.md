@@ -12,6 +12,17 @@ Always keep this file up-to-date with newest requirements for the agent.
 3. Implement the plan.
 4. After completion, write the feature description in `docs/features/` and delete the PRD and technical plan.
 
+## Docs Directory Rules
+- `docs/product_requirements/`: PRDs for new features.
+- `docs/technical/`: technical plans, bugs, and security notes.
+- `docs/features/`: completed feature write-ups.
+- `docs/technical/bugs/` and `docs/technical/security/` file naming is mandatory:
+  - Every file must start with a date in `YYYY-MM-DD` format.
+  - After the date, include a descriptive name.
+  - Example: `2026-02-09-task-review-not-completing.md`.
+- Lifecycle rule for `docs/technical/bugs/` and `docs/technical/security/`:
+  - Delete the file once the issue is resolved.
+
 ## Security
 Never commit or publish real phone numbers, videos, or live configuration values. Use obviously fake placeholders in docs, tests, and examples.
 
