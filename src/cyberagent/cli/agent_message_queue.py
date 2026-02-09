@@ -138,6 +138,107 @@ def ack_agent_message(path: Path) -> None:
         logger.warning("Failed to remove agent message %s: %s", path, exc)
 
 
+def list_dead_letter_agent_messages() -> list[QueuedAgentMessage]:
+    """
+    Load dead-lettered agent messages in stable order.
+    """
+    if not AGENT_MESSAGE_DEAD_LETTER_DIR.exists():
+        return []
+    messages: list[QueuedAgentMessage] = []
+    for path in sorted(AGENT_MESSAGE_DEAD_LETTER_DIR.glob("*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("Failed to read dead-letter message %s: %s", path, exc)
+            continue
+        recipient = data.get("recipient")
+        message_type = data.get("message_type")
+        payload = data.get("payload")
+        if not isinstance(recipient, str) or not recipient:
+            continue
+        if not isinstance(message_type, str) or not message_type:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        sender = data.get("sender")
+        sender_value = sender if isinstance(sender, str) else None
+        raw_idempotency_key = data.get("idempotency_key")
+        idempotency_key = (
+            raw_idempotency_key
+            if isinstance(raw_idempotency_key, str) and raw_idempotency_key
+            else _build_agent_message_idempotency_key(
+                recipient=recipient,
+                sender=sender_value,
+                message_type=message_type,
+                payload=payload,
+            )
+        )
+        queued_at = data.get("queued_at")
+        queued_at_value = queued_at if isinstance(queued_at, (int, float)) else 0.0
+        attempts = data.get("attempts")
+        attempts_value = attempts if isinstance(attempts, int) and attempts >= 0 else 0
+        next_attempt_at = data.get("next_attempt_at")
+        next_attempt_at_value = (
+            next_attempt_at if isinstance(next_attempt_at, (int, float)) else 0.0
+        )
+        messages.append(
+            QueuedAgentMessage(
+                path=path,
+                recipient=recipient,
+                sender=sender_value,
+                message_type=message_type,
+                payload=payload,
+                idempotency_key=idempotency_key,
+                queued_at=queued_at_value,
+                attempts=attempts_value,
+                next_attempt_at=next_attempt_at_value,
+            )
+        )
+    return messages
+
+
+def requeue_dead_letter_agent_message(path: Path) -> Path | None:
+    """
+    Move a dead-letter message back to the active queue for retry.
+    """
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning(
+            "Failed to read dead-letter message %s for requeue: %s", path, exc
+        )
+        return None
+    data.pop("dead_lettered_at", None)
+    data.pop("last_error", None)
+    data.pop("last_failed_at", None)
+    data["attempts"] = 0
+    data["next_attempt_at"] = 0.0
+    AGENT_MESSAGE_QUEUE_DIR.mkdir(parents=True, exist_ok=True)
+    target = AGENT_MESSAGE_QUEUE_DIR / path.name
+    try:
+        tmp_path = target.with_suffix(".tmp")
+        tmp_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+        tmp_path.replace(target)
+        path.unlink(missing_ok=True)
+        return target
+    except OSError as exc:
+        logger.warning("Failed to requeue dead-letter message %s: %s", path, exc)
+        return None
+
+
+def requeue_all_dead_letter_agent_messages(limit: int | None = None) -> int:
+    """
+    Requeue dead-letter messages up to ``limit`` entries.
+    """
+    moved = 0
+    for message in list_dead_letter_agent_messages():
+        if limit is not None and moved >= limit:
+            break
+        if requeue_dead_letter_agent_message(message.path) is not None:
+            moved += 1
+    return moved
+
+
 def defer_agent_message(
     *,
     path: Path,

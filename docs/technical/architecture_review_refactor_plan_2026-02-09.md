@@ -84,7 +84,7 @@ Critical review of the current project architecture across runtime, agent orches
 ### Phase 4 Progress
 - [x] Step 1: Add idempotency keys to queued messages.
 - [x] Step 2: Add processed-message journal for replay-safe startup.
-- [ ] Step 3: Harden dead-letter recovery tooling (`cyberagent inbox`/ops command).
+- [x] Step 3: Harden dead-letter recovery tooling (`cyberagent inbox`/ops command).
 
 ## Phase 0: Stabilization (1 sprint)
 1. Fix entrypoint architecture debt:

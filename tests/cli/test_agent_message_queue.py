@@ -75,3 +75,35 @@ def test_enqueue_agent_message_accepts_explicit_idempotency_key(tmp_path: Path) 
     assert path.exists()
     assert len(queued) == 1
     assert queued[0].idempotency_key == "resume:initiative:1"
+
+
+def test_requeue_dead_letter_agent_message_moves_message_to_queue(
+    tmp_path: Path,
+) -> None:
+    agent_message_queue.AGENT_MESSAGE_QUEUE_DIR = tmp_path / "queue"
+    agent_message_queue.AGENT_MESSAGE_DEAD_LETTER_DIR = tmp_path / "dead_letter"
+    path = agent_message_queue.enqueue_agent_message(
+        recipient="System3/root",
+        sender="System4/root",
+        message_type="initiative_assign",
+        payload={"initiative_id": 1, "source": "System4_root", "content": "Resume."},
+    )
+    agent_message_queue.defer_agent_message(
+        path=path,
+        error="connection error",
+        now_ts=100.0,
+        max_attempts=1,
+    )
+    dead_letters = agent_message_queue.list_dead_letter_agent_messages()
+    assert len(dead_letters) == 1
+
+    moved_path = agent_message_queue.requeue_dead_letter_agent_message(
+        dead_letters[0].path
+    )
+    assert moved_path is not None
+    assert moved_path.exists()
+    assert not dead_letters[0].path.exists()
+
+    queued = agent_message_queue.read_queued_agent_messages()
+    assert len(queued) == 1
+    assert queued[0].attempts == 0
