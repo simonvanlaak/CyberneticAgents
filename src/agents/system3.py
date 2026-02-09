@@ -292,6 +292,7 @@ class System3(SystemBase):
         policy_chunks = [
             policy_chunk[i : i + 5] for i in range(0, len(policy_chunk), 5)
         ]
+        all_cases: list[dict[str, object]] = []
         for policy_chunk in policy_chunks:
             message_specific_prompts = [
                 f"Review task result {task.id} for if it violates any policy."
@@ -332,6 +333,13 @@ class System3(SystemBase):
                 )
 
             for case in cases_response.cases:
+                all_cases.append(
+                    {
+                        "policy_id": case.policy_id,
+                        "judgement": case.judgement.value,
+                        "reasoning": case.reasoning,
+                    }
+                )
                 if case.judgement == PolicyJudgement.VIOLATED:
                     await self._publish_message_to_agent(
                         PolicyViolationMessage(
@@ -360,6 +368,7 @@ class System3(SystemBase):
                     # system 5 will call this message handler again once it has clarified the policy.
                 else:
                     raise ValueError("Invalid policy judgement")
+        task_service.set_task_case_judgement(task, all_cases)
 
     def _is_json_generation_failure(self, exc: Exception) -> bool:
         text = str(exc).lower()

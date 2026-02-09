@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import importlib
+import json
 from typing import Any
 
 try:
     from src.cyberagent.ui.kanban_data import (
         KANBAN_STATUSES,
         group_tasks_by_hierarchy,
+        load_task_detail,
         load_task_cards,
     )
     from src.cyberagent.ui.teams_data import load_teams_with_members
@@ -16,6 +18,7 @@ except ModuleNotFoundError:
     from kanban_data import (
         KANBAN_STATUSES,
         group_tasks_by_hierarchy,
+        load_task_detail,
         load_task_cards,
     )
     from teams_data import load_teams_with_members
@@ -90,6 +93,66 @@ def _apply_filters(
     return team_id, strategy_id, initiative_id, assignee
 
 
+def _open_task_details(st: Any, task_id: int) -> None:
+    st.session_state["dashboard_selected_task_id"] = task_id
+    st.session_state["dashboard_page"] = "Task Details"
+    st.rerun()
+
+
+def _render_case_judgement(st: Any, case_judgement: str | None) -> None:
+    if not case_judgement:
+        st.caption("No case judgement recorded.")
+        return
+    try:
+        parsed = json.loads(case_judgement)
+    except json.JSONDecodeError:
+        st.code(case_judgement)
+        return
+    if not isinstance(parsed, list):
+        st.code(case_judgement)
+        return
+    if len(parsed) == 0:
+        st.caption("No case judgement recorded.")
+        return
+    st.dataframe(parsed, use_container_width=True, hide_index=True)
+
+
+def _render_task_details_page(st: Any, title_col: Any) -> None:
+    task_id = st.session_state.get("dashboard_selected_task_id")
+    with title_col:
+        st.title("CyberneticAgents Task Details")
+    if task_id is None:
+        st.info("Select a task from the Kanban board.")
+        return
+    task = load_task_detail(int(task_id))
+    if task is None:
+        st.error(f"Task #{task_id} not found.")
+        return
+
+    st.subheader(f"Task #{task.id}: {task.name}")
+    st.markdown(
+        "\n".join(
+            [
+                f"- Status: `{task.status}`",
+                f"- Assignee: `{task.assignee or '-'}`",
+                f"- Team: `{task.team_name}` (`{task.team_id}`)",
+                f"- Purpose: `{task.purpose_name or '-'}`",
+                f"- Strategy: `{task.strategy_name or '-'}`",
+                f"- Initiative: `{task.initiative_name or '-'}` (`{task.initiative_id or '-'}`)",
+            ]
+        )
+    )
+    st.subheader("Task Content")
+    st.write(task.content or "-")
+    st.subheader("Task Result")
+    st.write(task.result or "-")
+    st.subheader("Case Judgement")
+    _render_case_judgement(st, task.case_judgement)
+    if st.button("Back to Kanban"):
+        st.session_state["dashboard_page"] = "Kanban"
+        st.rerun()
+
+
 def render_board() -> None:
     st = _load_streamlit()
     st.set_page_config(page_title="CyberneticAgents Kanban", layout="wide")
@@ -99,11 +162,20 @@ def render_board() -> None:
     with badge_col:
         st.markdown(f"⚠️ **{warnings}**  ❌ **{errors}**")
 
-    page = st.sidebar.selectbox("Page", ["Kanban", "Teams"])
+    pages = ["Kanban", "Teams"]
+    if st.session_state.get("dashboard_selected_task_id") is not None:
+        pages.append("Task Details")
+    current_page = st.session_state.get("dashboard_page", "Kanban")
+    default_idx = pages.index(current_page) if current_page in pages else 0
+    page = st.sidebar.selectbox("Page", pages, index=default_idx)
+    st.session_state["dashboard_page"] = page
     if page == "Teams":
         with title_col:
             st.title("CyberneticAgents Teams (Read-Only)")
         render_teams_page(st)
+        return
+    if page == "Task Details":
+        _render_task_details_page(st, title_col)
         return
 
     with title_col:
@@ -141,14 +213,13 @@ def render_board() -> None:
                 continue
             for task in cards:
                 assignee_text = task.assignee or "-"
-                column.markdown(
-                    "\n".join(
-                        [
-                            f"**#{task.id} {task.name}**",
-                            f"- Assignee: `{assignee_text}`",
-                        ]
-                    )
-                )
+                if column.button(
+                    f"#{task.id} {task.name}",
+                    key=f"task_open_{task.id}",
+                    use_container_width=True,
+                ):
+                    _open_task_details(st, task.id)
+                column.caption(f"Assignee: {assignee_text}")
                 column.divider()
 
     st.subheader("Task Table")

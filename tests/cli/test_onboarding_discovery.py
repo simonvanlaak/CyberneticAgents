@@ -456,6 +456,179 @@ def test_fetch_profile_links_calls_callback(
     assert calls == [("https://example.com/profile", "Profile content")]
 
 
+def test_discovery_repo_sync_stores_split_markdown_memory_entries(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    args = _default_args()
+    repo_dir = tmp_path / "repo"
+    (repo_dir / "notes").mkdir(parents=True)
+    (repo_dir / "notes" / "alpha.md").write_text(
+        "# Alpha\nAlpha line 1\nAlpha line 2\n", encoding="utf-8"
+    )
+    (repo_dir / "notes" / "beta.md").write_text(
+        "# Beta\nBeta line 1\nBeta line 2\n", encoding="utf-8"
+    )
+    captured_entries: list[dict[str, object]] = []
+
+    monkeypatch.setattr(
+        onboarding_discovery, "_ensure_onboarding_token", lambda *_: True
+    )
+    _stub_messages(monkeypatch)
+    monkeypatch.setattr(onboarding_discovery, "has_onepassword_auth", lambda: False)
+    monkeypatch.setattr(
+        onboarding_discovery,
+        "load_secret_from_1password_with_error",
+        lambda **_kwargs: ("token", None),
+    )
+    monkeypatch.setattr(onboarding_discovery, "_create_cli_tool", lambda: object())
+    _stub_system4(monkeypatch)
+    monkeypatch.setattr(
+        onboarding_discovery, "_resolve_default_branch", lambda *_: "main"
+    )
+    monkeypatch.setattr(
+        onboarding_discovery, "_sync_obsidian_repo", lambda **_: (repo_dir, True)
+    )
+    monkeypatch.setattr(
+        onboarding_discovery,
+        "_fetch_profile_links",
+        lambda *_args, **_kwargs: "",
+    )
+    monkeypatch.setattr(onboarding_discovery, "store_onboarding_memory", lambda *_: None)
+    monkeypatch.setattr(onboarding_discovery, "enqueue_suggestion", lambda *_: None)
+    monkeypatch.setattr(
+        onboarding_discovery,
+        "_write_onboarding_summary",
+        lambda _text: tmp_path / "summary.md",
+    )
+
+    def _capture_store_entry(
+        *,
+        team_id: int,
+        content: str,
+        tags: list[str],
+        source: object,
+        priority: object,
+        layer: object,
+        namespace: str = "user",
+        confidence: float = 0.6,
+    ) -> None:
+        captured_entries.append(
+            {
+                "team_id": team_id,
+                "content": content,
+                "tags": tags,
+                "namespace": namespace,
+                "confidence": confidence,
+            }
+        )
+
+    monkeypatch.setattr(
+        onboarding_discovery, "store_onboarding_memory_entry", _capture_store_entry
+    )
+
+    summary_path = onboarding_discovery.run_discovery_onboarding(args, team_id=1)
+
+    assert summary_path == tmp_path / "summary.md"
+    pkm_overview = [
+        entry
+        for entry in captured_entries
+        if entry["tags"] == ["onboarding", "pkm"]
+    ]
+    assert len(pkm_overview) == 1
+    pkm_file_entries = [
+        entry for entry in captured_entries if "pkm_file" in cast(list[str], entry["tags"])
+    ]
+    assert len(pkm_file_entries) == 2
+    contents = [cast(str, entry["content"]) for entry in pkm_file_entries]
+    assert any("PKM file: notes/alpha.md" in content for content in contents)
+    assert any("PKM file: notes/beta.md" in content for content in contents)
+
+
+def test_discovery_notion_sync_stores_split_item_memory_entries(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    args = _default_args()
+    args.pkm_source = "notion"
+    args.repo_url = ""
+    captured_entries: list[dict[str, object]] = []
+
+    monkeypatch.setattr(onboarding_discovery, "_ensure_notion_token", lambda *_: True)
+    _stub_messages(monkeypatch)
+    monkeypatch.setattr(onboarding_discovery, "has_onepassword_auth", lambda: False)
+    monkeypatch.setattr(
+        onboarding_discovery,
+        "load_secret_from_1password_with_error",
+        lambda **_kwargs: ("token", None),
+    )
+    monkeypatch.setattr(onboarding_discovery, "_create_cli_tool", lambda: object())
+    _stub_system4(monkeypatch)
+    monkeypatch.setattr(
+        onboarding_discovery,
+        "_sync_notion_workspace",
+        lambda **_: (
+            "Notion items analyzed: 2\n- [page] A\n- [database] B",
+            ["Notion item: [page] A", "Notion item: [database] B"],
+            True,
+        ),
+    )
+    monkeypatch.setattr(
+        onboarding_discovery,
+        "_fetch_profile_links",
+        lambda *_args, **_kwargs: "",
+    )
+    monkeypatch.setattr(onboarding_discovery, "store_onboarding_memory", lambda *_: None)
+    monkeypatch.setattr(onboarding_discovery, "enqueue_suggestion", lambda *_: None)
+    monkeypatch.setattr(
+        onboarding_discovery,
+        "_write_onboarding_summary",
+        lambda _text: tmp_path / "summary.md",
+    )
+
+    def _capture_store_entry(
+        *,
+        team_id: int,
+        content: str,
+        tags: list[str],
+        source: object,
+        priority: object,
+        layer: object,
+        namespace: str = "user",
+        confidence: float = 0.6,
+    ) -> None:
+        captured_entries.append(
+            {
+                "team_id": team_id,
+                "content": content,
+                "tags": tags,
+                "namespace": namespace,
+                "confidence": confidence,
+            }
+        )
+
+    monkeypatch.setattr(
+        onboarding_discovery, "store_onboarding_memory_entry", _capture_store_entry
+    )
+
+    summary_path = onboarding_discovery.run_discovery_onboarding(args, team_id=1)
+
+    assert summary_path == tmp_path / "summary.md"
+    pkm_overview = [
+        entry
+        for entry in captured_entries
+        if entry["tags"] == ["onboarding", "pkm"]
+    ]
+    assert len(pkm_overview) == 1
+    pkm_item_entries = [
+        entry
+        for entry in captured_entries
+        if "pkm_notion_item" in cast(list[str], entry["tags"])
+    ]
+    assert len(pkm_item_entries) == 2
+    contents = [cast(str, entry["content"]) for entry in pkm_item_entries]
+    assert any("Notion item: [page] A" in content for content in contents)
+    assert any("Notion item: [database] B" in content for content in contents)
+
+
 def test_sync_repo_reports_unknown_error_when_missing_details(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:

@@ -25,6 +25,8 @@ class TaskCard:
     assignee: Optional[str]
     name: str
     content: str
+    result: Optional[str]
+    case_judgement: Optional[str]
 
 
 @dataclass(frozen=True)
@@ -44,6 +46,14 @@ def _connect_db() -> sqlite3.Connection:
     conn = sqlite3.connect(get_database_path())
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def _task_column_expr(conn: sqlite3.Connection, column_name: str) -> str:
+    columns = conn.execute("PRAGMA table_info(tasks)").fetchall()
+    names = {str(row["name"]) for row in columns}
+    if column_name in names:
+        return f"t.{column_name}"
+    return "NULL"
 
 
 def _normalize_status(raw_status: object) -> str:
@@ -74,7 +84,10 @@ def load_task_cards(
         initiative_id: Optional initiative filter.
         assignee: Optional assignee filter.
     """
-    query = """
+    conn = _connect_db()
+    result_expr = _task_column_expr(conn, "result")
+    case_judgement_expr = _task_column_expr(conn, "case_judgement")
+    query = f"""
         SELECT
             t.id AS task_id,
             t.team_id AS team_id,
@@ -88,7 +101,9 @@ def load_task_cards(
             t.status AS status,
             t.assignee AS assignee,
             t.name AS task_name,
-            t.content AS task_content
+            t.content AS task_content,
+            {result_expr} AS task_result,
+            {case_judgement_expr} AS case_judgement
         FROM tasks t
         JOIN teams tm ON tm.id = t.team_id
         LEFT JOIN initiatives i ON i.id = t.initiative_id
@@ -113,7 +128,6 @@ def load_task_cards(
 
     query += " ORDER BY t.id"
 
-    conn = _connect_db()
     try:
         cursor = conn.cursor()
         rows = cursor.execute(query, tuple(params)).fetchall()
@@ -152,11 +166,33 @@ def load_task_cards(
                 assignee=str(row["assignee"]) if row["assignee"] is not None else None,
                 name=str(row["task_name"]),
                 content=str(row["task_content"]),
+                result=(
+                    str(row["task_result"]) if row["task_result"] is not None else None
+                ),
+                case_judgement=(
+                    str(row["case_judgement"])
+                    if row["case_judgement"] is not None
+                    else None
+                ),
             )
             for row in rows
         ]
     finally:
         conn.close()
+
+
+def load_task_detail(task_id: int) -> Optional[TaskCard]:
+    """
+    Load one task card by id with hierarchy and review fields.
+
+    Args:
+        task_id: Task identifier.
+    """
+    tasks = load_task_cards()
+    for task in tasks:
+        if task.id == task_id:
+            return task
+    return None
 
 
 def group_tasks_by_status(tasks: list[TaskCard]) -> dict[str, list[TaskCard]]:

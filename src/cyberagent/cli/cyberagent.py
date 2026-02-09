@@ -33,6 +33,7 @@ from src.agents.messages import UserMessage
 from src.cli_session import list_inbox_entries
 from src.cyberagent.channels.telegram.parser import build_session_id
 from src.cyberagent.cli import dev as dev_cli
+from src.cyberagent.cli import dashboard_launcher
 from src.cyberagent.cli.env_loader import load_op_service_account_token
 from src.cyberagent.cli import log_filters
 from src.cyberagent.cli import onboarding as onboarding_cli
@@ -417,8 +418,12 @@ async def _handle_restart(args: argparse.Namespace) -> int:
 
 
 def _handle_ui(_: argparse.Namespace) -> int:
+    dashboard_python = dashboard_launcher.resolve_dashboard_python()
+    if dashboard_python is None:
+        print(get_message("cyberagent", "streamlit_missing"), file=sys.stderr)
+        return 1
     dashboard_path = Path(__file__).resolve().parents[1] / "ui" / "dashboard.py"
-    cmd = [sys.executable, "-m", "streamlit", "run", str(dashboard_path)]
+    cmd = [dashboard_python, "-m", "streamlit", "run", str(dashboard_path)]
     result = subprocess.run(
         cmd,
         check=False,

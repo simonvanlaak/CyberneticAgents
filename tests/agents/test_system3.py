@@ -270,6 +270,7 @@ async def test_system3_task_review_falls_back_on_json_validate_failure():
         patch.object(system3, "_get_systems_by_type", return_value=[DummySystem5()]),
         patch.object(system3, "run", mocked_run),
         patch("src.cyberagent.services.tasks.approve_task") as approve_task,
+        patch("src.cyberagent.services.tasks.set_task_case_judgement"),
     ):
         await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
 
@@ -281,3 +282,68 @@ async def test_system3_task_review_falls_back_on_json_validate_failure():
     assert second_call.args[3] is None
     assert second_call.kwargs["include_memory_context"] is False
     approve_task.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_system3_task_review_persists_case_judgements() -> None:
+    system3 = System3("System3/controller1")
+    system3._publish_message_to_agent = AsyncMock()
+
+    message = TaskReviewMessage(
+        task_id=42,
+        assignee_agent_id_str="System1/root",
+        source="System1/root",
+        content="Task result",
+    )
+    context = MessageContext(
+        sender=AgentId.from_str("System1/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="task_review_store_cases",
+    )
+
+    class DummyTask:
+        id = 42
+        assignee = "System1/root"
+
+    class DummySystem5:
+        def get_agent_id(self):
+            return AgentId.from_str("System5/root")
+
+    cases_json = (
+        '{"cases":[{"policy_id":1,"judgement":"Satisfied","reasoning":"ok"},'
+        '{"policy_id":2,"judgement":"Violated","reasoning":"bad"}]}'
+    )
+
+    with (
+        patch("src.cyberagent.services.tasks._get_task", return_value=DummyTask()),
+        patch(
+            "src.cyberagent.services.policies._get_system_policy_prompts",
+            return_value=[
+                '{"id":1,"content":"p1","system_id":1,"team_id":1,"name":"n1"}',
+                '{"id":2,"content":"p2","system_id":1,"team_id":1,"name":"n2"}',
+            ],
+        ),
+        patch.object(system3, "_get_systems_by_type", return_value=[DummySystem5()]),
+        patch.object(
+            system3,
+            "run",
+            AsyncMock(
+                return_value=TaskResult(
+                    messages=[TextMessage(content=cases_json, source="System3")]
+                )
+            ),
+        ),
+        patch("src.cyberagent.services.tasks.approve_task") as approve_task,
+        patch("src.cyberagent.services.tasks.set_task_case_judgement") as set_judgement,
+    ):
+        await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
+
+    approve_task.assert_called_once()
+    set_judgement.assert_called_once()
+    stored_cases = set_judgement.call_args.args[1]
+    assert stored_cases == [
+        {"policy_id": 1, "judgement": "Satisfied", "reasoning": "ok"},
+        {"policy_id": 2, "judgement": "Violated", "reasoning": "bad"},
+    ]

@@ -30,6 +30,7 @@ class Task(Base):
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     result: Mapped[Optional[str]] = mapped_column(Text)
+    case_judgement: Mapped[Optional[str]] = mapped_column(Text)
 
     # Relationships
     team = relationship("Team", back_populates="tasks")

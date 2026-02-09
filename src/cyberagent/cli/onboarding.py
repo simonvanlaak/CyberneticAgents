@@ -466,6 +466,16 @@ def _trigger_onboarding_initiative(
     finally:
         session.close()
     if existing_run is not None:
+        enqueue_agent_message(
+            recipient="System3/root",
+            sender="System4/root",
+            message_type="initiative_assign",
+            payload={
+                "initiative_id": existing_run.initiative_id,
+                "source": "Onboarding",
+                "content": f"Resume onboarding initiative {existing_run.initiative_id}.",
+            },
+        )
         return True
 
     purpose = purposes_service.get_or_create_default_purpose(team_id)

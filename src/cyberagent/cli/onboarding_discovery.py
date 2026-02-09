@@ -40,6 +40,8 @@ from src.cyberagent.tools.cli_executor.cli_tool import CliTool
 from src.cyberagent.tools.cli_executor.factory import create_cli_executor
 
 logger = logging.getLogger(__name__)
+MARKDOWN_PKM_FILE_LIMIT = 1000
+MARKDOWN_PKM_LINES_PER_FILE = 20
 
 
 def run_discovery_onboarding(args: object, team_id: int | None = None) -> Path | None:
@@ -161,15 +163,12 @@ def _run_discovery_pipeline(
             token_username=token_username,
         )
         if success:
-            markdown_summary = _summarize_markdown_repo(repo_path)
+            markdown_summary, pkm_file_excerpts = _summarize_markdown_repo(repo_path)
             if team_id is not None and markdown_summary.strip():
-                store_onboarding_memory_entry(
+                _store_markdown_memory_entries(
                     team_id=team_id,
-                    content=markdown_summary,
-                    tags=["onboarding", "pkm"],
-                    source=MemorySource.IMPORT,
-                    priority=MemoryPriority.HIGH,
-                    layer=MemoryLayer.LONG_TERM,
+                    markdown_summary=markdown_summary,
+                    pkm_file_excerpts=pkm_file_excerpts,
                 )
         elif allow_prompt:
             if not _prompt_continue_without_pkm(
@@ -178,20 +177,17 @@ def _run_discovery_pipeline(
                 return None
     elif notion_sync_allowed:
         print(get_message("onboarding_discovery", "notion_sync_starting"))
-        notion_summary, success = _sync_notion_workspace(
+        notion_summary, notion_item_summaries, success = _sync_notion_workspace(
             cli_tool=cli_tool,
             agent_id=agent_id,
         )
         if success:
             markdown_summary = notion_summary
             if team_id is not None and markdown_summary.strip():
-                store_onboarding_memory_entry(
+                _store_notion_memory_entries(
                     team_id=team_id,
-                    content=markdown_summary,
-                    tags=["onboarding", "pkm"],
-                    source=MemorySource.IMPORT,
-                    priority=MemoryPriority.HIGH,
-                    layer=MemoryLayer.LONG_TERM,
+                    notion_summary=markdown_summary,
+                    notion_item_summaries=notion_item_summaries,
                 )
         elif allow_prompt:
             if not _prompt_continue_without_pkm(
@@ -387,7 +383,7 @@ def _sync_notion_workspace(
     *,
     cli_tool: CliTool,
     agent_id: str | None,
-) -> tuple[str, bool]:
+) -> tuple[str, list[str], bool]:
     search_body = {
         "page_size": 25,
         "sort": {"direction": "descending", "timestamp": "last_edited_time"},
@@ -406,7 +402,7 @@ def _sync_notion_workspace(
         if not error:
             error = f"Unknown error (result={result})" if result else "Unknown error"
         print(get_message("onboarding_discovery", "failed_sync_notion", error=error))
-        return "", False
+        return "", [], False
     output = result.get("output")
     payload = output.get("response") if isinstance(output, dict) else None
     if not isinstance(payload, dict):
@@ -417,7 +413,7 @@ def _sync_notion_workspace(
                 error="No response payload.",
             )
         )
-        return "", False
+        return "", [], False
     results = payload.get("results")
     if not isinstance(results, list):
         print(
@@ -427,9 +423,9 @@ def _sync_notion_workspace(
                 error="No results returned.",
             )
         )
-        return "", False
-    summary = _summarize_notion_results(results)
-    return summary, True
+        return "", [], False
+    summary, item_summaries = _summarize_notion_results(results)
+    return summary, item_summaries, True
 
 
 def _start_sync_notifier() -> threading.Event:
@@ -443,26 +439,68 @@ def _start_sync_notifier() -> threading.Event:
     return stop_event
 
 
-def _summarize_markdown_repo(repo_path: Path) -> str:
+def _summarize_markdown_repo(repo_path: Path) -> tuple[str, list[tuple[str, str]]]:
+    file_excerpts, skipped_count = _collect_markdown_repo_file_excerpts(repo_path)
+    lines = [f"Markdown files analyzed: {len(file_excerpts)}"]
+    for relative_path, excerpt in file_excerpts:
+        lines.append(f"\n## {relative_path}")
+        if excerpt:
+            lines.append(excerpt)
+    if skipped_count > 0:
+        lines.append(
+            f"\nSkipped {skipped_count} markdown files (limit {MARKDOWN_PKM_FILE_LIMIT})."
+        )
+    return "\n".join(lines), file_excerpts
+
+
+def _collect_markdown_repo_file_excerpts(
+    repo_path: Path,
+) -> tuple[list[tuple[str, str]], int]:
     files = sorted(repo_path.rglob("*.md"))
-    limited = files[:1000]
-    lines = [f"Markdown files analyzed: {len(limited)}"]
+    limited = files[:MARKDOWN_PKM_FILE_LIMIT]
+    excerpts: list[tuple[str, str]] = []
     for path in limited:
         try:
             content = path.read_text(encoding="utf-8")
         except OSError:
             continue
-        excerpt = content.strip().splitlines()[:20]
-        lines.append(f"\n## {path.relative_to(repo_path)}")
-        if excerpt:
-            lines.append("\n".join(excerpt))
-    if len(files) > 1000:
-        lines.append(f"\nSkipped {len(files) - 1000} markdown files (limit 1000).")
-    return "\n".join(lines)
+        excerpt_lines = content.strip().splitlines()[:MARKDOWN_PKM_LINES_PER_FILE]
+        excerpt = "\n".join(excerpt_lines).strip()
+        excerpts.append((str(path.relative_to(repo_path)), excerpt))
+    skipped_count = max(0, len(files) - MARKDOWN_PKM_FILE_LIMIT)
+    return excerpts, skipped_count
 
 
-def _summarize_notion_results(results: list[dict[str, Any]]) -> str:
+def _store_markdown_memory_entries(
+    *,
+    team_id: int,
+    markdown_summary: str,
+    pkm_file_excerpts: list[tuple[str, str]],
+) -> None:
+    store_onboarding_memory_entry(
+        team_id=team_id,
+        content=markdown_summary,
+        tags=["onboarding", "pkm"],
+        source=MemorySource.IMPORT,
+        priority=MemoryPriority.HIGH,
+        layer=MemoryLayer.LONG_TERM,
+    )
+    for relative_path, excerpt in pkm_file_excerpts:
+        if not excerpt:
+            continue
+        store_onboarding_memory_entry(
+            team_id=team_id,
+            content=f"PKM file: {relative_path}\n\n{excerpt}",
+            tags=["onboarding", "pkm", "pkm_file"],
+            source=MemorySource.IMPORT,
+            priority=MemoryPriority.HIGH,
+            layer=MemoryLayer.LONG_TERM,
+        )
+
+
+def _summarize_notion_results(results: list[dict[str, Any]]) -> tuple[str, list[str]]:
     lines = [f"Notion items analyzed: {len(results)}"]
+    item_summaries: list[str] = []
     for item in results:
         title = _extract_notion_title(item)
         url = item.get("url") if isinstance(item.get("url"), str) else ""
@@ -476,8 +514,37 @@ def _summarize_notion_results(results: list[dict[str, Any]]) -> str:
         )
         suffix = f" ({last_edited})" if last_edited else ""
         url_text = f" {url}" if url else ""
-        lines.append(f"- [{object_type}] {title}{suffix}{url_text}")
-    return "\n".join(lines)
+        item_line = f"[{object_type}] {title}{suffix}{url_text}"
+        lines.append(f"- {item_line}")
+        item_summaries.append(f"Notion item: {item_line}")
+    return "\n".join(lines), item_summaries
+
+
+def _store_notion_memory_entries(
+    *,
+    team_id: int,
+    notion_summary: str,
+    notion_item_summaries: list[str],
+) -> None:
+    store_onboarding_memory_entry(
+        team_id=team_id,
+        content=notion_summary,
+        tags=["onboarding", "pkm"],
+        source=MemorySource.IMPORT,
+        priority=MemoryPriority.HIGH,
+        layer=MemoryLayer.LONG_TERM,
+    )
+    for item_summary in notion_item_summaries:
+        if not item_summary.strip():
+            continue
+        store_onboarding_memory_entry(
+            team_id=team_id,
+            content=item_summary.strip(),
+            tags=["onboarding", "pkm", "pkm_notion_item"],
+            source=MemorySource.IMPORT,
+            priority=MemoryPriority.HIGH,
+            layer=MemoryLayer.LONG_TERM,
+        )
 
 
 def _extract_notion_title(item: dict[str, Any]) -> str:

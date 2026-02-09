@@ -43,6 +43,38 @@ def test_get_or_create_default_purpose_returns_existing():
     assert existing.id == purpose_id
 
 
+def test_get_or_create_default_purpose_creates_viability_purpose() -> None:
+    init_db()
+    team_id = _create_team_id()
+
+    created = get_or_create_default_purpose(team_id)
+
+    assert created.name == "Default Purpose"
+    assert (
+        created.content
+        == "Stay viable by creating more value for the user than the cost incurred."
+    )
+
+
+def test_get_or_create_default_purpose_migrates_legacy_default_content() -> None:
+    init_db()
+    team_id = _create_team_id()
+    purpose = Purpose(
+        team_id=team_id,
+        name="Default Purpose",
+        content="Default purpose content.",
+    )
+    purpose_id = purpose.add()
+
+    updated = get_or_create_default_purpose(team_id)
+
+    assert updated.id == purpose_id
+    assert (
+        updated.content
+        == "Stay viable by creating more value for the user than the cost incurred."
+    )
+
+
 def test_get_or_create_default_purpose_reuses_existing_non_default_name():
     init_db()
     team_id = _create_team_id()

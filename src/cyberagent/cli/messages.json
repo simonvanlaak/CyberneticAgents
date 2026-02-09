@@ -186,6 +186,7 @@
     "suggestion_send_timed_out": "Suggestion send timed out; the runtime may still be working. Check logs with 'cyberagent logs'.",
     "model_output_parse_failed": "Model output could not be parsed. Try rephrasing the request or using a more explicit payload.",
     "runtime_shutdown_timed_out": "Runtime shutdown timed out; exiting anyway.",
+    "streamlit_missing": "Streamlit is not installed in this Python environment. Install dependencies with 'python3 -m pip install -e .' and retry.",
     "payload_required": "payload is required",
     "yaml_requires_pyyaml": "YAML support requires PyYAML"
   },

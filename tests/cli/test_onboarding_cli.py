@@ -524,6 +524,42 @@ def test_handle_onboarding_triggers_onboarding_sop(
     assert queued[0].recipient == "System3/root"
 
 
+def test_handle_onboarding_requeues_existing_initiative_run_on_restart(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _clear_teams()
+    monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
+    monkeypatch.setattr(
+        onboarding_cli, "_start_runtime_after_onboarding", lambda *_: None
+    )
+    monkeypatch.setattr(
+        onboarding_cli, "_start_discovery_background", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        onboarding_cli, "start_onboarding_interview", lambda **_kwargs: None
+    )
+    monkeypatch.setattr(
+        agent_message_queue, "AGENT_MESSAGE_QUEUE_DIR", tmp_path / "agent_queue"
+    )
+
+    onboarding_cli.handle_onboarding(
+        _default_onboarding_args(),
+        'cyberagent suggest "Describe the task"',
+        "cyberagent inbox",
+    )
+    onboarding_cli.handle_onboarding(
+        _default_onboarding_args(),
+        'cyberagent suggest "Describe the task"',
+        "cyberagent inbox",
+    )
+
+    queued = agent_message_queue.read_queued_agent_messages()
+    assert len(queued) == 2
+    assert all(message.message_type == "initiative_assign" for message in queued)
+    initiative_ids = [int(message.payload["initiative_id"]) for message in queued]
+    assert len(set(initiative_ids)) == 1
+
+
 def test_build_onboarding_prompt_includes_summary_path() -> None:
     prompt = onboarding_cli._build_onboarding_prompt(
         summary_path=Path("data/onboarding/20260204_120000/summary.md"),

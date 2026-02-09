@@ -12,6 +12,7 @@ from src.cyberagent.ui.kanban_data import (
     KANBAN_STATUSES,
     group_tasks_by_hierarchy,
     group_tasks_by_status,
+    load_task_detail,
     load_task_cards,
 )
 from src.enums import Status
@@ -63,6 +64,8 @@ def _seed_task(
     name: str,
     status: Status,
     assignee: str | None,
+    result: str | None = None,
+    case_judgement: str | None = None,
 ) -> None:
     session = next(get_db())
     try:
@@ -73,6 +76,8 @@ def _seed_task(
             content=f"{name} content",
             assignee=assignee,
             status=status,
+            result=result,
+            case_judgement=case_judgement,
         )
         session.add(task)
         session.commit()
@@ -205,3 +210,50 @@ def test_group_tasks_by_hierarchy_hides_completed_only_initiatives() -> None:
 
     assert initiative_active in initiative_ids
     assert initiative_done not in initiative_ids
+
+
+def test_load_task_cards_includes_case_judgement() -> None:
+    team_id, _, _, initiative_id = _seed_team_hierarchy("case")
+    _seed_task(
+        team_id=team_id,
+        initiative_id=initiative_id,
+        name="Case reviewed",
+        status=Status.APPROVED,
+        assignee="System1/root",
+        case_judgement='[{"policy_id":1,"judgement":"Satisfied","reasoning":"ok"}]',
+    )
+
+    cards = load_task_cards(team_id=team_id)
+    case_card = next(task for task in cards if task.name == "Case reviewed")
+    assert case_card.case_judgement == (
+        '[{"policy_id":1,"judgement":"Satisfied","reasoning":"ok"}]'
+    )
+
+
+def test_load_task_detail_returns_full_payload() -> None:
+    team_id, purpose_id, strategy_id, initiative_id = _seed_team_hierarchy("detail")
+    _seed_task(
+        team_id=team_id,
+        initiative_id=initiative_id,
+        name="Detailed task",
+        status=Status.APPROVED,
+        assignee="System1/root",
+        result="Completed result",
+        case_judgement='[{"policy_id":2,"judgement":"Vague","reasoning":"needs clarification"}]',
+    )
+
+    task_id = next(
+        task.id
+        for task in load_task_cards(team_id=team_id)
+        if task.name == "Detailed task"
+    )
+    detail = load_task_detail(task_id)
+    assert detail is not None
+    assert detail.id == task_id
+    assert detail.team_id == team_id
+    assert detail.purpose_id == purpose_id
+    assert detail.strategy_id == strategy_id
+    assert detail.initiative_id == initiative_id
+    assert detail.result == "Completed result"
+    assert detail.case_judgement is not None
+    assert '"judgement":"Vague"' in detail.case_judgement

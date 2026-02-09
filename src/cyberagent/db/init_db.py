@@ -107,9 +107,11 @@ def init_db():
                 ) from retry_exc
             else:
                 _ensure_team_last_active_column()
+                _ensure_task_case_judgement_column()
                 return
         raise
     _ensure_team_last_active_column()
+    _ensure_task_case_judgement_column()
 
 
 def _ensure_team_last_active_column() -> None:
@@ -125,6 +127,17 @@ def _ensure_team_last_active_column() -> None:
             text("UPDATE teams SET last_active_at = :now WHERE last_active_at IS NULL"),
             {"now": datetime.utcnow().isoformat()},
         )
+
+
+def _ensure_task_case_judgement_column() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.connect() as connection:
+        columns = connection.execute(text("PRAGMA table_info(tasks);")).fetchall()
+        column_names = {column[1] for column in columns}
+        if "case_judgement" in column_names:
+            return
+        connection.execute(text("ALTER TABLE tasks ADD COLUMN case_judgement TEXT"))
 
 
 def configure_database(database_url: str, *, from_env: bool = False) -> None:
@@ -217,6 +230,7 @@ def recover_sqlite_database() -> str | None:
     except OperationalError:
         return None
     _ensure_team_last_active_column()
+    _ensure_task_case_judgement_column()
     return backup_path
 
 

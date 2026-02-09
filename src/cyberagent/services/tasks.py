@@ -1,5 +1,7 @@
 """Task orchestration helpers."""
 
+import json
+
 from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.models.task import Task, get_task as _get_task
 from src.enums import Status
@@ -120,4 +122,16 @@ def approve_task(task: Task) -> None:
         task: Task to update.
     """
     task.set_status(Status.APPROVED)
+    task.update()
+
+
+def set_task_case_judgement(task: Task, cases: list[dict[str, object]]) -> None:
+    """
+    Persist policy review case judgements on a task.
+
+    Args:
+        task: Task to update.
+        cases: Structured policy case judgements.
+    """
+    task.case_judgement = json.dumps(cases, ensure_ascii=True)
     task.update()

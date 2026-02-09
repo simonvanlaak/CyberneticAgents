@@ -13,6 +13,12 @@ from src.cyberagent.db.init_db import Base
 from src.cyberagent.domain.serialize import model_to_dict
 from src.cyberagent.db.models.strategy import Strategy
 
+DEFAULT_PURPOSE_NAME = "Default Purpose"
+DEFAULT_PURPOSE_CONTENT = (
+    "Stay viable by creating more value for the user than the cost incurred."
+)
+LEGACY_DEFAULT_PURPOSE_CONTENT = "Default purpose content."
+
 
 class Purpose(Base):
     __tablename__ = "purposes"
@@ -78,15 +84,21 @@ def get_or_create_default_purpose(team_id: int) -> Purpose:
                     {"purpose_id": primary.id}
                 )
                 db.delete(duplicate)
-            if duplicates:
+            should_update_default = (
+                primary.name == DEFAULT_PURPOSE_NAME
+                and primary.content == LEGACY_DEFAULT_PURPOSE_CONTENT
+            )
+            if should_update_default:
+                primary.content = DEFAULT_PURPOSE_CONTENT
+            if duplicates or should_update_default:
                 db.commit()
                 db.refresh(primary)
             db.expunge(primary)
             return primary
         purpose = Purpose(
             team_id=team_id,
-            name="Default Purpose",
-            content="Default purpose content.",
+            name=DEFAULT_PURPOSE_NAME,
+            content=DEFAULT_PURPOSE_CONTENT,
         )
         db.add(purpose)
         db.commit()
