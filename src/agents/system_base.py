@@ -24,22 +24,15 @@ from autogen_core import (
     message_handler,
 )
 from autogen_core.models import (
-    ChatCompletionClient,
-    LLMMessage,
-    ModelCapabilities,
     ModelInfo,
     SystemMessage,
 )
-from autogen_core.tools import Tool, ToolSchema
-from autogen_core import CancellationToken
-from autogen_core.models import CreateResult, RequestUsage
-from typing import Mapping, Sequence, Optional
 from autogen_core.tools import BaseTool, StaticStreamWorkbench
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 from opentelemetry import trace
 from pydantic import BaseModel
 
-from src.agents.messages import CapabilityGapMessage
+from src.agents.messages import CapabilityGapMessage, InternalErrorMessage
 from src.cyberagent.services import policies as policy_service
 from src.cyberagent.services import systems as system_service
 from src.cyberagent.services import teams as team_service
@@ -71,6 +64,7 @@ from src.cyberagent.tools.cli_executor import (
 )
 from src.cyberagent.tools.memory_crud import MemoryCrudTool
 from src.cyberagent.core.agent_naming import normalize_message_source
+from src.agents.tool_choice_required_client import ToolChoiceRequiredClient
 
 if TYPE_CHECKING:
     from src.cyberagent.db.models.system import System
@@ -86,77 +80,8 @@ SYSTEM_TYPES = {
 logger = logging.getLogger(__name__)
 
 
-class ToolChoiceRequiredClient(ChatCompletionClient):
-    def __init__(self, client: ChatCompletionClient) -> None:
-        self._client = client
-
-    @property
-    def model_info(self) -> ModelInfo:
-        return self._client.model_info
-
-    async def create(
-        self,
-        messages: Sequence[LLMMessage],
-        *,
-        tools: Sequence[Tool | ToolSchema] = (),
-        tool_choice: Tool | str = "auto",
-        json_output: Optional[bool | type[BaseModel]] = None,
-        extra_create_args: Mapping[str, Any] = {},
-        cancellation_token: Optional[CancellationToken] = None,
-    ) -> CreateResult:
-        return await self._client.create(
-            messages,
-            tools=tools,
-            tool_choice="required",
-            json_output=json_output,
-            extra_create_args=extra_create_args,
-            cancellation_token=cancellation_token,
-        )
-
-    def create_stream(
-        self,
-        messages: Sequence[LLMMessage],
-        *,
-        tools: Sequence[Tool | ToolSchema] = (),
-        tool_choice: Tool | str = "auto",
-        json_output: Optional[bool | type[BaseModel]] = None,
-        extra_create_args: Mapping[str, Any] = {},
-        cancellation_token: Optional[CancellationToken] = None,
-    ) -> Any:
-        return self._client.create_stream(
-            messages,
-            tools=tools,
-            tool_choice="required",
-            json_output=json_output,
-            extra_create_args=extra_create_args,
-            cancellation_token=cancellation_token,
-        )
-
-    async def close(self) -> None:
-        await self._client.close()
-
-    def actual_usage(self) -> RequestUsage:
-        return self._client.actual_usage()
-
-    def total_usage(self) -> RequestUsage:
-        return self._client.total_usage()
-
-    def count_tokens(
-        self, messages: Sequence[LLMMessage], *, tools: Sequence[Tool | ToolSchema] = ()
-    ) -> int:
-        return self._client.count_tokens(messages, tools=tools)
-
-    def remaining_tokens(
-        self, messages: Sequence[LLMMessage], *, tools: Sequence[Tool | ToolSchema] = ()
-    ) -> int:
-        return self._client.remaining_tokens(messages, tools=tools)
-
-    @property
-    def capabilities(self) -> ModelCapabilities:  # type: ignore[override]
-        return self._client.capabilities
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self._client, name)
+class InternalErrorRoutedError(RuntimeError):
+    """Raised after an internal error has already been routed to System5."""
 
 
 def _infer_system_type(agent_type: str) -> SystemType | None:
@@ -388,9 +313,43 @@ class SystemBase(RoutedAgent):
             processing_span.set_attribute("message_type", "processing")
 
             # get response
-            task_result: TaskResult = await self._agent.run(
-                task=chat_messages, cancellation_token=ctx.cancellation_token
-            )
+            try:
+                task_result: TaskResult = await self._agent.run(
+                    task=chat_messages, cancellation_token=ctx.cancellation_token
+                )
+            except Exception as exc:
+                if output_content_type is None or not self._is_json_generation_failure(
+                    exc
+                ):
+                    if self.agent_id.type == "System5":
+                        raise
+                    await self._route_internal_error_to_policy_system(
+                        failed_message_type=chat_messages[-1].__class__.__name__,
+                        error_summary=str(exc),
+                        task_id=getattr(chat_messages[-1], "task_id", None),
+                    )
+                    raise InternalErrorRoutedError("internal_error_routed") from exc
+
+                logger.warning(
+                    "Structured generation failed for %s. Falling back to unstructured retry.",
+                    output_content_type.__name__,
+                )
+                fallback_messages: list[BaseTextChatMessage] = [
+                    *chat_messages,
+                    TextMessage(
+                        source=self.name,
+                        content=self._build_output_fallback_instruction(
+                            output_content_type
+                        ),
+                    ),
+                ]
+                self._agent._model_client = get_model_client(self.agent_id, False)
+                self._agent._workbench = []
+                self._agent._output_content_type = None
+                await self._set_system_prompt(prompts, memory_context)
+                task_result = await self._agent.run(
+                    task=fallback_messages, cancellation_token=ctx.cancellation_token
+                )
             if output_content_type is not None:
                 parse_error = self._get_structured_parse_error(
                     task_result, output_content_type
@@ -467,6 +426,17 @@ class SystemBase(RoutedAgent):
             f"{schema}"
         )
 
+    def _build_output_fallback_instruction(
+        self, output_content_type: type[BaseModel]
+    ) -> str:
+        schema = json.dumps(output_content_type.model_json_schema(), ensure_ascii=True)
+        return (
+            "JSON generation failed in structured mode. "
+            "Return strict JSON only with this schema: "
+            f"{schema}. "
+            "Do not include markdown or prose outside the JSON object."
+        )
+
     def _get_structured_parse_error(
         self, result: TaskResult, output_content_type: type[BaseModel]
     ) -> str | None:
@@ -475,6 +445,39 @@ class SystemBase(RoutedAgent):
             return None
         except ValueError as exc:
             return str(exc)
+
+    def _is_json_generation_failure(self, exc: Exception) -> bool:
+        text = str(exc).lower()
+        return "json_validate_failed" in text or "failed to generate json" in text
+
+    async def _route_internal_error_to_policy_system(
+        self,
+        failed_message_type: str,
+        error_summary: str,
+        task_id: int | None = None,
+    ) -> None:
+        if self.agent_id.type == "System5":
+            return
+        policy_systems = self._get_systems_by_type(SystemType.POLICY)
+        if not policy_systems:
+            logger.error(
+                "Internal error in %s but no System5 found: %s",
+                self.agent_id.__str__(),
+                error_summary,
+            )
+            return
+        await self._publish_message_to_agent(
+            InternalErrorMessage(
+                team_id=self.team_id,
+                origin_system_id_str=self.agent_id.__str__(),
+                failed_message_type=failed_message_type,
+                error_summary=error_summary,
+                task_id=task_id,
+                content="Internal processing failure routed to System5.",
+                source=self.name,
+            ),
+            policy_systems[0].get_agent_id(),
+        )
 
     @message_handler
     async def handle_tool_call_summary(

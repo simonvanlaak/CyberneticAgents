@@ -96,6 +96,18 @@ class DummySystem(SystemBase):
         return []
 
 
+class DummySystem5(SystemBase):
+    def __init__(self) -> None:
+        super().__init__(
+            "System5/root",
+            identity_prompt="test",
+            responsibility_prompts=["test"],
+        )
+
+    def _get_systems_by_type(self, type: SystemType) -> list:  # noqa: A002
+        return []
+
+
 class DummyStructuredResponse(BaseModel):
     value: str
 
@@ -237,3 +249,135 @@ async def test_run_retries_once_when_structured_output_is_invalid(
     retry_messages = second_call.kwargs["task"]
     assert len(retry_messages) == 2
     assert "Return strict JSON" in retry_messages[-1].content
+
+
+@pytest.mark.asyncio
+async def test_run_falls_back_to_unstructured_when_json_generation_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    system = DummySystem()
+
+    async def fake_set_system_prompt(
+        _prompts: list[str], _memory_context: list[str] | None = None
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(system, "_set_system_prompt", fake_set_system_prompt)
+    monkeypatch.setattr(system, "_build_memory_context", lambda *_args: [])
+    monkeypatch.setattr(
+        "src.agents.system_base.mark_team_active", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        "src.agents.system_base.get_model_client",
+        lambda *_args, **_kwargs: DummyModelClient(),
+    )
+    system._agent.run = AsyncMock(
+        side_effect=[
+            RuntimeError("json_validate_failed: Failed to generate JSON"),
+            TaskResult(
+                messages=[TextMessage(content='{"value":"ok"}', source="System4/root")]
+            ),
+        ]
+    )
+
+    message = TextMessage(content="hello", source="User")
+    context = MessageContext(
+        sender=AgentId.from_str("User/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="structured_json_generation_fallback_test",
+    )
+
+    await system.run([message], context, output_content_type=DummyStructuredResponse)
+    assert system._agent.run.await_count == 2
+    second_call = system._agent.run.await_args_list[1]
+    retry_messages = second_call.kwargs["task"]
+    assert len(retry_messages) == 2
+    assert "Return strict JSON only with this schema" in retry_messages[-1].content
+
+
+@pytest.mark.asyncio
+async def test_run_routes_unhandled_errors_to_team_system5(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    system = DummySystem()
+    system._publish_message_to_agent = AsyncMock()
+
+    async def fake_set_system_prompt(
+        _prompts: list[str], _memory_context: list[str] | None = None
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(system, "_set_system_prompt", fake_set_system_prompt)
+    monkeypatch.setattr(system, "_build_memory_context", lambda *_args: [])
+    monkeypatch.setattr(
+        "src.agents.system_base.mark_team_active", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        "src.agents.system_base.get_model_client",
+        lambda *_args, **_kwargs: DummyModelClient(),
+    )
+
+    class _PolicySystem:
+        def get_agent_id(self) -> AgentId:
+            return AgentId.from_str("System5/root")
+
+    monkeypatch.setattr(
+        system, "_get_systems_by_type", lambda *_args: [_PolicySystem()]
+    )
+    system._agent.run = AsyncMock(side_effect=RuntimeError("boom"))
+
+    message = TextMessage(content="hello", source="User")
+    context = MessageContext(
+        sender=AgentId.from_str("User/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="run_error_route_test",
+    )
+
+    from src.agents.system_base import InternalErrorRoutedError
+
+    with pytest.raises(InternalErrorRoutedError):
+        await system.run([message], context)
+
+    system._publish_message_to_agent.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_run_does_not_route_errors_for_system5(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    system = DummySystem5()
+    system._publish_message_to_agent = AsyncMock()
+
+    async def fake_set_system_prompt(
+        _prompts: list[str], _memory_context: list[str] | None = None
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(system, "_set_system_prompt", fake_set_system_prompt)
+    monkeypatch.setattr(system, "_build_memory_context", lambda *_args: [])
+    monkeypatch.setattr(
+        "src.agents.system_base.mark_team_active", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        "src.agents.system_base.get_model_client",
+        lambda *_args, **_kwargs: DummyModelClient(),
+    )
+    system._agent.run = AsyncMock(side_effect=RuntimeError("boom"))
+
+    message = TextMessage(content="hello", source="User")
+    context = MessageContext(
+        sender=AgentId.from_str("User/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="run_error_no_route_system5_test",
+    )
+
+    with pytest.raises(RuntimeError, match="boom"):
+        await system.run([message], context)
+
+    system._publish_message_to_agent.assert_not_awaited()

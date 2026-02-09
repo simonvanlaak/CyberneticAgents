@@ -41,6 +41,19 @@ def complete_task(task: Task, result: str) -> None:
     task.update()
 
 
+def mark_task_blocked(task: Task, reasoning: str) -> None:
+    """
+    Mark a task as blocked with an explanation.
+
+    Args:
+        task: Task record to update.
+        reasoning: Human-readable reason for the blocked status.
+    """
+    task.reasoning = reasoning
+    task.set_status(Status.BLOCKED)
+    task.update()
+
+
 def get_task_by_id(task_id: int) -> Task:
     """
     Fetch a task or raise if missing.
@@ -133,5 +146,21 @@ def set_task_case_judgement(task: Task, cases: list[dict[str, object]]) -> None:
         task: Task to update.
         cases: Structured policy case judgements.
     """
+    judgement_priority = {"Violated": 3, "Vague": 2, "Satisfied": 1}
+    selected_case: dict[str, object] | None = None
+    selected_score = 0
+    for case in cases:
+        judgement = str(case.get("judgement", ""))
+        score = judgement_priority.get(judgement, 0)
+        if score > selected_score:
+            selected_case = case
+            selected_score = score
+
     task.case_judgement = json.dumps(cases, ensure_ascii=True)
+    if selected_case is not None:
+        task.policy_judgement = str(selected_case.get("judgement", ""))
+        task.policy_judgement_reasoning = str(selected_case.get("reasoning", ""))
+    else:
+        task.policy_judgement = None
+        task.policy_judgement_reasoning = None
     task.update()

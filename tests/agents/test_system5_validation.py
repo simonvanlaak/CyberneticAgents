@@ -15,6 +15,7 @@ from src.agents.messages import (
     PolicyVagueMessage,
     PolicySuggestionMessage,
     TaskReviewMessage,
+    InternalErrorMessage,
     StrategyReviewMessage,
     ResearchReviewMessage,
     ConfirmationMessage,
@@ -64,6 +65,7 @@ class TestSystem5Basic:
             "handle_policy_violation_message",
             "handle_policy_vague_message",
             "handle_policy_suggestion_message",
+            "handle_internal_error_message",
             "handle_strategy_review_message",
             "handle_research_review_message",
             "handle_team_envelope_update_message",
@@ -274,6 +276,62 @@ async def test_system5_no_conflicts():
     print("✅ No structured output conflicts (tools registered)")
     print("✅ All methods use ConfirmationMessage structured output")
     print("✅ System5 implementation is correct as-is")
+
+
+@pytest.mark.asyncio
+async def test_system5_non_root_escalates_internal_error_to_root():
+    system5 = System5("System5/policy1")
+    system5._publish_message_to_agent = AsyncMock()
+
+    result = await system5.handle_internal_error_message(
+        InternalErrorMessage(
+            team_id=1,
+            origin_system_id_str="System3/root",
+            failed_message_type="TaskReviewMessage",
+            error_summary="Failed to parse response",
+            task_id=42,
+            content="Review failure",
+            source="System3/root",
+        ),
+        SimpleNamespace(),
+    )  # type: ignore[arg-type]
+
+    assert result.is_error is False
+    assert "Escalated internal error to System5/root" in result.content
+    system5._publish_message_to_agent.assert_awaited_once()
+    await_args = system5._publish_message_to_agent.await_args
+    assert await_args is not None
+    published = await_args.args[0]
+    recipient = await_args.args[1]
+    assert isinstance(published, InternalErrorMessage)
+    assert str(recipient) == "System5/root"
+
+
+@pytest.mark.asyncio
+async def test_system5_root_notifies_user_on_internal_error():
+    system5 = System5("System5/root")
+    system5._publish_message_to_agent = AsyncMock()
+
+    result = await system5.handle_internal_error_message(
+        InternalErrorMessage(
+            team_id=1,
+            origin_system_id_str="System3/root",
+            failed_message_type="TaskReviewMessage",
+            error_summary="Failed to parse response",
+            task_id=42,
+            content="Review failure",
+            source="System3/root",
+        ),
+        SimpleNamespace(),
+    )  # type: ignore[arg-type]
+
+    assert result.is_error is True
+    assert "Escalated internal error to user" in result.content
+    system5._publish_message_to_agent.assert_awaited_once()
+    await_args = system5._publish_message_to_agent.await_args
+    assert await_args is not None
+    recipient = await_args.args[1]
+    assert str(recipient) == "UserAgent/root"
 
 
 if __name__ == "__main__":

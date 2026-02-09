@@ -1,10 +1,13 @@
 from autogen_agentchat.base import TaskResult
+from autogen_agentchat.messages import TextMessage
 from autogen_core import MessageContext, message_handler
+from autogen_core import AgentId
 from autogen_core.tools import FunctionTool
 
 from src.agents.messages import (
     CapabilityGapMessage,
     ConfirmationMessage,
+    InternalErrorMessage,
     PolicySuggestionMessage,
     TaskReviewMessage,
     PolicyVagueMessage,
@@ -253,6 +256,84 @@ class System5(SystemBase):
 
         response = await self.run([message], context, message_specific_prompts)
         return self._confirmation_from_response(response)
+
+    @message_handler
+    async def handle_internal_error_message(
+        self, message: InternalErrorMessage, context: MessageContext
+    ) -> ConfirmationMessage:
+        """
+        Route internal failures upward through the policy hierarchy.
+        """
+        del context
+        if self.agent_id.key == "root":
+            await self._publish_message_to_agent(
+                TextMessage(
+                    content=(
+                        "Internal error reached root System5.\n"
+                        f"Origin: {message.origin_system_id_str}\n"
+                        f"Message type: {message.failed_message_type}\n"
+                        f"Task id: {message.task_id}\n"
+                        f"Error: {message.error_summary}"
+                    ),
+                    source=self.agent_id.__str__(),
+                ),
+                AgentId.from_str("UserAgent/root"),
+            )
+            return ConfirmationMessage(
+                content="Escalated internal error to user.",
+                is_error=True,
+                source=self.name,
+            )
+
+        if (
+            message.failed_message_type == TaskReviewMessage.__name__
+            and message.task_id is not None
+        ):
+            try:
+                task = task_service.get_task_by_id(message.task_id)
+                if task.assignee:
+                    created = policy_service.ensure_baseline_policies_for_assignee(
+                        task.assignee
+                    )
+                    control_systems = self._get_systems_by_type(SystemType.CONTROL)
+                    if control_systems:
+                        await self._publish_message_to_agent(
+                            TaskReviewMessage(
+                                task_id=task.id,
+                                assignee_agent_id_str=task.assignee,
+                                source=self.name,
+                                content=task.result or task.name,
+                            ),
+                            control_systems[0].get_agent_id(),
+                        )
+                    return ConfirmationMessage(
+                        content=(
+                            f"Attempted local remediation: ensured {created} "
+                            f"baseline policies and retriggered task {task.id} review."
+                        ),
+                        is_error=False,
+                        source=self.name,
+                    )
+            except Exception:
+                pass
+
+        await self._publish_message_to_agent(
+            InternalErrorMessage(
+                team_id=message.team_id,
+                origin_system_id_str=message.origin_system_id_str,
+                failed_message_type=message.failed_message_type,
+                error_summary=message.error_summary,
+                task_id=message.task_id,
+                content=message.content,
+                source=self.name,
+            ),
+            AgentId.from_str("System5/root"),
+        )
+        return ConfirmationMessage(
+            content="Escalated internal error to System5/root.",
+            is_error=False,
+            source=self.name,
+        )
 
     def _confirmation_from_response(
         self, response: "TaskResult"

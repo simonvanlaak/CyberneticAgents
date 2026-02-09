@@ -128,3 +128,13 @@ class ConfirmationMessage(BaseTextChatMessage):
 
     content: str
     is_error: bool
+
+
+class InternalErrorMessage(BaseTextChatMessage):
+    """Used by systems to route internal processing failures to the team's System5."""
+
+    team_id: int
+    origin_system_id_str: str
+    failed_message_type: str
+    error_summary: str
+    task_id: int | None = None

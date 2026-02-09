@@ -14,10 +14,12 @@ from src.agents.system3 import (
     TasksCreateResponse,
 )
 from src.agents.messages import (
+    InternalErrorMessage,
     InitiativeAssignMessage,
     PolicySuggestionMessage,
     TaskReviewMessage,
 )
+from src.enums import Status
 
 
 class TestSystem3Basic:
@@ -222,8 +224,43 @@ async def test_system3_task_review_escalates_when_no_policies():
 
 
 @pytest.mark.asyncio
+async def test_system3_task_review_skips_blocked_tasks() -> None:
+    system3 = System3("System3/controller1")
+    system3._publish_message_to_agent = AsyncMock()
+    mocked_run = AsyncMock()
+
+    message = TaskReviewMessage(
+        task_id=42,
+        assignee_agent_id_str="System1/root",
+        source="System1/root",
+        content="Task result",
+    )
+    context = MessageContext(
+        sender=AgentId.from_str("System1/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="task_review_blocked",
+    )
+
+    class DummyTask:
+        id = 42
+        assignee = "System1/root"
+        status = Status.BLOCKED
+
+    with (
+        patch("src.cyberagent.services.tasks._get_task", return_value=DummyTask()),
+        patch.object(system3, "run", mocked_run),
+    ):
+        await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
+
+    assert mocked_run.await_count == 0
+    assert system3._publish_message_to_agent.await_count == 0
+
+
+@pytest.mark.asyncio
 async def test_system3_task_review_falls_back_on_json_validate_failure():
-    """Structured review should retry without strict schema when provider rejects JSON generation."""
+    """System3 should request structured review; fallback is handled in SystemBase."""
     system3 = System3("System3/controller1")
     system3._publish_message_to_agent = AsyncMock()
 
@@ -253,10 +290,9 @@ async def test_system3_task_review_falls_back_on_json_validate_failure():
         '{"cases":[{"policy_id":1,"judgement":"Satisfied","reasoning":"ok"}]}'
     )
     mocked_run = AsyncMock(
-        side_effect=[
-            RuntimeError("json_validate_failed: Failed to generate JSON"),
-            TaskResult(messages=[TextMessage(content=fallback_json, source="System3")]),
-        ]
+        return_value=TaskResult(
+            messages=[TextMessage(content=fallback_json, source="System3")]
+        )
     )
 
     with (
@@ -274,13 +310,10 @@ async def test_system3_task_review_falls_back_on_json_validate_failure():
     ):
         await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
 
-    assert mocked_run.await_count == 2
+    assert mocked_run.await_count == 1
     first_call = mocked_run.await_args_list[0]
-    second_call = mocked_run.await_args_list[1]
     assert first_call.args[3].__name__ == "CasesResponse"
     assert first_call.kwargs["include_memory_context"] is False
-    assert second_call.args[3] is None
-    assert second_call.kwargs["include_memory_context"] is False
     approve_task.assert_called_once()
 
 
@@ -347,3 +380,61 @@ async def test_system3_task_review_persists_case_judgements() -> None:
         {"policy_id": 1, "judgement": "Satisfied", "reasoning": "ok"},
         {"policy_id": 2, "judgement": "Violated", "reasoning": "bad"},
     ]
+
+
+@pytest.mark.asyncio
+async def test_system3_task_review_routes_internal_error_to_system5_on_parse_failure():
+    system3 = System3("System3/controller1")
+    system3._publish_message_to_agent = AsyncMock()
+
+    message = TaskReviewMessage(
+        task_id=42,
+        assignee_agent_id_str="System1/root",
+        source="System1/root",
+        content="Task result",
+    )
+    context = MessageContext(
+        sender=AgentId.from_str("System1/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="task_review_error_route",
+    )
+
+    class DummyTask:
+        id = 42
+        assignee = "System1/root"
+
+    class DummySystem5:
+        def get_agent_id(self):
+            return AgentId.from_str("System5/root")
+
+    mocked_run = AsyncMock(
+        side_effect=[
+            RuntimeError("json_validate_failed: Failed to generate JSON"),
+            TaskResult(messages=[TextMessage(content="not-json", source="System3")]),
+        ]
+    )
+
+    with (
+        patch("src.cyberagent.services.tasks._get_task", return_value=DummyTask()),
+        patch(
+            "src.cyberagent.services.policies._get_system_policy_prompts",
+            return_value=['{"id":1,"content":"p1","system_id":1,"team_id":1}'],
+        ),
+        patch.object(system3, "_get_systems_by_type", return_value=[DummySystem5()]),
+        patch.object(system3, "run", mocked_run),
+        patch("src.cyberagent.services.tasks.set_task_case_judgement") as set_cases,
+        patch("src.cyberagent.services.tasks.approve_task") as approve_task,
+    ):
+        await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
+
+    approve_task.assert_not_called()
+    set_cases.assert_not_called()
+    system3._publish_message_to_agent.assert_awaited_once()
+    await_args = system3._publish_message_to_agent.await_args
+    assert await_args is not None
+    published_message = await_args.args[0]
+    assert isinstance(published_message, InternalErrorMessage)
+    assert published_message.task_id == 42
+    assert published_message.origin_system_id_str == "System3/controller1"

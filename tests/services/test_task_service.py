@@ -8,6 +8,10 @@ class _FakeTask:
         self.assignee = None
         self.status = None
         self.result = None
+        self.reasoning = None
+        self.policy_judgement = None
+        self.policy_judgement_reasoning = None
+        self.case_judgement = None
         self.updated = False
 
     def set_status(self, status) -> None:
@@ -121,3 +125,36 @@ def test_get_task_by_id_missing_raises(monkeypatch: pytest.MonkeyPatch) -> None:
 
     with pytest.raises(ValueError):
         task_service.get_task_by_id(44)
+
+
+def test_mark_task_blocked_updates_status_and_reasoning() -> None:
+    from src.cyberagent.services import tasks as task_service
+    from src.cyberagent.db.models.task import Task
+
+    task = cast(Task, _FakeTask())
+
+    task_service.mark_task_blocked(task, "Missing external API credentials")
+
+    assert task.status is not None
+    assert task.reasoning == "Missing external API credentials"
+    assert task.updated is True
+
+
+def test_set_task_case_judgement_updates_policy_judgement_fields() -> None:
+    from src.cyberagent.services import tasks as task_service
+    from src.cyberagent.db.models.task import Task
+
+    task = cast(Task, _FakeTask())
+
+    task_service.set_task_case_judgement(
+        task,
+        [
+            {"policy_id": 1, "judgement": "Satisfied", "reasoning": "ok"},
+            {"policy_id": 2, "judgement": "Violated", "reasoning": "missing evidence"},
+        ],
+    )
+
+    assert task.case_judgement is not None
+    assert task.policy_judgement == "Violated"
+    assert task.policy_judgement_reasoning == "missing evidence"
+    assert task.updated is True

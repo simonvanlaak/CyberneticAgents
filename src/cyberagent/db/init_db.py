@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 from src.cyberagent.core.paths import get_data_dir
 
 from sqlalchemy import create_engine, text
-from sqlalchemy.exc import OperationalError
+from sqlalchemy.exc import OperationalError, SQLAlchemyError
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 
@@ -108,10 +108,16 @@ def init_db():
             else:
                 _ensure_team_last_active_column()
                 _ensure_task_case_judgement_column()
+                _ensure_task_reasoning_column()
+                _ensure_task_policy_judgement_column()
+                _ensure_task_policy_judgement_reasoning_column()
                 return
         raise
     _ensure_team_last_active_column()
     _ensure_task_case_judgement_column()
+    _ensure_task_reasoning_column()
+    _ensure_task_policy_judgement_column()
+    _ensure_task_policy_judgement_reasoning_column()
 
 
 def _ensure_team_last_active_column() -> None:
@@ -132,12 +138,58 @@ def _ensure_team_last_active_column() -> None:
 def _ensure_task_case_judgement_column() -> None:
     if engine.dialect.name != "sqlite":
         return
+    column_names = _get_sqlite_column_names("tasks")
+    if column_names is None or "case_judgement" in column_names:
+        return
     with engine.connect() as connection:
-        columns = connection.execute(text("PRAGMA table_info(tasks);")).fetchall()
-        column_names = {column[1] for column in columns}
-        if "case_judgement" in column_names:
-            return
         connection.execute(text("ALTER TABLE tasks ADD COLUMN case_judgement TEXT"))
+
+
+def _ensure_task_reasoning_column() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    column_names = _get_sqlite_column_names("tasks")
+    if column_names is None or "reasoning" in column_names:
+        return
+    with engine.connect() as connection:
+        connection.execute(text("ALTER TABLE tasks ADD COLUMN reasoning TEXT"))
+
+
+def _ensure_task_policy_judgement_column() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    column_names = _get_sqlite_column_names("tasks")
+    if column_names is None or "policy_judgement" in column_names:
+        return
+    with engine.connect() as connection:
+        connection.execute(text("ALTER TABLE tasks ADD COLUMN policy_judgement TEXT"))
+
+
+def _ensure_task_policy_judgement_reasoning_column() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    column_names = _get_sqlite_column_names("tasks")
+    if column_names is None or "policy_judgement_reasoning" in column_names:
+        return
+    with engine.connect() as connection:
+        connection.execute(
+            text("ALTER TABLE tasks ADD COLUMN policy_judgement_reasoning TEXT")
+        )
+
+
+def _get_sqlite_column_names(table_name: str) -> set[str] | None:
+    if engine.dialect.name != "sqlite":
+        return None
+    with engine.connect() as connection:
+        try:
+            columns = connection.execute(
+                text(f"PRAGMA table_info({table_name});")
+            ).fetchall()
+        except SQLAlchemyError:
+            return None
+        if not columns:
+            return None
+        return {str(column[1]) for column in columns}
 
 
 def configure_database(database_url: str, *, from_env: bool = False) -> None:
@@ -231,6 +283,9 @@ def recover_sqlite_database() -> str | None:
         return None
     _ensure_team_last_active_column()
     _ensure_task_case_judgement_column()
+    _ensure_task_reasoning_column()
+    _ensure_task_policy_judgement_column()
+    _ensure_task_policy_judgement_reasoning_column()
     return backup_path
 
 

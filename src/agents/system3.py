@@ -14,14 +14,14 @@ from src.agents.messages import (
     TaskAssignMessage,
     TaskReviewMessage,
 )
-from src.agents.system_base import SystemBase
+from src.agents.system_base import InternalErrorRoutedError, SystemBase
 from src.cyberagent.services import initiatives as initiative_service
 from src.cyberagent.services import procedures as procedures_service
 from src.cyberagent.services import policies as policy_service
 from src.cyberagent.services import systems as system_service
 from src.cyberagent.services import tasks as task_service
 from src.cyberagent.db.models.system import get_system_from_agent_id
-from src.enums import PolicyJudgement, SystemType
+from src.enums import PolicyJudgement, Status, SystemType
 from src.cyberagent.db.init_db import init_db
 
 
@@ -267,6 +267,13 @@ class System3(SystemBase):
         task = task_service.get_task_by_id(message.task_id)
         if not task.assignee:
             raise ValueError("Task has no assignee")
+        task_status = getattr(task, "status", None)
+        status_value = getattr(task_status, "value", task_status)
+        if task_status == Status.BLOCKED or str(status_value).lower() in {
+            "blocked",
+            "status.blocked",
+        }:
+            return
         policy_chunk = policy_service.get_system_policy_prompts(task.assignee)
         policy_systems = self._get_systems_by_type(SystemType.POLICY)
         if not policy_systems:
@@ -293,86 +300,93 @@ class System3(SystemBase):
             policy_chunk[i : i + 5] for i in range(0, len(policy_chunk), 5)
         ]
         all_cases: list[dict[str, object]] = []
-        for policy_chunk in policy_chunks:
-            message_specific_prompts = [
-                f"Review task result {task.id} for if it violates any policy."
-                "## Policies",
-                *policy_chunk,
-                "## Response",
-                "You are required to judge each policy as vague, violated, or passed.",
-            ]
-            try:
-                response = await self.run(
-                    [message],
-                    ctx,
-                    message_specific_prompts,
-                    CasesResponse,
-                    include_memory_context=False,
-                )
-                cases_response = self._get_structured_message(response, CasesResponse)
-            except Exception as exc:
-                if not self._is_json_generation_failure(exc):
-                    raise
-                fallback_prompts = [
-                    *message_specific_prompts,
-                    (
-                        "Return strict JSON only with this schema: "
-                        '{"cases":[{"policy_id":<int>,"judgement":"Vague|Violated|Satisfied","reasoning":"<string>"}]}'
-                    ),
-                    "Do not include markdown or prose outside the JSON object.",
+        try:
+            for policy_chunk in policy_chunks:
+                message_specific_prompts = [
+                    f"Review task result {task.id} for if it violates any policy."
+                    "## Policies",
+                    *policy_chunk,
+                    "## Response",
+                    "You are required to judge each policy as vague, violated, or passed.",
                 ]
-                fallback_response = await self.run(
-                    [message],
-                    ctx,
-                    fallback_prompts,
-                    None,
-                    include_memory_context=False,
-                )
-                cases_response = self._get_structured_message(
-                    fallback_response, CasesResponse
-                )
-
-            for case in cases_response.cases:
-                all_cases.append(
-                    {
-                        "policy_id": case.policy_id,
-                        "judgement": case.judgement.value,
-                        "reasoning": case.reasoning,
-                    }
-                )
-                if case.judgement == PolicyJudgement.VIOLATED:
-                    await self._publish_message_to_agent(
-                        PolicyViolationMessage(
-                            task_id=task.id,
-                            assignee_agent_id_str=task.assignee,
-                            policy_id=case.policy_id,
-                            content=case.reasoning,
-                            source=self.name,
-                        ),
-                        system_5_id,
+                try:
+                    response = await self.run(
+                        [message],
+                        ctx,
+                        message_specific_prompts,
+                        CasesResponse,
+                        include_memory_context=False,
                     )
-                    # response of system 5 will be handled in a different message handler
-                elif case.judgement == PolicyJudgement.SATISFIED:
-                    task_service.approve_task(task)
-                    # check if system should get another task assigned
-                elif case.judgement == PolicyJudgement.VAGUE:
-                    await self._publish_message_to_agent(
-                        PolicyVagueMessage(
-                            task_id=task.id,
-                            policy_id=case.policy_id,
-                            content=case.reasoning,
-                            source=self.name,
-                        ),
-                        system_5_id,
+                    cases_response = self._get_structured_message(
+                        response, CasesResponse
                     )
-                    # system 5 will call this message handler again once it has clarified the policy.
-                else:
-                    raise ValueError("Invalid policy judgement")
-        task_service.set_task_case_judgement(task, all_cases)
+                except Exception as exc:
+                    if not self._is_json_generation_failure(exc):
+                        raise
+                    fallback_prompts = [
+                        *message_specific_prompts,
+                        (
+                            "Return strict JSON only with this schema: "
+                            '{"cases":[{"policy_id":<int>,"judgement":"Vague|Violated|Satisfied","reasoning":"<string>"}]}'
+                        ),
+                        "Do not include markdown or prose outside the JSON object.",
+                    ]
+                    fallback_response = await self.run(
+                        [message],
+                        ctx,
+                        fallback_prompts,
+                        None,
+                        include_memory_context=False,
+                    )
+                    cases_response = self._get_structured_message(
+                        fallback_response, CasesResponse
+                    )
 
-    def _is_json_generation_failure(self, exc: Exception) -> bool:
-        text = str(exc).lower()
-        return "json_validate_failed" in text or "failed to generate json" in text
+                for case in cases_response.cases:
+                    all_cases.append(
+                        {
+                            "policy_id": case.policy_id,
+                            "judgement": case.judgement.value,
+                            "reasoning": case.reasoning,
+                        }
+                    )
+                    if case.judgement == PolicyJudgement.VIOLATED:
+                        await self._publish_message_to_agent(
+                            PolicyViolationMessage(
+                                task_id=task.id,
+                                assignee_agent_id_str=task.assignee,
+                                policy_id=case.policy_id,
+                                content=case.reasoning,
+                                source=self.name,
+                            ),
+                            system_5_id,
+                        )
+                        # response of system 5 will be handled in a different message handler
+                    elif case.judgement == PolicyJudgement.SATISFIED:
+                        task_service.approve_task(task)
+                        # check if system should get another task assigned
+                    elif case.judgement == PolicyJudgement.VAGUE:
+                        await self._publish_message_to_agent(
+                            PolicyVagueMessage(
+                                task_id=task.id,
+                                policy_id=case.policy_id,
+                                content=case.reasoning,
+                                source=self.name,
+                            ),
+                            system_5_id,
+                        )
+                        # system 5 will call this message handler again once it has clarified the policy.
+                    else:
+                        raise ValueError("Invalid policy judgement")
+            task_service.set_task_case_judgement(task, all_cases)
+        except Exception as exc:
+            if isinstance(exc, InternalErrorRoutedError):
+                return
+            await self._route_internal_error_to_policy_system(
+                failed_message_type=message.__class__.__name__,
+                error_summary=str(exc),
+                task_id=task.id,
+            )
 
     async def assign_task(self, system_id: int, task_id: int):
         assignee = system_service.get_system(system_id)
