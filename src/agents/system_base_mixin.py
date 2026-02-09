@@ -85,7 +85,6 @@ class SystemBaseMixin:
     agent_id: AgentId
     team_id: int
     name: str
-    id: AgentId
     identity_prompt: str
     responsibility_prompts: list[str]
     tools: list[Any]
@@ -93,6 +92,11 @@ class SystemBaseMixin:
     _last_system_messages: list[SystemMessage]
     _session_recorder: MemorySessionRecorder | None
     publish_message: Any
+
+    if TYPE_CHECKING:
+
+        @property
+        def id(self) -> AgentId: ...
 
     def _build_output_contract_prompts(
         self,
