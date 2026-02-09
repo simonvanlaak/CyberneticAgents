@@ -473,7 +473,10 @@ def render_teams_page(st: Any) -> None:
 
     for team in teams:
         st.subheader(f"Team {team.team_name} ({team.team_id})")
-        team_policies_text = ", ".join(team.policies) if team.policies else "-"
+        team_policy_values = getattr(team, "policy_details", None) or team.policies
+        team_policies_text = (
+            ", ".join(team_policy_values) if team_policy_values else "-"
+        )
         team_permissions_text = ", ".join(team.permissions) if team.permissions else "-"
         st.caption(f"Team policies: {team_policies_text}")
         st.caption(f"Team permissions: {team_permissions_text}")
@@ -488,7 +491,11 @@ def render_teams_page(st: Any) -> None:
                     "type": member.system_type,
                     "agent_id": member.agent_id_str,
                     "system_policies": (
-                        ", ".join(member.policies) if member.policies else "-"
+                        ", ".join(
+                            getattr(member, "policy_details", None) or member.policies
+                        )
+                        if (getattr(member, "policy_details", None) or member.policies)
+                        else "-"
                     ),
                     "system_permissions": (
                         ", ".join(member.permissions) if member.permissions else "-"

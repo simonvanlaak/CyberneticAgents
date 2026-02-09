@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional
 
 from src.cyberagent.db.init_db import get_database_path
@@ -16,6 +16,7 @@ class TeamMemberView:
     agent_id_str: str
     policies: list[str]
     permissions: list[str]
+    policy_details: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,7 @@ class TeamWithMembersView:
     policies: list[str]
     permissions: list[str]
     members: list[TeamMemberView]
+    policy_details: list[str] = field(default_factory=list)
 
 
 def _connect_db() -> sqlite3.Connection:
@@ -69,6 +71,7 @@ def load_teams_with_members(team_id: Optional[int] = None) -> list[TeamWithMembe
                 team_id=row_team_id,
                 team_name=str(row["team_name"]),
                 policies=[],
+                policy_details=[],
                 permissions=[],
                 members=[],
             )
@@ -81,6 +84,7 @@ def load_teams_with_members(team_id: Optional[int] = None) -> list[TeamWithMembe
                 system_type=str(row["system_type"]),
                 agent_id_str=str(row["system_agent_id"]),
                 policies=[],
+                policy_details=[],
                 permissions=[],
             )
         )
@@ -95,7 +99,7 @@ def _attach_policies(
     if not grouped:
         return
     query = """
-        SELECT id, team_id, system_id, name
+        SELECT id, team_id, system_id, name, content
         FROM policies
         WHERE 1 = 1
     """
@@ -118,7 +122,9 @@ def _attach_policies(
         if team is None:
             continue
         policy_name = str(row["name"])
+        policy_detail = _format_policy_detail(policy_name, row["content"])
         team.policies.append(policy_name)
+        team.policy_details.append(policy_detail)
         system_id_value = row["system_id"]
         if system_id_value is None:
             continue
@@ -126,15 +132,22 @@ def _attach_policies(
         if member is None:
             continue
         member.policies.append(policy_name)
+        member.policy_details.append(policy_detail)
 
     for team in grouped.values():
         team_policy_values = sorted(set(team.policies))
         team.policies.clear()
         team.policies.extend(team_policy_values)
+        team_policy_detail_values = sorted(set(team.policy_details))
+        team.policy_details.clear()
+        team.policy_details.extend(team_policy_detail_values)
         for member in team.members:
             member_policy_values = sorted(set(member.policies))
             member.policies.clear()
             member.policies.extend(member_policy_values)
+            member_policy_detail_values = sorted(set(member.policy_details))
+            member.policy_details.clear()
+            member.policy_details.extend(member_policy_detail_values)
 
 
 def _attach_permissions(
@@ -194,3 +207,10 @@ def _strip_skill_prefix(resource: str) -> str:
     if resource.startswith("skill:"):
         return resource[len("skill:") :]
     return resource
+
+
+def _format_policy_detail(name: str, content_value: object) -> str:
+    content = str(content_value or "").strip()
+    if not content:
+        return name
+    return f"{name}: {content}"

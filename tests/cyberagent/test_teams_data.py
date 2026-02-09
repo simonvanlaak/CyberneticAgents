@@ -133,10 +133,20 @@ def test_load_teams_with_members_includes_policies_and_permissions() -> None:
     rows = load_teams_with_members(team_id=team)
     assert len(rows) == 1
     assert rows[0].policies == ["System policy", "Team policy"]
+    assert rows[0].policy_details == [
+        "System policy: System-level policy content",
+        "Team policy: Team-level policy content",
+    ]
     assert rows[0].permissions == ["skill.alpha"]
     assert len(rows[0].members) == 2
     members_by_id = {member.id: member for member in rows[0].members}
     assert members_by_id[system_id].policies == ["Team policy"]
+    assert members_by_id[system_id].policy_details == [
+        "Team policy: Team-level policy content"
+    ]
     assert members_by_id[system_id].permissions == ["skill.alpha"]
     assert members_by_id[system_id_two].policies == ["System policy"]
+    assert members_by_id[system_id_two].policy_details == [
+        "System policy: System-level policy content"
+    ]
     assert members_by_id[system_id_two].permissions == []

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import cast
+
 from src.cli_session import AnsweredQuestion, InboxEntry
 from src.cyberagent.ui import dashboard
 from src.cyberagent.ui.memory_data import MemoryEntryView
@@ -73,6 +75,7 @@ def test_render_teams_page_uses_width_stretch(
                 team_name="team-1",
                 policies=["p1"],
                 permissions=["skill.a"],
+                policy_details=["p1: policy content"],
                 members=[
                     TeamMemberView(
                         id=10,
@@ -81,6 +84,7 @@ def test_render_teams_page_uses_width_stretch(
                         agent_id_str="System1/team-1",
                         policies=["sp1"],
                         permissions=["skill.a"],
+                        policy_details=["sp1: system policy content"],
                     )
                 ],
             )
@@ -93,6 +97,11 @@ def test_render_teams_page_uses_width_stretch(
     kwargs = fake_st.dataframe_calls[0]
     assert kwargs.get("width") == "stretch"
     assert "use_container_width" not in kwargs
+    assert any(
+        caption == "Team policies: p1: policy content" for caption in fake_st.captions
+    )
+    rows = cast(list[dict[str, object]], fake_st.dataframe_data[0])
+    assert rows[0]["system_policies"] == "sp1: system policy content"
 
 
 def test_render_teams_page_no_teams_shows_info(monkeypatch) -> None:
