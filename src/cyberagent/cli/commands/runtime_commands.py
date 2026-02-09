@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import argparse
 import os
+import signal
 import subprocess
 import sys
+import time
+from pathlib import Path
 
 from src.cyberagent.cli.constants import (
     ONBOARDING_COMMAND,
@@ -118,9 +121,69 @@ def _start_runtime_background() -> int | None:
 
 
 async def _handle_stop(_: argparse.Namespace) -> int:
+    _stop_background_runtime_process()
     await stop_runtime()
+    _clear_runtime_pid_file()
     print(get_message("cyberagent", "runtime_stopped"))
     return 0
+
+
+def _stop_background_runtime_process() -> None:
+    pid = _load_runtime_pid()
+    if pid is None:
+        return
+    if not _runtime_pid_is_running():
+        return
+    if not _pid_looks_like_runtime(pid):
+        return
+    try:
+        os.kill(pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    except OSError:
+        return
+    if _wait_for_pid_exit(pid, timeout_seconds=3.0):
+        return
+    try:
+        os.kill(pid, signal.SIGKILL)
+    except OSError:
+        return
+    _wait_for_pid_exit(pid, timeout_seconds=1.0)
+
+
+def _wait_for_pid_exit(pid: int, timeout_seconds: float) -> bool:
+    deadline = time.time() + timeout_seconds
+    while time.time() < deadline:
+        if not _is_pid_running(pid):
+            return True
+        time.sleep(0.05)
+    return not _is_pid_running(pid)
+
+
+def _is_pid_running(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except OSError:
+        return False
+    return True
+
+
+def _pid_looks_like_runtime(pid: int) -> bool:
+    cmdline_path = f"/proc/{pid}/cmdline"
+    try:
+        raw = Path(cmdline_path).read_bytes()
+    except OSError:
+        # If command line is unavailable, prefer terminating stale runtime PID.
+        return True
+    cmdline = raw.decode("utf-8", errors="ignore")
+    return "src.cyberagent.cli.cyberagent" in cmdline and "serve" in cmdline
+
+
+def _clear_runtime_pid_file() -> None:
+    try:
+        RUNTIME_PID_FILE.unlink()
+    except OSError:
+        return
 
 
 async def _handle_restart(args: argparse.Namespace) -> int:
