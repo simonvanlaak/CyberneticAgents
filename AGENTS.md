@@ -57,6 +57,7 @@ Never commit or publish real phone numbers, videos, or live configuration values
 3. Never batch unrelated changes into one commit; keep scope tightly focused.
 4. Use concise, action-oriented conventional commit messages (e.g., `cli: add verbose flag to send`).
 5. Stage only the files that belong to your change.
+6. If any completed change is still uncommitted, create the atomic commit immediately before starting new work.
 
 ## Project Architecture
 
