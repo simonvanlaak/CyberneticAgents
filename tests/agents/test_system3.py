@@ -16,6 +16,7 @@ from src.agents.system3 import (
     TasksCreateResponse,
 )
 from src.agents.messages import (
+    CapabilityGapMessage,
     InitiativeAssignMessage,
     PolicySuggestionMessage,
     TaskReviewMessage,
@@ -635,3 +636,60 @@ async def test_system3_task_review_parse_failure_marks_retry_exhausted_after_max
     published_message = await_args.args[0]
     assert isinstance(published_message, PolicySuggestionMessage)
     assert "manual intervention" in published_message.content.lower()
+
+
+@pytest.mark.asyncio
+async def test_system3_capability_gap_retries_tool_args_json_error_without_routing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    system3 = System3("System3/controller1")
+    system3._publish_message_to_agent = AsyncMock()
+
+    async def fake_set_system_prompt(
+        _prompts: list[str], _memory_context: list[str] | None = None
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(system3, "_set_system_prompt", fake_set_system_prompt)
+    monkeypatch.setattr(system3, "_build_memory_context", lambda *_args: [])
+    monkeypatch.setattr(
+        "src.agents.system_base.mark_team_active", lambda *_args, **_kwargs: None
+    )
+
+    class DummyTask:
+        assignee = "System1/root"
+
+    monkeypatch.setattr(
+        "src.cyberagent.services.tasks._get_task", lambda _task_id: DummyTask()
+    )
+    monkeypatch.setattr(system3, "_was_tool_called", lambda *_args, **_kwargs: True)
+
+    system3._agent.run = AsyncMock(
+        side_effect=[
+            RuntimeError(
+                "Error code: 400 - {'error': {'message': "
+                "'Failed to parse tool call arguments as JSON', "
+                "'type': 'invalid_request_error', 'code': 'tool_use_failed'}}"
+            ),
+            TaskResult(messages=[TextMessage(content="ok", source="System3/root")]),
+        ]
+    )
+
+    message = CapabilityGapMessage(
+        task_id=7,
+        content="Need different capability",
+        assignee_agent_id_str="System1/root",
+        source="System1/root",
+    )
+    context = MessageContext(
+        sender=AgentId.from_str("System1/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="capability_gap_tool_args_retry_test",
+    )
+
+    await system3.handle_capability_gap_message(message, context)  # type: ignore[arg-type]
+
+    assert system3._agent.run.await_count == 2
+    system3._publish_message_to_agent.assert_not_awaited()
