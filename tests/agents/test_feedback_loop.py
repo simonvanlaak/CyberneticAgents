@@ -6,7 +6,12 @@ from autogen_agentchat.base import TaskResult
 from autogen_agentchat.messages import StructuredMessage, TextMessage
 from autogen_core import AgentId, CancellationToken, MessageContext
 
-from src.agents.messages import StrategyRequestMessage, UserMessage
+from src.agents.messages import (
+    CapabilityGapMessage,
+    StrategyRequestMessage,
+    TaskReviewMessage,
+    UserMessage,
+)
 from src.agents.system1 import System1
 from src.agents.system3 import (
     System3,
@@ -289,6 +294,17 @@ async def test_product_discovery_feedback_loop_creates_tasks(
         tasks = db.query(Task).filter(Task.team_id == team_id).all()
         assert tasks
         assert all(task.assignee == "System1/ops1" for task in tasks)
-        assert len(collected_reviews) == len(tasks)
+        task_reviews = [
+            message
+            for message in collected_reviews
+            if isinstance(message, TaskReviewMessage)
+        ]
+        capability_gaps = [
+            message
+            for message in collected_reviews
+            if isinstance(message, CapabilityGapMessage)
+        ]
+        assert len(task_reviews) == len(tasks)
+        assert len(capability_gaps) == len(tasks)
     finally:
         db.close()
