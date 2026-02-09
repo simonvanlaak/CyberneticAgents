@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from difflib import SequenceMatcher
 import sqlite3
 from dataclasses import dataclass
@@ -20,8 +21,11 @@ from src.cyberagent.memory.models import (
     MemorySource,
 )
 from src.cyberagent.memory.store import MemoryStore
+from src.cyberagent.core.paths import resolve_data_path
 
 _CURSOR_PREFIX = "offset:"
+_DEFAULT_DB_FILENAME = "memory.db"
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(slots=True)
@@ -31,6 +35,7 @@ class SqliteMemoryStore(MemoryStore):
     db_path: Path
 
     def __post_init__(self) -> None:
+        self.db_path = self.db_path.expanduser()
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._ensure_schema()
 
@@ -179,7 +184,27 @@ class SqliteMemoryStore(MemoryStore):
             connection.commit()
 
     def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.db_path)
+        try:
+            return self._open_connection(self.db_path)
+        except sqlite3.OperationalError as exc:
+            fallback_path = resolve_data_path(_DEFAULT_DB_FILENAME).resolve()
+            if fallback_path == self.db_path:
+                raise sqlite3.OperationalError(
+                    f"Unable to open SQLite memory database at '{self.db_path}'."
+                ) from exc
+            fallback_path.parent.mkdir(parents=True, exist_ok=True)
+            connection = self._open_connection(fallback_path)
+            _LOGGER.warning(
+                "Unable to open SQLite memory database at '%s'; "
+                "falling back to '%s'.",
+                self.db_path,
+                fallback_path,
+            )
+            self.db_path = fallback_path
+            return connection
+
+    def _open_connection(self, path: Path) -> sqlite3.Connection:
+        connection = sqlite3.connect(path)
         connection.row_factory = sqlite3.Row
         return connection
 

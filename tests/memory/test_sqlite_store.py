@@ -93,3 +93,19 @@ def test_sqlite_store_query_filters(tmp_path) -> None:
     result = store.query(query)
     assert len(result.items) == 1
     assert result.items[0].id == "mem-1"
+
+
+def test_sqlite_store_falls_back_when_db_path_is_unopenable(
+    tmp_path, monkeypatch
+) -> None:
+    broken_path = tmp_path / "memory.db"
+    broken_path.mkdir()
+    monkeypatch.setenv("CYBERAGENT_ROOT", str(tmp_path))
+
+    store = SqliteMemoryStore(broken_path)
+    entry = _entry("mem-1", "fallback works")
+    store.add(entry)
+
+    expected_fallback = tmp_path / "data" / "memory.db"
+    assert store.db_path == expected_fallback
+    assert expected_fallback.exists()
