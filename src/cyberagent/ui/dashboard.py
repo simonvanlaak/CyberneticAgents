@@ -148,11 +148,9 @@ def _render_task_details_page(st: Any, title_col: Any) -> None:
     st.subheader("Task Content")
     st.write(task.content or "-")
     st.subheader("Status Reasoning")
-    st.write(getattr(task, "reasoning", None) or "-")
+    st.write(task.reasoning or "-")
     st.subheader("Task Result")
     st.write(task.result or "-")
-    st.subheader("Status Reasoning")
-    st.write(task.reasoning or "-")
     st.subheader("Case Judgement")
     _render_case_judgement(st, task.case_judgement)
     if st.button("Back to Kanban"):
