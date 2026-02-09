@@ -25,10 +25,6 @@ async def test_run_headless_session_starts_cli_executor(
     async def fake_register() -> None:
         return None
 
-    class DummyEnforcer:
-        def clear_policy(self) -> None:
-            return None
-
     class DummyRuntime:
         async def send_message(self, *args, **kwargs):  # noqa: ANN001
             return None
@@ -41,7 +37,6 @@ async def test_run_headless_session_starts_cli_executor(
 
     monkeypatch.setattr(headless, "init_db", lambda: None)
     monkeypatch.setattr(headless, "register_systems", fake_register)
-    monkeypatch.setattr(headless, "get_enforcer", lambda: DummyEnforcer())
     monkeypatch.setattr(headless, "configure_autogen_logging", lambda _dir: None)
     monkeypatch.setattr(headless, "get_runtime", lambda: DummyRuntime())
     monkeypatch.setattr(headless, "read_stdin_loop", fake_read_stdin)
@@ -71,10 +66,6 @@ async def test_run_headless_session_starts_webhook_when_configured(
 
     async def fake_register() -> None:
         return None
-
-    class DummyEnforcer:
-        def clear_policy(self) -> None:
-            return None
 
     class DummyRuntime:
         async def send_message(self, *args, **kwargs):  # noqa: ANN001
@@ -112,7 +103,6 @@ async def test_run_headless_session_starts_webhook_when_configured(
 
     monkeypatch.setattr(headless, "init_db", lambda: None)
     monkeypatch.setattr(headless, "register_systems", fake_register)
-    monkeypatch.setattr(headless, "get_enforcer", lambda: DummyEnforcer())
     monkeypatch.setattr(headless, "configure_autogen_logging", lambda _dir: None)
     monkeypatch.setattr(headless, "get_runtime", lambda: DummyRuntime())
     monkeypatch.setattr(headless, "read_stdin_loop", fake_read_stdin)

@@ -26,7 +26,6 @@ from src.cyberagent.cli.agent_message_queue import (
 from src.cyberagent.db.init_db import init_db
 from src.cyberagent.core.state import get_last_team_id
 from src.cyberagent.core.logging import configure_autogen_logging
-from src.rbac.enforcer import get_enforcer
 from src.registry import register_systems
 from src.cyberagent.core.runtime import (
     get_runtime,
@@ -89,8 +88,6 @@ async def run_headless_session(initial_message: str | None = None) -> None:
             return
         os.environ["CYBERAGENT_ACTIVE_TEAM_ID"] = str(team_id)
     await register_systems()
-    enforcer = get_enforcer()
-    enforcer.clear_policy()
 
     logs_dir = get_logs_dir()
     logs_dir.mkdir(parents=True, exist_ok=True)
