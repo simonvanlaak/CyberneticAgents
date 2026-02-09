@@ -11,7 +11,6 @@ import pytest
 from src.cyberagent.db import init_db
 from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.models.system import ensure_default_systems_for_team
-from src.cyberagent.db.models.recursion import Recursion
 from src.cyberagent.db.models.team import Team
 from src.cyberagent.testing.pytest_worker import get_pytest_worker_id
 from src.cyberagent.testing.thread_exceptions import ThreadExceptionTracker
@@ -80,7 +79,12 @@ def _clear_active_team_env(monkeypatch: pytest.MonkeyPatch) -> None:
         os.chmod(TEST_DB_PATH, 0o666)
     session = next(get_db())
     try:
-        session.query(Recursion).delete()
+        for table in reversed(init_db.Base.metadata.sorted_tables):
+            session.execute(table.delete())
         session.commit()
+        team = Team(name="default_team", last_active_at=datetime.utcnow())
+        session.add(team)
+        session.commit()
+        ensure_default_systems_for_team(team.id)
     finally:
         session.close()
