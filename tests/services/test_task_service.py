@@ -158,3 +158,39 @@ def test_set_task_case_judgement_updates_policy_judgement_fields() -> None:
     assert task.policy_judgement == "Violated"
     assert task.policy_judgement_reasoning == "missing evidence"
     assert task.updated is True
+
+
+def test_persist_task_uses_session_merge_for_sqlalchemy_task(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.cyberagent.services import tasks as task_service
+    from src.cyberagent.db.models.task import Task
+
+    class _Session:
+        def __init__(self) -> None:
+            self.merged = None
+            self.committed = False
+            self.closed = False
+
+        def merge(self, task) -> None:  # type: ignore[no-untyped-def]
+            self.merged = task
+
+        def commit(self) -> None:
+            self.committed = True
+
+        def close(self) -> None:
+            self.closed = True
+
+    session = _Session()
+
+    def _fake_get_db():  # type: ignore[no-untyped-def]
+        yield session
+
+    monkeypatch.setattr(task_service, "get_db", _fake_get_db)
+    task = Task(team_id=1, initiative_id=1, name="Task", content="Do it")
+
+    task_service.complete_task(task, "done")
+
+    assert session.merged is task
+    assert session.committed is True
+    assert session.closed is True

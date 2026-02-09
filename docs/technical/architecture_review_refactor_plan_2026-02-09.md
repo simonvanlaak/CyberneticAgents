@@ -70,7 +70,7 @@ Critical review of the current project architecture across runtime, agent orches
 ### Phase 1 Progress
 - [x] Step 1: Replace direct use of `runtime._known_agent_names` with runtime-scoped registration adapter.
 - [x] Step 2: Remove DB model -> agent message coupling.
-- [ ] Step 3: Begin transaction-scoped repository migration for task/initiative/procedure run paths.
+- [x] Step 3: Begin transaction-scoped repository migration for task lifecycle paths (initial slice in `tasks` service).
 
 ## Phase 0: Stabilization (1 sprint)
 1. Fix entrypoint architecture debt:

@@ -24,7 +24,7 @@ def start_task(task_id: int) -> Task:
     if task is None:
         raise ValueError(f"Task with id {task_id} not found")
     task.set_status(Status.IN_PROGRESS)
-    task.update()
+    _persist_task(task)
     return task
 
 
@@ -38,7 +38,7 @@ def complete_task(task: Task, result: str) -> None:
     """
     task.result = result
     task.set_status(Status.COMPLETED)
-    task.update()
+    _persist_task(task)
 
 
 def mark_task_blocked(task: Task, reasoning: str) -> None:
@@ -51,7 +51,7 @@ def mark_task_blocked(task: Task, reasoning: str) -> None:
     """
     task.reasoning = reasoning
     task.set_status(Status.BLOCKED)
-    task.update()
+    _persist_task(task)
 
 
 def get_task_by_id(task_id: int) -> Task:
@@ -124,7 +124,7 @@ def assign_task(task: Task, assignee_agent_id_str: str) -> None:
         assignee_agent_id_str: Agent id string.
     """
     task.assignee = assignee_agent_id_str
-    task.update()
+    _persist_task(task)
 
 
 def approve_task(task: Task) -> None:
@@ -135,7 +135,7 @@ def approve_task(task: Task) -> None:
         task: Task to update.
     """
     task.set_status(Status.APPROVED)
-    task.update()
+    _persist_task(task)
 
 
 def set_task_case_judgement(task: Task, cases: list[dict[str, object]]) -> None:
@@ -163,4 +163,24 @@ def set_task_case_judgement(task: Task, cases: list[dict[str, object]]) -> None:
     else:
         task.policy_judgement = None
         task.policy_judgement_reasoning = None
-    task.update()
+    _persist_task(task)
+
+
+def _persist_task(task: Task) -> None:
+    """
+    Persist a task mutation using service-level transaction control.
+
+    Transitional compatibility:
+    - SQLAlchemy Task instances are persisted via session merge/commit here.
+    - Test doubles or legacy stand-ins fall back to ``update()`` when available.
+    """
+    if isinstance(task, Task):
+        session = next(get_db())
+        try:
+            session.merge(task)
+            session.commit()
+        finally:
+            session.close()
+        return
+    if hasattr(task, "update"):
+        task.update()
