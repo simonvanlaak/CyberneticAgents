@@ -21,7 +21,7 @@ from src.agents.messages import (
     PolicySuggestionMessage,
     TaskReviewMessage,
 )
-from src.enums import PolicyJudgement, Status
+from src.enums import PolicyJudgement, Status, SystemType
 
 
 class TestSystem3Basic:
@@ -748,3 +748,64 @@ async def test_system3_capability_gap_prompt_includes_exact_task_context(
     assert "The affected task_id is 7." in joined
     assert "never use 0 or placeholders" in joined
     assert "Define workshop objectives and key questions" in joined
+
+
+@pytest.mark.asyncio
+async def test_system3_blocked_task_with_insufficient_info_requests_system4_research():
+    """When a task is blocked due to insufficient information, System3 should request System4 research."""
+    system3 = System3("System3/controller1")
+    system3._publish_message_to_agent = AsyncMock()
+
+    message = TaskReviewMessage(
+        task_id=33,
+        assignee_agent_id_str="System1/root",
+        source="System1/root",
+        content="Review blocked task.",
+    )
+    context = MessageContext(
+        sender=AgentId.from_str("System1/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="task_review_blocked_insufficient_info",
+    )
+
+    class DummyTask:
+        id = 33
+        assignee = "System1/root"
+        status = Status.BLOCKED
+        name = "Collect user identity and disambiguation links"
+        content = "Gather user name and confirm public profile links"
+        reasoning = "Insufficient information: No user identity or disambiguation links are available to retrieve."
+
+    class DummySystem4:
+        def get_agent_id(self):
+            return AgentId.from_str("System4/root")
+
+    class DummySystem5:
+        def get_agent_id(self):
+            return AgentId.from_str("System5/root")
+
+    with (
+        patch("src.cyberagent.services.tasks._get_task", return_value=DummyTask()),
+        patch.object(
+            system3,
+            "_get_systems_by_type",
+            side_effect=lambda system_type: [DummySystem4()]
+            if system_type == SystemType.INTELLIGENCE
+            else [DummySystem5()],
+        ),
+        patch(
+            "src.cyberagent.services.policies._get_system_policy_prompts",
+            return_value=["Policy #1"],
+        ),
+        patch.object(system3, "run", new=AsyncMock()),
+    ):
+        await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
+
+    # First message should be a research request to System4.
+    assert system3._publish_message_to_agent.await_count >= 1
+    published = [call.args[0] for call in system3._publish_message_to_agent.await_args_list]
+    from src.agents.messages import ResearchRequestMessage
+
+    assert any(isinstance(msg, ResearchRequestMessage) for msg in published)

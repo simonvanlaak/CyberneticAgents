@@ -12,6 +12,7 @@ from src.agents.messages import (
     PolicySuggestionMessage,
     PolicyVagueMessage,
     PolicyViolationMessage,
+    ResearchRequestMessage,
     TaskAssignMessage,
     TaskReviewMessage,
 )
@@ -154,6 +155,15 @@ class System3(SystemBase):
             ),
             system_5_id,
         )
+
+    def _is_insufficient_information_blocked_task(self, task: object) -> bool:
+        raw_status = getattr(task, "status", None)
+        status_value = getattr(raw_status, "value", raw_status)
+        status_text = str(status_value).strip().lower()
+        if "blocked" not in status_text:
+            return False
+        reasoning = str(getattr(task, "reasoning", "") or "").strip().lower()
+        return "insufficient information" in reasoning
 
     @message_handler
     async def handle_initiative_assign_message(
@@ -352,6 +362,30 @@ class System3(SystemBase):
             raise ValueError("Task has no assignee")
         if not task_service.is_review_eligible_for_task(task):
             return
+
+        # If the task is blocked due to missing/insufficient information, proactively
+        # request System4 (intelligence) to research/unblock before running policy review.
+        if self._is_insufficient_information_blocked_task(task):
+            intelligence_systems = self._get_systems_by_type(SystemType.INTELLIGENCE)
+            if intelligence_systems:
+                system_4_id = intelligence_systems[0].get_agent_id()
+                await self._publish_message_to_agent(
+                    ResearchRequestMessage(
+                        source=self.name,
+                        content=(
+                            "Task is blocked due to insufficient information. "
+                            "Please research or otherwise obtain the missing info, "
+                            "and if needed ask the user for the exact missing details.\n\n"
+                            f"Task ID: {task.id}\n"
+                            f"Task name: {getattr(task, 'name', '')}\n"
+                            f"Task content: {getattr(task, 'content', '')}\n"
+                            f"Blocked reasoning: {getattr(task, 'reasoning', '')}"
+                        ),
+                    ),
+                    system_4_id,
+                )
+            return
+
         policy_chunk = policy_service.get_system_policy_prompts(task.assignee)
         policy_systems = self._get_systems_by_type(SystemType.POLICY)
         if not policy_systems:
