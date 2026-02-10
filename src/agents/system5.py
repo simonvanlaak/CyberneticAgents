@@ -7,6 +7,7 @@ from autogen_core.tools import FunctionTool
 from src.agents.messages import (
     CapabilityGapMessage,
     ConfirmationMessage,
+    ConfirmationResponse,
     InternalErrorMessage,
     PolicySuggestionMessage,
     TaskReviewMessage,
@@ -90,7 +91,7 @@ class System5(SystemBase):
             [message],
             context,
             message_specific_prompts,
-            output_content_type=ConfirmationMessage,
+            output_content_type=ConfirmationResponse,
         )
 
         return self._get_structured_message(response, ConfirmationMessage)
@@ -148,7 +149,7 @@ class System5(SystemBase):
                 [message],
                 context,
                 message_specific_prompts,
-                output_content_type=ConfirmationMessage,
+                output_content_type=ConfirmationResponse,
             )
         except Exception as exc:
             return ConfirmationMessage(
@@ -161,7 +162,14 @@ class System5(SystemBase):
             )
 
         try:
-            return self._get_structured_message(response, ConfirmationMessage)
+            parsed: ConfirmationResponse = self._get_structured_message(
+                response, ConfirmationResponse
+            )
+            return ConfirmationMessage(
+                content=parsed.content,
+                is_error=parsed.is_error,
+                source=self.name,
+            )
         except Exception:
             # Back-compat / testing: allow plain-text confirmations when structured output
             # is not available (e.g., mocked TaskResult in unit tests).
@@ -226,10 +234,17 @@ class System5(SystemBase):
             [message],
             context,
             message_specific_prompts,
-            output_content_type=ConfirmationMessage,
+            output_content_type=ConfirmationResponse,
         )
 
-        return self._get_structured_message(response, ConfirmationMessage)
+        parsed: ConfirmationResponse = self._get_structured_message(
+            response, ConfirmationResponse
+        )
+        return ConfirmationMessage(
+            content=parsed.content,
+            is_error=parsed.is_error,
+            source=self.name,
+        )
 
     @message_handler
     async def handle_policy_suggestion_message(
@@ -424,10 +439,17 @@ class System5(SystemBase):
             [message],
             context,
             message_specific_prompts,
-            output_content_type=ConfirmationMessage,
+            output_content_type=ConfirmationResponse,
         )
 
-        return self._get_structured_message(response, ConfirmationMessage)
+        parsed: ConfirmationResponse = self._get_structured_message(
+            response, ConfirmationResponse
+        )
+        return ConfirmationMessage(
+            content=parsed.content,
+            is_error=parsed.is_error,
+            source=self.name,
+        )
 
     @message_handler
     async def handle_research_review_message(
@@ -462,10 +484,17 @@ class System5(SystemBase):
             [message],
             context,
             message_specific_prompts,
-            output_content_type=ConfirmationMessage,
+            output_content_type=ConfirmationResponse,
         )
 
-        return self._get_structured_message(response, ConfirmationMessage)
+        parsed: ConfirmationResponse = self._get_structured_message(
+            response, ConfirmationResponse
+        )
+        return ConfirmationMessage(
+            content=parsed.content,
+            is_error=parsed.is_error,
+            source=self.name,
+        )
 
     @message_handler
     async def handle_team_envelope_update_message(
