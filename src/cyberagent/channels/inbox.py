@@ -61,6 +61,28 @@ _pending_lock = threading.Lock()
 _next_entry_id = 1
 
 
+def _ensure_inbox_loaded() -> None:
+    """Hydrate in-memory inbox state from disk on first use.
+
+    Some read paths (e.g. the dashboard) intentionally read from persisted state.
+    If the process restarts, `_entries` may be empty while the state file still
+    contains pending questions; resolving should still work.
+    """
+    global _entries, _next_entry_id
+    if _entries:
+        return
+    state = _load_inbox_state()
+    if state is None:
+        return
+    try:
+        entries = _entries_from_state(state)
+        next_entry_id = int(state.get("next_entry_id", len(entries) + 1))
+    except Exception:
+        return
+    _entries = entries
+    _next_entry_id = max(next_entry_id, len(entries) + 1)
+
+
 def add_inbox_entry(
     kind: InboxEntryKind,
     content: str,
@@ -75,6 +97,7 @@ def add_inbox_entry(
 ) -> InboxEntry:
     """Add a new inbox entry."""
     with _pending_lock:
+        _ensure_inbox_loaded()
         entry = _add_inbox_entry_locked(
             kind=kind,
             content=content,
@@ -99,6 +122,7 @@ def enqueue_pending_question(
 ) -> int:
     """Record a pending question for the inbox."""
     with _pending_lock:
+        _ensure_inbox_loaded()
         entry = _add_inbox_entry_locked(
             kind="system_question",
             content=content,
@@ -138,6 +162,7 @@ def resolve_pending_question(
 ) -> AnsweredQuestion | None:
     """Resolve the oldest pending question with the provided answer."""
     with _pending_lock:
+        _ensure_inbox_loaded()
         entry_index = _get_pending_entry_index(channel=channel, session_id=session_id)
         if entry_index is None:
             return None
@@ -373,6 +398,7 @@ def _get_pending_entries(
     session_id: str | None = None,
 ) -> list[InboxEntry]:
     with _pending_lock:
+        _ensure_inbox_loaded()
         entries = [entry for entry in _entries if _is_pending_question(entry)]
     return _filter_entries(
         entries,
@@ -385,6 +411,7 @@ def _get_pending_entries(
 
 def _get_answered_entries() -> list[InboxEntry]:
     with _pending_lock:
+        _ensure_inbox_loaded()
         return [entry for entry in _entries if _is_answered_question(entry)]
 
 
