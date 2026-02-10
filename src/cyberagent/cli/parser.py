@@ -50,6 +50,14 @@ def build_parser() -> argparse.ArgumentParser:
     status_parser.add_argument("--team", type=int, default=None)
     status_parser.add_argument("--active-only", action="store_true")
     status_parser.add_argument("--json", action="store_true")
+    status_parser.add_argument(
+        "--details",
+        action="store_true",
+        help=(
+            "Include free-form fields (purpose content + descriptions + task content). "
+            "Warning: may print memory/notes."
+        ),
+    )
 
     suggest_parser = subparsers.add_parser(
         "suggest", help="Send a suggestion payload to System4."

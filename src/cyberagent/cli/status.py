@@ -320,8 +320,53 @@ def render_status(teams: list[TeamView], *, include_details: bool = False) -> st
     return "\n".join(lines)
 
 
-def render_status_json(teams: list[TeamView]) -> str:
-    return json.dumps({"teams": [asdict(team) for team in teams]}, indent=2)
+def _asdict_compact(team: TeamView, *, include_details: bool) -> dict:
+    payload = {"id": team.id, "name": team.name, "purposes": []}
+    for purpose in team.purposes:
+        purpose_payload = {
+            "id": purpose.id,
+            "name": purpose.name,
+            "strategies": [],
+        }
+        if include_details:
+            purpose_payload["content"] = purpose.content
+        for strategy in purpose.strategies:
+            strategy_payload = {
+                "id": strategy.id,
+                "status": strategy.status,
+                "name": strategy.name,
+                "initiatives": [],
+            }
+            if include_details:
+                strategy_payload["description"] = strategy.description
+            for initiative in strategy.initiatives:
+                initiative_payload = {
+                    "id": initiative.id,
+                    "status": initiative.status,
+                    "name": initiative.name,
+                    "tasks": [],
+                }
+                if include_details:
+                    initiative_payload["description"] = initiative.description
+                for task in initiative.tasks:
+                    task_payload = {
+                        "id": task.id,
+                        "status": task.status,
+                        "assignee": task.assignee,
+                        "name": task.name,
+                    }
+                    if include_details:
+                        task_payload["content"] = task.content
+                    initiative_payload["tasks"].append(task_payload)
+                strategy_payload["initiatives"].append(initiative_payload)
+            purpose_payload["strategies"].append(strategy_payload)
+        payload["purposes"].append(purpose_payload)
+    return payload
+
+
+def render_status_json(teams: list[TeamView], *, include_details: bool = False) -> str:
+    compact = {"teams": [_asdict_compact(team, include_details=include_details) for team in teams]}
+    return json.dumps(compact, indent=2)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -346,7 +391,7 @@ def main(argv: list[str]) -> int:
     init_db()
     status = collect_status(team_id=args.team, active_only=args.active_only)
     if args.json:
-        output = render_status_json(status)
+        output = render_status_json(status, include_details=bool(args.details))
     else:
         output = render_status(status, include_details=bool(args.details))
     print(output)

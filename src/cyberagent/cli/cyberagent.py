@@ -170,6 +170,8 @@ def _handle_status(args: argparse.Namespace) -> int:
         res_args.append("--active-only")
     if args.json:
         res_args.append("--json")
+    if getattr(args, "details", False):
+        res_args.append("--details")
     return status_main(res_args)
 
 

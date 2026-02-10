@@ -241,6 +241,18 @@ def test_status_json_output_includes_fields():
         render_status_json(collect_status(team_id=team_id, active_only=False))
     )
 
+    # Compact JSON should not leak free-form fields by default.
+    assert "content" not in payload["teams"][0]["purposes"][0]
+    assert "description" not in payload["teams"][0]["purposes"][0]["strategies"][0]
+    assert (
+        "description"
+        not in payload["teams"][0]["purposes"][0]["strategies"][0]["initiatives"][0]
+    )
+    assert (
+        "content"
+        not in payload["teams"][0]["purposes"][0]["strategies"][0]["initiatives"][0]["tasks"][0]
+    )
+
     assert payload["teams"][0]["id"] == team_id
     assert payload["teams"][0]["purposes"][0]["id"] == purpose_id
     assert payload["teams"][0]["purposes"][0]["strategies"][0]["id"] == strategy_id
@@ -253,6 +265,63 @@ def test_status_json_output_includes_fields():
             0
         ]["id"]
         == task_id
+    )
+
+
+def test_status_json_output_includes_details_when_requested():
+    init_db()
+    team_id = _create_team_id()
+    purpose = Purpose(
+        team_id=team_id,
+        name="Purpose JSON Details",
+        content="Purpose content details.",
+    )
+    purpose_id = purpose.add()
+    strategy_id = _insert_strategy(
+        team_id=team_id,
+        purpose_id=purpose_id,
+        name="Strategy JSON Details",
+        description="Strategy description details.",
+        status="in_progress",
+    )
+    initiative_id = _insert_initiative(
+        team_id=team_id,
+        strategy_id=strategy_id,
+        name="Initiative JSON Details",
+        description="Initiative description details.",
+        status="pending",
+    )
+    _insert_task(
+        team_id=team_id,
+        initiative_id=initiative_id,
+        name="Task JSON Details",
+        content="Task content details.",
+        status="pending",
+        assignee=None,
+    )
+
+    payload = json.loads(
+        render_status_json(
+            collect_status(team_id=team_id, active_only=False), include_details=True
+        )
+    )
+
+    assert payload["teams"][0]["purposes"][0]["content"] == "Purpose content details."
+    assert (
+        payload["teams"][0]["purposes"][0]["strategies"][0]["description"]
+        == "Strategy description details."
+    )
+    assert (
+        payload["teams"][0]["purposes"][0]["strategies"][0]["initiatives"][0][
+            "description"
+        ]
+        == "Initiative description details."
+    )
+    assert (
+        payload["teams"][0]["purposes"][0]["strategies"][0]["initiatives"][0][
+            "tasks"
+        ][0]["content"]
+        == "Task content details."
     )
 
 
