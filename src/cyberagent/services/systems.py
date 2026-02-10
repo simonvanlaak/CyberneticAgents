@@ -88,7 +88,10 @@ def add_skill_grant(system_id: int, skill_name: str, actor_id: str) -> bool:
     current = list_granted_skills(system_id)
     if skill_name in current:
         return False
-    if len(current) >= 5:
+    # Default systems increasingly rely on multiple built-in skills (PKM access,
+    # web, messaging, memory). Keep the limit high enough to avoid onboarding
+    # failures while still preventing unbounded grants.
+    if len(current) >= 10:
         _raise_permission_error(
             team_id, system_id, skill_name, "system_skill_limit", actor_id
         )
