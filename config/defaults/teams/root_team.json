@@ -14,6 +14,8 @@
     "git-readonly-sync",
     "file-reader",
     "notion",
+    "obsidian-search",
+    "obsidian-get",
     "web-search",
     "web-fetch"
   ],
@@ -36,6 +38,8 @@
         "git-readonly-sync",
         "file-reader",
         "notion",
+        "obsidian-search",
+        "obsidian-get",
         "web-search"
       ],
       "config": {}
@@ -51,7 +55,12 @@
       "name": "System4/root",
       "type": "INTELLIGENCE",
       "agent_id": "System4/root",
-      "skill_grants": ["memory_crud", "git-readonly-sync"],
+      "skill_grants": [
+        "memory_crud",
+        "git-readonly-sync",
+        "obsidian-search",
+        "obsidian-get"
+      ],
       "config": {}
     },
     {
