@@ -263,6 +263,28 @@ class SystemBase(SystemBaseMixin, RoutedAgent):
                 )
             except Exception as exc:
                 retry_result: TaskResult | None = None
+
+                provider_error_summary = None
+                try:
+                    from src.agents.provider_errors import extract_provider_error_details
+
+                    details = extract_provider_error_details(exc)
+                    if details is not None and details.status_code is not None:
+                        provider_error_summary = (
+                            "provider_http_error"
+                            f" status={details.status_code}"
+                            f" request_id={details.request_id or 'unknown'}"
+                            f" type={details.error_type or 'unknown'}"
+                            f" code={details.error_code or 'unknown'}"
+                            f" message={details.message or details.raw_body_excerpt or 'n/a'}"
+                        )
+                        logger.warning(
+                            "Provider HTTP error for %s: %s",
+                            self.agent_id.__str__(),
+                            provider_error_summary,
+                        )
+                except Exception:
+                    provider_error_summary = None
                 if self._is_message_length_error(exc):
                     retry_result = await self._retry_with_compacted_message_payload(
                         chat_messages=chat_messages,
@@ -302,7 +324,11 @@ class SystemBase(SystemBaseMixin, RoutedAgent):
                         raise
                     await self._route_internal_error_to_policy_system(
                         failed_message_type=chat_messages[-1].__class__.__name__,
-                        error_summary=str(exc),
+                        error_summary=(
+                            f"{str(exc)} | {provider_error_summary}"
+                            if provider_error_summary
+                            else str(exc)
+                        ),
                         task_id=getattr(chat_messages[-1], "task_id", None),
                     )
                     raise InternalErrorRoutedError("internal_error_routed") from exc
