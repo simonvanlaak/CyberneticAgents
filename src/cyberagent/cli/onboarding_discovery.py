@@ -59,13 +59,17 @@ def start_discovery_background(args: object, team_id: int) -> None:
     if os.environ.get("CYBERAGENT_DISABLE_BACKGROUND_DISCOVERY"):
         logger.info("Background discovery disabled via env override.")
         return
+
+    # Background discovery should not block the onboarding interview, but we still
+    # want it to enqueue the onboarding discovery prompt once the sync completes
+    # so the agent can incorporate PKM/profile context as soon as it's available.
     thread = threading.Thread(
         target=_run_discovery_pipeline,
         kwargs={
             "args": args,
             "team_id": team_id,
             "allow_prompt": False,
-            "enqueue_prompt": False,
+            "enqueue_prompt": True,
         },
         daemon=True,
     )

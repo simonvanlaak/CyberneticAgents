@@ -211,7 +211,10 @@ def handle_onboarding(
     elif force_background:
         background_discovery = True
     else:
-        background_discovery = not sys.stdin.isatty() or not sys.stdout.isatty()
+        # Default to background discovery so onboarding can start immediately.
+        # Foreground discovery can take minutes (e.g. PKM repo sync / docker pulls)
+        # and shouldn't block the user from answering the first question.
+        background_discovery = True
 
     summary_path: Path | None = None
     if background_discovery:
