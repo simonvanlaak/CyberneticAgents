@@ -163,6 +163,30 @@ class SystemBaseMixin:
             "characters, and no markdown."
         )
 
+    def _is_tool_call_name_validation_error(self, exc: Exception) -> bool:
+        """Detect provider tool-name validation failures.
+
+        Some providers reject tool calls when the model emits a tool name that doesn't
+        exactly match one of the registered tools. A common failure mode is the model
+        prefixing tool names with "functions/" (e.g. "functions/ContactUserTool").
+        """
+
+        text = str(exc).lower()
+        return (
+            "tool_use_failed" in text
+            and "attempted to call tool" in text
+            and "was not in request.tools" in text
+            and "functions/" in text
+        )
+
+    def _build_tool_call_name_retry_instruction(self) -> str:
+        return (
+            "Retry the previous response. If you call a tool, the tool name must match "
+            "exactly one of the registered tool names listed under # TOOLS. "
+            "Do NOT prefix tool names with 'functions/' (e.g. use 'ContactUserTool', "
+            "not 'functions/ContactUserTool')."
+        )
+
     async def _route_internal_error_to_policy_system(
         self,
         failed_message_type: str,

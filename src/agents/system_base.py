@@ -309,6 +309,22 @@ class SystemBase(SystemBaseMixin, RoutedAgent):
                         task=tool_retry_messages,
                         cancellation_token=ctx.cancellation_token,
                     )
+                elif self._is_tool_call_name_validation_error(exc):
+                    logger.warning(
+                        "Tool call name validation failed for %s. Retrying once with normalized tool naming instruction.",
+                        self.agent_id.__str__(),
+                    )
+                    tool_name_retry_messages: list[BaseTextChatMessage] = [
+                        *chat_messages,
+                        TextMessage(
+                            source=self.name,
+                            content=self._build_tool_call_name_retry_instruction(),
+                        ),
+                    ]
+                    retry_result = await self._agent.run(
+                        task=tool_name_retry_messages,
+                        cancellation_token=ctx.cancellation_token,
+                    )
                 if retry_result is not None:
                     task_result = retry_result
                 elif self._is_required_tool_choice_missing_call_error(
