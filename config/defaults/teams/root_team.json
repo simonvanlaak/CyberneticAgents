@@ -11,7 +11,11 @@
     "speech-to-text",
     "message-routing",
     "memory_crud",
-    "git-readonly-sync"
+    "git-readonly-sync",
+    "file-reader",
+    "notion",
+    "web-search",
+    "web-fetch"
   ],
   "routing_rules": [
     {
@@ -27,7 +31,13 @@
       "name": "System1/root",
       "type": "OPERATION",
       "agent_id": "System1/root",
-      "skill_grants": ["memory_crud"],
+      "skill_grants": [
+        "memory_crud",
+        "git-readonly-sync",
+        "file-reader",
+        "notion",
+        "web-search"
+      ],
       "config": {}
     },
     {
