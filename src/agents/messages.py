@@ -1,4 +1,5 @@
 from autogen_agentchat.messages import BaseTextChatMessage
+from pydantic import BaseModel, ConfigDict
 
 
 class UserMessage(BaseTextChatMessage):
@@ -125,6 +126,22 @@ class RecursionCreateMessage(BaseTextChatMessage):
 
 class ConfirmationMessage(BaseTextChatMessage):
     """Used by a system to confirm an action has been completed."""
+
+    content: str
+    is_error: bool
+
+
+class ConfirmationResponse(BaseModel):
+    """Structured-output payload for providers.
+
+    We intentionally avoid inheriting from BaseTextChatMessage because upstream
+    includes a free-form `metadata` object that some OpenAI-compatible providers
+    reject unless every object schema sets `additionalProperties: false`.
+
+    Using a plain BaseModel with `extra='forbid'` yields a stricter JSON schema.
+    """
+
+    model_config = ConfigDict(extra="forbid")
 
     content: str
     is_error: bool
