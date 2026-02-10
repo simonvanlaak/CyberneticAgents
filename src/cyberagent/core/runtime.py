@@ -21,6 +21,9 @@ from src.cyberagent.tools.cli_executor.docker_env_executor import (
 from src.cyberagent.tools.cli_executor.factory import create_cli_executor
 from src.cyberagent.secrets import get_secret
 from src.cyberagent.core.agent_registration import clear_runtime
+from src.cyberagent.observability.otlp_403_log_suppressor import (
+    install_otlp_langfuse_403_log_suppression,
+)
 
 # Singleton runtime instance
 _runtime: SingleThreadedAgentRuntime | None = None
@@ -49,6 +52,9 @@ def configure_tracing():
         tracer_provider = TracerProvider(
             resource=Resource({"service.name": "cybernetic-agents"})
         )
+
+        # Reduce log spam when Langfuse ingestion is suspended (common OTLP 403).
+        install_otlp_langfuse_403_log_suppression()
 
         auth_string = base64.b64encode(f"{public_key}:{secret_key}".encode()).decode()
 
