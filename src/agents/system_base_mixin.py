@@ -163,6 +163,27 @@ class SystemBaseMixin:
             "characters, and no markdown."
         )
 
+    def _is_tool_name_prefix_error(self, exc: Exception) -> bool:
+        """Detect provider rejections where the model used a namespaced tool name.
+
+        Example:
+          attempted to call tool 'functions/ContactUserTool' which was not in request.tools
+        """
+        text = str(exc).lower()
+        return (
+            "tool_use_failed" in text
+            and "attempted to call tool" in text
+            and "functions/" in text
+            and "not in request.tools" in text
+        )
+
+    def _build_tool_name_prefix_retry_instruction(self) -> str:
+        return (
+            "Retry the previous response. If you call a tool, you MUST use the exact "
+            "tool name as provided in the tools list, with no prefixes or namespaces. "
+            "For example, use 'ContactUserTool' (NOT 'functions/ContactUserTool')."
+        )
+
     async def _route_internal_error_to_policy_system(
         self,
         failed_message_type: str,

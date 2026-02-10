@@ -309,6 +309,22 @@ class SystemBase(SystemBaseMixin, RoutedAgent):
                         task=tool_retry_messages,
                         cancellation_token=ctx.cancellation_token,
                     )
+                elif self._is_tool_name_prefix_error(exc):
+                    logger.warning(
+                        "Tool call name prefix mismatch for %s. Retrying once.",
+                        self.agent_id.__str__(),
+                    )
+                    tool_name_retry_messages: list[BaseTextChatMessage] = [
+                        *chat_messages,
+                        TextMessage(
+                            source=self.name,
+                            content=self._build_tool_name_prefix_retry_instruction(),
+                        ),
+                    ]
+                    retry_result = await self._agent.run(
+                        task=tool_name_retry_messages,
+                        cancellation_token=ctx.cancellation_token,
+                    )
                 if retry_result is not None:
                     task_result = retry_result
                 elif self._is_required_tool_choice_missing_call_error(
