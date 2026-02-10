@@ -333,6 +333,20 @@ class SystemBaseMixin:
             ),
             metrics=metrics,
         )
+
+        def _should_force_onboarding_profile(text: str) -> bool:
+            lowered = text.lower()
+            return any(
+                fragment in lowered
+                for fragment in (
+                    "collect user identity",
+                    "disambiguation",
+                    "profile links",
+                    "onboarding",
+                    "identity and links",
+                )
+            )
+
         entries = []
         for scope, namespace in _resolve_memory_scopes(actor):
             try:
@@ -354,6 +368,37 @@ class SystemBaseMixin:
                 )
                 continue
             entries.extend(result.items)
+
+            # Identity collection during onboarding must be able to recall the
+            # onboarding summary/profile even when semantic search misses.
+            if scope == MemoryScope.GLOBAL and _should_force_onboarding_profile(
+                query_text
+            ):
+                from src.cyberagent.memory.models import MemoryLayer
+
+                try:
+                    tagged = retrieval.search_entries(
+                        actor=actor,
+                        scope=scope,
+                        namespace=namespace,
+                        query_text=None,
+                        tags=["onboarding", "user_profile"],
+                        layer=MemoryLayer.LONG_TERM,
+                        limit=_env_int("MEMORY_RETRIEVAL_LIMIT", 6),
+                    )
+                except PermissionError:
+                    tagged = None
+                except (sqlite3.Error, OSError) as exc:
+                    logger.warning(
+                        "Onboarding memory retrieval skipped for %s/%s: %s",
+                        scope.value,
+                        namespace,
+                        exc,
+                    )
+                    tagged = None
+                if tagged is not None:
+                    entries.extend(tagged.items)
+
         deduped = []
         seen: set[str] = set()
         for entry in entries:
