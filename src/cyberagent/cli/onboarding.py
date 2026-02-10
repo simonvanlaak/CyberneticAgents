@@ -194,13 +194,27 @@ def handle_onboarding(
     )
 
     # Phase 1 onboarding requires a persisted onboarding output that can be applied to
-    # root context (purpose + strategy). To make this deterministic, default to running
-    # discovery in the foreground. Background discovery can be re-enabled explicitly.
-    background_discovery = os.environ.get(
+    # root context (purpose + strategy).
+    #
+    # Discovery sometimes prompts for input (PKM/auth decisions). In non-interactive
+    # contexts (including test runs), default to background discovery to avoid blocking.
+    background_discovery_raw = os.environ.get(
         "CYBERAGENT_ONBOARDING_DISCOVERY_BACKGROUND", ""
     )
+    foreground_raw = os.environ.get("CYBERAGENT_ONBOARDING_DISCOVERY_FOREGROUND", "")
+
+    force_foreground = foreground_raw.strip().lower() in {"1", "true", "yes"}
+    force_background = background_discovery_raw.strip().lower() in {"1", "true", "yes"}
+
+    if force_foreground:
+        background_discovery = False
+    elif force_background:
+        background_discovery = True
+    else:
+        background_discovery = not sys.stdin.isatty() or not sys.stdout.isatty()
+
     summary_path: Path | None = None
-    if background_discovery.strip().lower() in {"1", "true", "yes"}:
+    if background_discovery:
         _start_discovery_background(args, team.id)
     else:
         summary_path = _run_discovery_onboarding(args, team.id)
@@ -473,7 +487,7 @@ _start_discovery_background = start_discovery_background
 def _apply_onboarding_output(
     *,
     team_id: int,
-    summary_path: Path,
+    summary_path: Path | str,
     onboarding_strategy_name: str,
 ) -> None:
     """Apply onboarding discovery output to root context.
@@ -483,6 +497,9 @@ def _apply_onboarding_output(
     - Apply it to the active System5 purpose (append-only)
     - Apply it to the initial System4 strategy description
     """
+
+    if isinstance(summary_path, str):
+        summary_path = Path(summary_path)
 
     if not summary_path.exists():
         return

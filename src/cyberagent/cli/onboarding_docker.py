@@ -26,7 +26,16 @@ def check_docker_socket_access() -> bool:
         return True
     if not socket_path.exists():
         return True
-    if os.access(socket_path, os.R_OK | os.W_OK):
+    # os.access() can report True for privileged users even when the socket is
+    # effectively inaccessible for typical operators. Keep this check conservative:
+    # if the socket has no RW bits set at all, treat it as inaccessible.
+    try:
+        mode = socket_path.stat().st_mode & 0o777
+    except OSError:
+        mode = 0
+    if (mode & 0o666) == 0:
+        pass
+    elif os.access(socket_path, os.R_OK | os.W_OK):
         return True
     print(
         get_message(

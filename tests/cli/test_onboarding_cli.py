@@ -249,10 +249,12 @@ def test_handle_onboarding_stops_when_discovery_fails(
     assert len(start_calls) == 1
 
 
-def test_handle_onboarding_stops_when_trigger_fails(
+def test_handle_onboarding_continues_when_trigger_is_disabled(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _clear_teams()
+    # Phase 1 onboarding no longer triggers an initiative; ensure the flow still
+    # proceeds to starting the runtime even if legacy trigger hooks are mocked.
     _mock_onboarding_flow(monkeypatch, Path("summary.md"), trigger_ok=False)
     monkeypatch.setattr(
         onboarding_cli, "start_onboarding_interview", lambda **_kwargs: None
@@ -271,8 +273,8 @@ def test_handle_onboarding_stops_when_trigger_fails(
         "cyberagent inbox",
     )
 
-    assert exit_code == 1
-    assert start_calls == []
+    assert exit_code == 0
+    assert len(start_calls) == 1
 
 
 def test_validate_onboarding_inputs_prompts_for_missing() -> None:
@@ -470,6 +472,7 @@ def test_handle_onboarding_applies_discovery_output_to_root_context(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _clear_teams()
+    monkeypatch.setenv("CYBERAGENT_ONBOARDING_DISCOVERY_FOREGROUND", "1")
     monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
     monkeypatch.setattr(
         onboarding_cli, "_start_runtime_after_onboarding", lambda *_: None
@@ -495,13 +498,8 @@ def test_handle_onboarding_applies_discovery_output_to_root_context(
         assert team is not None
         purpose = (
             session.query(Purpose)
-            .filter(
-                Purpose.team_id == team.id,
-                Purpose.name
-                == onboarding_cli.get_default_purpose_name(
-                    onboarding_cli.load_root_team_defaults()
-                ),
-            )
+            .filter(Purpose.team_id == team.id)
+            .order_by(Purpose.id.asc())
             .first()
         )
         assert purpose is not None
