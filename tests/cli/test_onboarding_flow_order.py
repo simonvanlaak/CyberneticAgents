@@ -35,7 +35,7 @@ def _default_onboarding_args() -> argparse.Namespace:
     )
 
 
-def test_onboarding_starts_background_discovery_before_initiative_trigger(
+def test_onboarding_starts_background_discovery_when_non_interactive(
     monkeypatch,
 ) -> None:
     _clear_teams()
@@ -44,16 +44,11 @@ def test_onboarding_starts_background_discovery_before_initiative_trigger(
     def _fake_background(*_args, **_kwargs):
         sequence.append("discovery_background")
 
-    def _fake_trigger(*_args, **_kwargs):
-        sequence.append("trigger")
-        return True
-
     monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
     monkeypatch.setattr(
         onboarding_cli, "start_onboarding_interview", lambda **_kw: None
     )
     monkeypatch.setattr(onboarding_cli, "_start_discovery_background", _fake_background)
-    monkeypatch.setattr(onboarding_cli, "_trigger_onboarding_initiative", _fake_trigger)
     monkeypatch.setattr(
         onboarding_cli, "_start_runtime_after_onboarding", lambda *_: None
     )
@@ -68,4 +63,4 @@ def test_onboarding_starts_background_discovery_before_initiative_trigger(
     )
 
     assert exit_code == 0
-    assert sequence == ["discovery_background", "trigger"]
+    assert sequence == ["discovery_background"]
