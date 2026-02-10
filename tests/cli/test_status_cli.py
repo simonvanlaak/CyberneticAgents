@@ -128,16 +128,23 @@ def test_status_render_includes_hierarchy():
 
     assert f"Team {team_id}:" in output
     assert f"Purpose {purpose_id}: Purpose Alpha" in output
-    assert "Content: Purpose content." in output
+    assert "Content: Purpose content." not in output
     assert f"Strategy {strategy_id} [in_progress]: Strategy Alpha" in output
-    assert "Description: Strategy description." in output
+    assert "Description: Strategy description." not in output
     assert f"Initiative {initiative_id} [pending]: Initiative Alpha" in output
-    assert "Description: Initiative description." in output
+    assert "Description: Initiative description." not in output
     assert (
         f"Task {task_one_id} [pending] (assignee: root_operations_alpha) - Task One"
         in output
     )
     assert f"Task {task_two_id} [completed] (assignee: -) - Task Two" in output
+
+    output_details = render_status(
+        collect_status(team_id=team_id, active_only=False), include_details=True
+    )
+    assert "Content: Purpose content." in output_details
+    assert "Description: Strategy description." in output_details
+    assert "Description: Initiative description." in output_details
 
 
 def test_status_render_no_data_suggests_start() -> None:

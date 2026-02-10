@@ -183,7 +183,26 @@ def _append_lines(lines: list[str], extra_lines: Iterable[str]) -> None:
     lines.extend(extra_lines)
 
 
-def render_status(teams: list[TeamView]) -> str:
+def _truncate(text: str | None, max_chars: int) -> str:
+    if not text:
+        return ""
+    raw = str(text).replace("\r\n", "\n").replace("\r", "\n")
+    raw = " ".join(part for part in raw.split("\n") if part.strip())
+    if len(raw) <= max_chars:
+        return raw
+    return raw[: max_chars - 1] + "…"
+
+
+def render_status(teams: list[TeamView], *, include_details: bool = False) -> str:
+    """Render a human-readable status tree.
+
+    By default this is *compact* and does not print long free-form fields
+    (purpose content, descriptions, task content) to avoid leaking memory/notes
+    into terminal output.
+
+    Use include_details=True to include truncated detail fields.
+    """
+
     if not teams:
         return "\n".join(
             [
@@ -191,6 +210,7 @@ def render_status(teams: list[TeamView]) -> str:
                 get_message("status", "next_start", start_command=START_COMMAND),
             ]
         )
+
     lines: list[str] = []
     for team in teams:
         lines.append(
@@ -207,6 +227,7 @@ def render_status(teams: list[TeamView]) -> str:
                 f"  {get_message('status', 'next_give_task', suggest_command=SUGGEST_COMMAND)}"
             )
             continue
+
         for purpose in team.purposes:
             lines.append(
                 get_message(
@@ -216,15 +237,22 @@ def render_status(teams: list[TeamView]) -> str:
                     purpose_name=purpose.name,
                 )
             )
-            lines.append(
-                get_message("status", "purpose_content", content=purpose.content)
-            )
+            if include_details:
+                lines.append(
+                    get_message(
+                        "status",
+                        "purpose_content",
+                        content=_truncate(purpose.content, 240),
+                    )
+                )
+
             if not purpose.strategies:
                 lines.append(f"    {get_message('status', 'no_strategies')}")
                 lines.append(
                     f"    {get_message('status', 'next_suggest', suggest_command=SUGGEST_COMMAND)}"
                 )
                 continue
+
             for strategy in purpose.strategies:
                 lines.append(
                     get_message(
@@ -235,19 +263,22 @@ def render_status(teams: list[TeamView]) -> str:
                         strategy_name=strategy.name,
                     )
                 )
-                lines.append(
-                    get_message(
-                        "status",
-                        "strategy_description",
-                        description=strategy.description,
+                if include_details:
+                    lines.append(
+                        get_message(
+                            "status",
+                            "strategy_description",
+                            description=_truncate(strategy.description, 240),
+                        )
                     )
-                )
+
                 if not strategy.initiatives:
                     lines.append(f"      {get_message('status', 'no_initiatives')}")
                     lines.append(
                         f"      {get_message('status', 'next_create_initiatives', suggest_command=SUGGEST_COMMAND)}"
                     )
                     continue
+
                 for initiative in strategy.initiatives:
                     lines.append(
                         get_message(
@@ -258,16 +289,19 @@ def render_status(teams: list[TeamView]) -> str:
                             initiative_name=initiative.name,
                         )
                     )
-                    lines.append(
-                        get_message(
-                            "status",
-                            "initiative_description",
-                            description=initiative.description,
+                    if include_details:
+                        lines.append(
+                            get_message(
+                                "status",
+                                "initiative_description",
+                                description=_truncate(initiative.description, 240),
+                            )
                         )
-                    )
+
                     if not initiative.tasks:
                         lines.append(f"        {get_message('status', 'no_tasks')}")
                         continue
+
                     task_lines = [
                         (
                             get_message(
@@ -282,6 +316,7 @@ def render_status(teams: list[TeamView]) -> str:
                         for task in initiative.tasks
                     ]
                     _append_lines(lines, task_lines)
+
     return "\n".join(lines)
 
 
@@ -297,6 +332,11 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--team", type=int, default=None)
     parser.add_argument("--active-only", action="store_true")
     parser.add_argument("--json", action="store_true")
+    parser.add_argument(
+        "--details",
+        action="store_true",
+        help="Include truncated free-form fields (purpose content + descriptions).",
+    )
     return parser
 
 
@@ -308,6 +348,6 @@ def main(argv: list[str]) -> int:
     if args.json:
         output = render_status_json(status)
     else:
-        output = render_status(status)
+        output = render_status(status, include_details=bool(args.details))
     print(output)
     return 0
