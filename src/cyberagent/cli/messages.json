@@ -31,7 +31,9 @@
     ],
     "telegram_session_missing": "Telegram is configured, but no active chat session was found. Send a message to the bot to start a session, then re-run onboarding to deliver the interview over Telegram.",
     "telegram_session_required": [
-      "Send a first message to your bot to link your admin chat.",
+      "Optional: send a first message to your bot to link your admin chat.",
+      "If you are just testing onboarding or prefer CLI-only, you do NOT need to actually send a Telegram message.",
+      "You can continue by running tasks via the CLI suggestion flow (e.g. `cyberagent suggest ...`).",
       "This bot is private to you unless you explicitly add others."
     ],
     "telegram_botfather_instructions": [

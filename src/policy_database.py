@@ -13,6 +13,8 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 
+import threading
+
 # Database setup
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEFAULT_DB_PATH = os.path.join(BASE_DIR, "data", "CyberneticAgents.db")
@@ -21,6 +23,9 @@ DATABASE_URL = os.environ.get("CYBERAGENT_DB_URL", f"sqlite:///{DEFAULT_DB_PATH}
 Base = declarative_base()
 engine = create_engine(DATABASE_URL)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+_INITIALIZE_LOCK = threading.Lock()
+_INITIALIZED = False
 
 
 class PolicyPrompt(Base):
@@ -33,14 +38,25 @@ class PolicyPrompt(Base):
     content = Column(String(5000), nullable=False)  # 5000 character limit
 
 
-def init_database():
-    """Initialize database and create tables."""
+def init_database() -> None:
+    """Initialize database and create tables.
+
+    Notes:
+        This may be called concurrently (e.g. under pytest-xdist) against the
+        same SQLite file. In that case, one worker can win the race to create
+        tables while others see an `already exists` error. That should be
+        treated as success.
+    """
+
     # Ensure data directory exists
     _ensure_data_dir()
     try:
         Base.metadata.create_all(bind=engine)
     except OperationalError as exc:
-        if "disk i/o" in str(exc).lower():
+        msg = str(exc).lower()
+        if "already exists" in msg:
+            return
+        if "disk i/o" in msg:
             backup = _attempt_recover_sqlite()
             if backup:
                 _configure_engine(DATABASE_URL)
@@ -52,8 +68,20 @@ def init_database():
         raise
 
 
+def _init_database_once() -> None:
+    global _INITIALIZED
+    if _INITIALIZED:
+        return
+    with _INITIALIZE_LOCK:
+        if _INITIALIZED:
+            return
+        init_database()
+        _INITIALIZED = True
+
+
 def get_session():
     """Get database session."""
+    _init_database_once()
     return SessionLocal()
 
 
@@ -168,5 +196,4 @@ def list_policy_prompts() -> List[PolicyPrompt]:
         session.close()
 
 
-# Initialize database on import
-init_database()
+# Database initialization is intentionally lazy (see get_session()).
