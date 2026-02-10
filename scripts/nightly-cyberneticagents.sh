@@ -69,7 +69,23 @@ log() { echo "[$(date -u +"%F %T") UTC] $*"; }
   log "syncing to origin/${BRANCH_MAIN}"
   git fetch origin --prune
   git checkout "$BRANCH_MAIN"
-  git reset --hard "origin/${BRANCH_MAIN}"
+
+  # If local main is ahead (e.g. you're running this script to validate a commit
+  # before pushing), do not discard local commits.
+  ahead_count="$(git rev-list --count "origin/${BRANCH_MAIN}..HEAD" 2>/dev/null || echo 0)"
+  if [ "${ahead_count}" = "0" ]; then
+    git reset --hard "origin/${BRANCH_MAIN}"
+  else
+    log "local ${BRANCH_MAIN} is ahead of origin/${BRANCH_MAIN} by ${ahead_count} commit(s); skipping hard reset"
+  fi
+
+  # Optional: if GitLab CI is failing, open a GitHub issue with details and
+  # move it to the top of Project #1 (Ready).
+  # Safe-by-default: script exits 0 when not configured.
+  if [ -x ./scripts/gitlab_ci_failure_to_github_issue.sh ]; then
+    log "checking GitLab CI (best-effort)"
+    bash ./scripts/gitlab_ci_failure_to_github_issue.sh || true
+  fi
 
   # Python env
   export UV_LINK_MODE=copy
