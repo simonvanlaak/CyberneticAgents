@@ -192,25 +192,32 @@ def handle_onboarding(
         repo_url=str(getattr(args, "repo_url", "")).strip(),
         profile_links=list(getattr(args, "profile_links", []) or []),
     )
-    foreground_discovery = os.environ.get(
-        "CYBERAGENT_ONBOARDING_DISCOVERY_FOREGROUND", ""
+
+    # Phase 1 onboarding requires a persisted onboarding output that can be applied to
+    # root context (purpose + strategy). To make this deterministic, default to running
+    # discovery in the foreground. Background discovery can be re-enabled explicitly.
+    background_discovery = os.environ.get(
+        "CYBERAGENT_ONBOARDING_DISCOVERY_BACKGROUND", ""
     )
-    if foreground_discovery.strip().lower() in {"1", "true", "yes"}:
+    summary_path: Path | None = None
+    if background_discovery.strip().lower() in {"1", "true", "yes"}:
+        _start_discovery_background(args, team.id)
+    else:
         summary_path = _run_discovery_onboarding(args, team.id)
         if summary_path is None:
             print(get_message("onboarding", "discovery_failed"))
             print(get_message("onboarding", "discovery_failed_hint"))
             return 1
-    else:
-        _start_discovery_background(args, team.id)
-    if auto_execute:
-        if not _trigger_onboarding_initiative(
-            team.id,
-            onboarding_procedure_name=auto_execute,
+
+    if summary_path is not None:
+        _apply_onboarding_output(
+            team_id=team.id,
+            summary_path=summary_path,
             onboarding_strategy_name=strategy_name,
-            onboarding_purpose_name=purpose_name,
-        ):
-            return 1
+        )
+
+    # Phase 1 scope explicitly avoids creating System3 initiatives/tasks. The SOP is
+    # still seeded/approved for later execution, but not auto-executed during onboarding.
     runtime_pid = _start_runtime_after_onboarding(team.id)
     if runtime_pid == -1:
         return 1
@@ -463,12 +470,111 @@ _run_discovery_onboarding = run_discovery_onboarding
 _start_discovery_background = start_discovery_background
 
 
+def _apply_onboarding_output(
+    *,
+    team_id: int,
+    summary_path: Path,
+    onboarding_strategy_name: str,
+) -> None:
+    """Apply onboarding discovery output to root context.
+
+    Phase 1 stores onboarding output as free-form text (no strict schema). We:
+    - Persist it (handled inside discovery pipeline when team_id is provided)
+    - Apply it to the active System5 purpose (append-only)
+    - Apply it to the initial System4 strategy description
+    """
+
+    if not summary_path.exists():
+        return
+    try:
+        summary_text = summary_path.read_text(encoding="utf-8").strip()
+    except OSError:
+        return
+    if not summary_text:
+        return
+
+    # Update purpose (System5 root context). Keep any default purpose content and
+    # append the onboarding output for traceability.
+    purpose = purposes_service.get_or_create_default_purpose(team_id)
+    existing = (purpose.content or "").strip()
+    if summary_text in existing:
+        purpose_block = existing
+    elif not existing:
+        purpose_block = summary_text
+    else:
+        purpose_block = "\n\n".join(
+            [
+                existing,
+                "---",
+                "# Onboarding Output",
+                f"(Source: {summary_path})",
+                "",
+                summary_text,
+            ]
+        )
+    purpose.content = purpose_block
+    try:
+        purpose.update()
+    except SQLAlchemyError as exc:
+        _print_db_write_error("purpose", exc)
+        return
+
+    # Ensure an initial strategy exists and attach the onboarding output.
+    session = next(get_db())
+    try:
+        strategy = (
+            session.query(Strategy)
+            .filter(
+                Strategy.team_id == team_id,
+                Strategy.name == onboarding_strategy_name,
+            )
+            .first()
+        )
+        if strategy is None:
+            strategy = strategies_service.create_strategy(
+                team_id=team_id,
+                purpose_id=purpose.id,
+                name=onboarding_strategy_name,
+                description=summary_text,
+            )
+        else:
+            existing_desc = (strategy.description or "").strip()
+            if summary_text not in existing_desc:
+                strategy.description = (
+                    summary_text
+                    if not existing_desc
+                    else "\n\n".join(
+                        [
+                            existing_desc,
+                            "---",
+                            "# Onboarding Output",
+                            f"(Source: {summary_path})",
+                            "",
+                            summary_text,
+                        ]
+                    )
+                )
+                session.add(strategy)
+                session.commit()
+    except SQLAlchemyError as exc:
+        session.rollback()
+        _print_db_write_error("strategy", exc)
+    finally:
+        session.close()
+
+
 def _trigger_onboarding_initiative(
     team_id: int,
     onboarding_procedure_name: str,
     onboarding_strategy_name: str,
     onboarding_purpose_name: str,
 ) -> bool:
+    """Deprecated for Phase 1 onboarding.
+
+    Keeping the implementation for later re-introduction, but Phase 1 explicitly
+    avoids creating System3 initiatives/tasks during onboarding.
+    """
+
     ensure_default_systems_for_team(team_id)
     session = next(get_db())
     try:
@@ -483,27 +589,6 @@ def _trigger_onboarding_initiative(
     finally:
         session.close()
     if procedure is None:
-        return True
-    session = next(get_db())
-    try:
-        existing_run = (
-            session.query(ProcedureRun)
-            .filter(ProcedureRun.procedure_id == procedure.id)
-            .first()
-        )
-    finally:
-        session.close()
-    if existing_run is not None:
-        enqueue_agent_message(
-            recipient="System3/root",
-            sender="System4/root",
-            message_type="initiative_assign",
-            payload={
-                "initiative_id": existing_run.initiative_id,
-                "source": "Onboarding",
-                "content": f"Resume onboarding initiative {existing_run.initiative_id}.",
-            },
-        )
         return True
 
     purpose = purposes_service.get_or_create_default_purpose(team_id)
@@ -529,7 +614,7 @@ def _trigger_onboarding_initiative(
         session.close()
     if strategy is None:
         try:
-            strategy = strategies_service.create_strategy(
+            strategies_service.create_strategy(
                 team_id=team_id,
                 purpose_id=purpose.id,
                 name=onboarding_strategy_name,
@@ -539,29 +624,6 @@ def _trigger_onboarding_initiative(
             _print_db_write_error("strategy", exc)
             return False
 
-    system3 = get_system_by_type(team_id, SystemType.CONTROL)
-    if system3 is None:
-        return False
-    try:
-        run = procedures_service.execute_procedure(
-            procedure_id=procedure.id,
-            team_id=team_id,
-            strategy_id=strategy.id,
-            executed_by_system_id=system3.id,
-        )
-    except SQLAlchemyError as exc:
-        _print_db_write_error("procedure run", exc)
-        return False
-    enqueue_agent_message(
-        recipient="System3/root",
-        sender="System4/root",
-        message_type="initiative_assign",
-        payload={
-            "initiative_id": run.initiative_id,
-            "source": "Onboarding",
-            "content": f"Start onboarding initiative {run.initiative_id}.",
-        },
-    )
     return True
 
 

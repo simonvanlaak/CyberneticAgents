@@ -466,7 +466,7 @@ def test_handle_onboarding_seeds_default_sops_once(tmp_path: Path) -> None:
         session.close()
 
 
-def test_handle_onboarding_triggers_onboarding_sop(
+def test_handle_onboarding_applies_discovery_output_to_root_context(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _clear_teams()
@@ -505,36 +505,27 @@ def test_handle_onboarding_triggers_onboarding_sop(
             .first()
         )
         assert purpose is not None
+        assert "summary" in (purpose.content or "")
+
         strategy = (
             session.query(Strategy)
             .filter(Strategy.team_id == team.id, Strategy.name == "Onboarding SOP")
             .first()
         )
         assert strategy is not None
-        procedure = (
-            session.query(Procedure)
-            .filter(
-                Procedure.team_id == team.id, Procedure.name == "First Run Discovery"
-            )
-            .first()
-        )
-        assert procedure is not None
-        assert purpose.content == procedure.description
+        assert "summary" in (strategy.description or "")
+
+        # Phase 1 onboarding does not auto-execute the SOP into System3 initiatives.
         run = session.query(ProcedureRun).first()
-        assert run is not None
-        initiative = (
-            session.query(Initiative).filter(Initiative.id == run.initiative_id).first()
-        )
-        assert initiative is not None
+        assert run is None
     finally:
         session.close()
 
     queued = agent_message_queue.read_queued_agent_messages()
-    assert len(queued) == 1
-    assert queued[0].recipient == "System3/root"
+    assert queued == []
 
 
-def test_handle_onboarding_requeues_existing_initiative_run_on_restart(
+def test_handle_onboarding_does_not_enqueue_system3_work_on_restart(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _clear_teams()
@@ -566,10 +557,7 @@ def test_handle_onboarding_requeues_existing_initiative_run_on_restart(
     )
 
     queued = agent_message_queue.read_queued_agent_messages()
-    assert len(queued) == 2
-    assert all(message.message_type == "initiative_assign" for message in queued)
-    initiative_ids = [int(message.payload["initiative_id"]) for message in queued]
-    assert len(set(initiative_ids)) == 1
+    assert queued == []
 
 
 def test_technical_onboarding_requires_groq_key(
