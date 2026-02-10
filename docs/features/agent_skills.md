@@ -51,6 +51,24 @@ Name rules:
 - `brave-search` (web search)
 - `web-fetch` (readability extraction)
 - `git-readonly-sync` (clone/pull read-only)
+- `notion` (Notion API)
+- `obsidian-search` (search local Obsidian vault)
+- `obsidian-get` (read local Obsidian note)
+
+## PKM: Obsidian Vault Access
+These skills let agents search and load full note content from a local Obsidian vault:
+- `obsidian-search`: find candidate notes (paths + matching-line snippets)
+- `obsidian-get`: load full markdown for a selected note
+
+Configuration:
+- Set `OBSIDIAN_VAULT_PATH` (vault root directory) in the runtime environment.
+
+Granting (so System1/System4 can use it):
+- During onboarding output, include skill grants such as:
+  - System1: `obsidian-search`, `obsidian-get`
+  - System4: `obsidian-search`, `obsidian-get`
+
+(Team envelope must also allow the skills if you're using non-root teams.)
 
 ## How to Test
 Quick test targets:
