@@ -151,14 +151,10 @@ class UserAgent(RoutedAgent):
                     message.content,
                 )
         elif ask_user_flag:
-            add_inbox_entry(
-                "system_question",
-                message.content,
-                channel=channel,
-                session_id=session_id,
-                asked_by=str(ctx.sender) if ctx.sender else None,
-                status="pending",
-            )
+            # question_id is already set: ContactUserTool called enqueue_pending_question
+            # before sending this message and the inbox entry already exists.
+            # Do NOT create a second inbox entry here — that would produce duplicates.
+            # Only forward to Telegram if needed.
             if (
                 self._last_channel_context
                 and self._last_channel_context.channel == "telegram"

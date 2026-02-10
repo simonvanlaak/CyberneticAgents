@@ -304,7 +304,14 @@ async def test_user_agent_forwards_informational_message_to_telegram() -> None:
 
 @pytest.mark.asyncio
 async def test_user_agent_forwards_question_with_id_to_telegram() -> None:
+    """When question_id is set, UserAgent only forwards to Telegram; it does NOT
+    create a new inbox entry (ContactUserTool already created one via
+    enqueue_pending_question before sending the message)."""
     clear_pending_questions()
+    # Simulate what ContactUserTool does before sending the TextMessage.
+    question_id = enqueue_pending_question(
+        "Hello! How can I help you today?", asked_by="root"
+    )
     user_agent = UserAgent("test_user")
     user_agent._last_channel_context = ChannelContext(
         channel="telegram",
@@ -323,7 +330,7 @@ async def test_user_agent_forwards_question_with_id_to_telegram() -> None:
     message = TextMessage(
         content="Hello! How can I help you today?",
         source="System4",
-        metadata={"ask_user": "true", "question_id": "1"},
+        metadata={"ask_user": "true", "question_id": str(question_id)},
     )
     await user_agent.handle_assistant_text_message(
         message=message,
@@ -331,9 +338,53 @@ async def test_user_agent_forwards_question_with_id_to_telegram() -> None:
     )  # type: ignore[call-arg]
 
     user_agent._send_telegram_prompt.assert_awaited_once_with(99, message.content)
+    # Exactly one entry — the one ContactUserTool created, NOT a second duplicate.
     entries = list_inbox_entries(kind="system_question")
     assert len(entries) == 1
     assert entries[0].content == "Hello! How can I help you today?"
+
+
+@pytest.mark.asyncio
+async def test_user_agent_no_duplicate_inbox_entry_when_question_id_set() -> None:
+    """Regression test for duplicate onboarding questions (issue #47).
+
+    ContactUserTool calls enqueue_pending_question (entry 1) then sends a
+    TextMessage with question_id set.  UserAgent must NOT create a second
+    inbox entry for the same question — doing so produced duplicates in the
+    dashboard inbox.
+    """
+    clear_pending_questions()
+    # Simulate ContactUserTool creating the inbox entry.
+    question_id = enqueue_pending_question(
+        "What is the most important outcome you want CyberneticAgents to help you achieve?",
+        asked_by="root",
+    )
+    user_agent = UserAgent("test_user")
+    sender = AgentId(type=System4.__name__, key="root")
+    ctx = MessageContext(
+        sender=sender,
+        topic_id=TopicId(type="System4", source="root"),
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="test-message",
+    )
+    # ContactUserTool sends this message after creating the inbox entry.
+    message = TextMessage(
+        content="What is the most important outcome you want CyberneticAgents to help you achieve?",
+        source="System4",
+        metadata={"ask_user": "true", "question_id": str(question_id)},
+    )
+    await user_agent.handle_assistant_text_message(
+        message=message,
+        ctx=ctx,
+    )  # type: ignore[call-arg]
+
+    # Must still be exactly ONE entry — no duplicate.
+    entries = list_inbox_entries(kind="system_question", status="pending")
+    assert len(entries) == 1, (
+        f"Expected 1 inbox entry, got {len(entries)} — duplicate question bug."
+    )
+    assert entries[0].asked_by == "root"  # set by ContactUserTool, not overwritten
 
 
 @pytest.mark.asyncio
