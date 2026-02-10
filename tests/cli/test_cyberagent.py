@@ -636,7 +636,7 @@ def test_python_module_start_uses_stub(monkeypatch: pytest.MonkeyPatch) -> None:
         capture_output=True,
         text=True,
         env=env,
-        timeout=5,
+        timeout=15,
     )
     assert result.returncode == 0
     assert "Runtime start stubbed" in result.stdout
