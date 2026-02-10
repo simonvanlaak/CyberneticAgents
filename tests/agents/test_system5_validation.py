@@ -334,6 +334,31 @@ async def test_system5_root_notifies_user_on_internal_error():
     assert str(recipient) == "UserAgent/root"
 
 
+@pytest.mark.asyncio
+async def test_system5_policy_violation_message_does_not_raise():
+    system5 = System5("System5/root")
+    system5.run = AsyncMock(
+        return_value=TaskResult(
+            messages=[TextMessage(content="ack", source="System5/root")]
+        )
+    )
+
+    message = PolicyViolationMessage(
+        task_id=7,
+        policy_id=1,
+        assignee_agent_id_str="System1/root",
+        content="Violation details",
+        source="System3/root",
+    )
+
+    result = await system5.handle_policy_violation_message(
+        message=message,
+        ctx=SimpleNamespace(),
+    )  # type: ignore[call-arg]
+
+    assert result.content == "ack"
+
+
 if __name__ == "__main__":
     # Run basic test
     import asyncio
