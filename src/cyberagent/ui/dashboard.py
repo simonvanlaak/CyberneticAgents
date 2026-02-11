@@ -526,11 +526,7 @@ def render_teams_page(st: Any) -> None:
                     "type": member.system_type,
                     "agent_id": member.agent_id_str,
                     "system_policies": (
-                        ", ".join(
-                            getattr(member, "policy_details", None) or member.policies
-                        )
-                        if (getattr(member, "policy_details", None) or member.policies)
-                        else "-"
+                        ", ".join(member.policies) if member.policies else "-"
                     ),
                     "system_permissions": (
                         ", ".join(member.permissions) if member.permissions else "-"

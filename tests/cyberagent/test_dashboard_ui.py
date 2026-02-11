@@ -100,7 +100,7 @@ def test_render_teams_page_uses_width_stretch(
     policy_rows = cast(list[dict[str, object]], fake_st.dataframe_data[0])
     assert policy_rows == [{"policy": "p1", "description": "policy content"}]
     rows = cast(list[dict[str, object]], fake_st.dataframe_data[1])
-    assert rows[0]["system_policies"] == "sp1: system policy content"
+    assert rows[0]["system_policies"] == "sp1"
 
 
 def test_render_teams_page_no_teams_shows_info(monkeypatch) -> None:
