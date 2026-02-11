@@ -346,6 +346,27 @@ def test_start_discovery_background_starts_thread(
     assert started["value"] is True
 
 
+def test_start_discovery_background_uses_non_daemon_thread(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+
+    class _FakeThread:
+        def __init__(self, *_args: object, **kwargs: object) -> None:
+            captured["daemon"] = kwargs.get("daemon")
+
+        def start(self) -> None:
+            captured["started"] = True
+
+    monkeypatch.delenv("CYBERAGENT_DISABLE_BACKGROUND_DISCOVERY", raising=False)
+    monkeypatch.setattr(threading, "Thread", _FakeThread)
+
+    onboarding_discovery.start_discovery_background(_default_args(), team_id=1)
+
+    assert captured["daemon"] is False
+    assert captured["started"] is True
+
+
 def test_start_discovery_background_calls_on_complete_with_summary(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:

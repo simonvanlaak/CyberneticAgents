@@ -85,7 +85,9 @@ def start_discovery_background(
 
     thread = threading.Thread(
         target=_run_and_finalize,
-        daemon=True,
+        # Keep this thread non-daemon so the onboarding process cannot exit
+        # before discovery output is persisted/applied to root context.
+        daemon=False,
     )
     thread.start()
 
