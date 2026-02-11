@@ -9,7 +9,21 @@ from typing import Any, cast
 import pytest
 
 from src.cyberagent.cli import onboarding_discovery
+from src.cyberagent.cli import agent_message_queue
+from src.cyberagent.db.db_utils import get_db
+from src.cyberagent.db.models.initiative import Initiative
+from src.cyberagent.db.models.procedure import Procedure
+from src.cyberagent.db.models.procedure_run import ProcedureRun
+from src.cyberagent.db.models.procedure_task import ProcedureTask
+from src.cyberagent.db.models.purpose import Purpose
+from src.cyberagent.db.models.strategy import Strategy
+from src.cyberagent.db.models.system import System
+from src.cyberagent.db.models.system import ensure_default_systems_for_team
+from src.cyberagent.db.models.team import Team
+from src.cyberagent.db.models.task import Task
+from src.cyberagent.services import procedures as procedures_service
 from src.cyberagent.tools.cli_executor.cli_tool import CliTool
+from src.enums import SystemType
 
 
 class _Args:
@@ -66,6 +80,23 @@ def _stub_messages(monkeypatch: pytest.MonkeyPatch) -> None:
         return "msg"
 
     monkeypatch.setattr(onboarding_discovery, "get_message", _get_message)
+
+
+def _clear_onboarding_execution_state() -> None:
+    session = next(get_db())
+    try:
+        session.query(Task).delete()
+        session.query(Initiative).delete()
+        session.query(ProcedureRun).delete()
+        session.query(ProcedureTask).delete()
+        session.query(Procedure).delete()
+        session.query(Strategy).delete()
+        session.query(Purpose).delete()
+        session.query(System).delete()
+        session.query(Team).delete()
+        session.commit()
+    finally:
+        session.close()
 
 
 def test_prepare_obsidian_vault_path_env_sets_expected_path(
@@ -440,6 +471,69 @@ def test_start_discovery_background_uses_default_on_complete(
     onboarding_discovery.start_discovery_background(_default_args(), team_id=7)
 
     assert calls == [(7, summary_path)]
+
+
+def test_auto_execute_onboarding_sop_creates_run_tasks_and_queue(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    _clear_onboarding_execution_state()
+    session = next(get_db())
+    try:
+        team = Team(name="root")
+        session.add(team)
+        session.commit()
+        team_id = team.id
+    finally:
+        session.close()
+
+    ensure_default_systems_for_team(team_id)
+    system4 = onboarding_discovery.get_system_by_type(team_id, SystemType.INTELLIGENCE)
+    system5 = onboarding_discovery.get_system_by_type(team_id, SystemType.POLICY)
+    assert system4 is not None
+    assert system5 is not None
+
+    procedure = procedures_service.create_procedure_draft(
+        team_id=team_id,
+        name="First Run Discovery",
+        description="Onboarding SOP description",
+        risk_level="medium",
+        impact="high",
+        rollback_plan="manual rollback",
+        created_by_system_id=system4.id,
+        tasks=[
+            {
+                "name": "Collect context",
+                "description": "Import context and define first work items.",
+                "position": 1,
+            }
+        ],
+    )
+    procedures_service.approve_procedure(
+        procedure_id=procedure.id, approved_by_system_id=system5.id
+    )
+    monkeypatch.setattr(
+        agent_message_queue, "AGENT_MESSAGE_QUEUE_DIR", tmp_path / "agent_queue"
+    )
+
+    onboarding_discovery._auto_execute_onboarding_sop_if_configured(team_id)
+    onboarding_discovery._auto_execute_onboarding_sop_if_configured(team_id)
+
+    session = next(get_db())
+    try:
+        runs = session.query(ProcedureRun).all()
+        assert len(runs) == 1
+        run = runs[0]
+        tasks = (
+            session.query(Task).filter(Task.initiative_id == run.initiative_id).all()
+        )
+        assert len(tasks) == 1
+    finally:
+        session.close()
+
+    queued = agent_message_queue.read_queued_agent_messages()
+    assert len(queued) == 1
+    assert queued[0].message_type == "initiative_assign"
+    assert queued[0].payload.get("initiative_id") == run.initiative_id
 
 
 def test_prompt_continue_without_pkm_handles_eof(

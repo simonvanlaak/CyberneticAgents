@@ -12,6 +12,9 @@ import threading
 from typing import Any, Callable
 from urllib.parse import urlparse, urlunparse
 
+from src.cyberagent.cli.onboarding_auto_execute import (
+    auto_execute_onboarding_sop_if_configured,
+)
 from src.cyberagent.cli.suggestion_queue import enqueue_suggestion
 from src.cyberagent.cli.onboarding_constants import (
     DEFAULT_GIT_TOKEN_ENV,
@@ -44,6 +47,7 @@ logger = logging.getLogger(__name__)
 MARKDOWN_PKM_FILE_LIMIT = 1000
 MARKDOWN_PKM_LINES_PER_FILE = 20
 ONBOARDING_PROMPT_SUMMARY_CHAR_LIMIT = 12000
+_auto_execute_onboarding_sop_if_configured = auto_execute_onboarding_sop_if_configured
 
 
 def run_discovery_onboarding(args: object, team_id: int | None = None) -> Path | None:
@@ -264,6 +268,7 @@ def _run_discovery_pipeline(
     summary_path = _write_onboarding_summary(summary_text)
     if team_id is not None:
         store_onboarding_memory(team_id, summary_path)
+        _auto_execute_onboarding_sop_if_configured(team_id)
     if summary_path is not None and enqueue_prompt:
         enqueue_suggestion(
             build_onboarding_prompt(
