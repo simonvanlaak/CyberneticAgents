@@ -22,7 +22,7 @@ if ! gh auth status -h github.com >/dev/null 2>&1; then
   exit 3
 fi
 
-cd /root/.openclaw/workspace
+cd /root/.openclaw/workspace/CyberneticAgents
 
 die_unexpected() {
   echo "$1" >&2
@@ -31,17 +31,91 @@ die_unexpected() {
 
 pick_item_tsv() {
   local json="$1"
-  jq -r '
-    def status: (.fields[]? | select(.name=="Status") | (.value // .text // .name // .)) // "";
-    def url: (.content.url // .contentUrl // .content_url // "");
-    def ctype: (.content.type // .contentType // .content_type // "");
-    def title: (.content.title // .title // "");
 
-    [ .items[]? | {id, st: status, u: url, ct: ctype, t: title} ]
-    | (map(select(.st=="In progress")) | .[0])
-      // (map(select(.st=="Ready")) | .[0])
-    | if .==null then empty else [.id,.st,.u,.ct,.t] | @tsv end
-  ' <<<"$json" 2>/dev/null || true
+  # Prefer python3 (available on the runner) to avoid jq dependency.
+  python3 - "$json" <<'PY' 2>/dev/null || true
+import json, sys
+
+raw = sys.argv[1] if len(sys.argv) > 1 else ""
+if not raw.strip():
+    sys.exit(0)
+
+try:
+    data = json.loads(raw)
+except Exception:
+    sys.exit(0)
+
+items = data.get('items') if isinstance(data, dict) else None
+if items is None and isinstance(data, list):
+    items = data
+if not isinstance(items, list):
+    sys.exit(0)
+
+def get_status(it):
+    fields = it.get('fields') or []
+    if isinstance(fields, dict):
+        fields = [fields]
+    for f in fields:
+        if not isinstance(f, dict):
+            continue
+        if f.get('name') == 'Status':
+            v = f.get('value')
+            if isinstance(v, dict):
+                v = v.get('name') or v.get('text')
+            return (v or f.get('text') or f.get('fieldValue') or '').strip()
+    return ''
+
+def get_content_url(it):
+    c = it.get('content') or {}
+    if not isinstance(c, dict):
+        c = {}
+    return (c.get('url') or it.get('contentUrl') or it.get('content_url') or '').strip()
+
+def get_content_type(it):
+    c = it.get('content') or {}
+    if not isinstance(c, dict):
+        c = {}
+    return (c.get('type') or it.get('contentType') or it.get('content_type') or '').strip()
+
+def get_title(it):
+    c = it.get('content') or {}
+    if not isinstance(c, dict):
+        c = {}
+    return (c.get('title') or it.get('title') or '').strip()
+
+cands = []
+for it in items:
+    if not isinstance(it, dict):
+        continue
+    item_id = (it.get('id') or '').strip()
+    if not item_id:
+        continue
+    st = get_status(it)
+    cands.append({
+        'id': item_id,
+        'st': st,
+        'u': get_content_url(it),
+        'ct': get_content_type(it),
+        't': get_title(it),
+    })
+
+pick = None
+for st_pref in ('In progress', 'Ready'):
+    for c in cands:
+        if c.get('st') == st_pref:
+            pick = c
+            break
+    if pick:
+        break
+
+if not pick:
+    sys.exit(0)
+
+def tsv_escape(s):
+    return (s or '').replace('\t',' ').replace('\n',' ').replace('\r',' ')
+
+print('\t'.join([tsv_escape(pick.get('id')), tsv_escape(pick.get('st')), tsv_escape(pick.get('u')), tsv_escape(pick.get('ct')), tsv_escape(pick.get('t'))]))
+PY
 }
 
 move_status() {
