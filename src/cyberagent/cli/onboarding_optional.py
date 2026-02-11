@@ -44,13 +44,17 @@ def _offer_optional_telegram_setup() -> None:
         return
     if os.environ.get("TELEGRAM_BOT_TOKEN"):
         onboarding_telegram._offer_optional_telegram_username_setup()
-        _offer_optional_telegram_webhook_setup()
+        if os.environ.get("TELEGRAM_BOT_TOKEN"):
+            message = get_message("onboarding", "feature_telegram")
+            print(get_message("onboarding", "feature_ready", message=message))
         return
     loaded = onboarding_telegram._load_secret_from_1password("TELEGRAM_BOT_TOKEN")
     if loaded:
         os.environ["TELEGRAM_BOT_TOKEN"] = loaded
         onboarding_telegram._offer_optional_telegram_username_setup()
-        _offer_optional_telegram_webhook_setup()
+        if os.environ.get("TELEGRAM_BOT_TOKEN"):
+            message = get_message("onboarding", "feature_telegram")
+            print(get_message("onboarding", "feature_ready", message=message))
         return
     print(get_message("onboarding", "telegram_botfather_instructions"))
     botfather = onboarding_telegram.botfather_link()
@@ -70,7 +74,9 @@ def _offer_optional_telegram_setup() -> None:
     if loaded:
         os.environ["TELEGRAM_BOT_TOKEN"] = loaded
     onboarding_telegram._offer_optional_telegram_username_setup()
-    _offer_optional_telegram_webhook_setup()
+    if os.environ.get("TELEGRAM_BOT_TOKEN"):
+        message = get_message("onboarding", "feature_telegram")
+        print(get_message("onboarding", "feature_ready", message=message))
 
 
 def _offer_optional_telegram_webhook_setup() -> None:

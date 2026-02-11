@@ -167,7 +167,7 @@ def test_offer_optional_telegram_setup_uses_existing_token(
 
     onboarding_optional._offer_optional_telegram_setup()
     assert username_called == [True]
-    assert webhook_called == [True]
+    assert webhook_called == []
 
 
 def test_ensure_repo_root_env_var_writes_env_file(
