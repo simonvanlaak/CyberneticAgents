@@ -51,7 +51,11 @@ class System1(SystemBase):
             [
                 "1. Execute tasks assigned by the requesting system.",
                 "2. Return results to the requesting system.",
-                "3. In case you are lacking the ability to execute a task, you request additional capabilities from the requesting system.",
+                (
+                    "3. In case you are lacking the ability or context, first use "
+                    "task_search and memory_crud to find prior team evidence; "
+                    "only then request additional capabilities."
+                ),
             ],
             trace_context,
         )
@@ -68,7 +72,18 @@ class System1(SystemBase):
         response = await self.run(
             [message],
             ctx,
+            message_specific_prompts=[
+                (
+                    "If key information is missing, call task_search to inspect "
+                    "previous team task outputs before marking this task blocked."
+                ),
+                (
+                    "If task_search is insufficient, read team/global memory via "
+                    "memory_crud list before escalating."
+                ),
+            ],
             output_content_type=TaskExecutionResult,
+            enable_tools=True,
         )
         latest_message = self._get_last_message(response)
         raw_result = (

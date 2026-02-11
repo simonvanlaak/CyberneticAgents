@@ -406,3 +406,52 @@ async def test_system1_requests_structured_task_execution_output(
     await_args = mocked_run.await_args
     assert await_args is not None
     assert await_args.kwargs["output_content_type"].__name__ == "TaskExecutionResult"
+
+
+@pytest.mark.asyncio
+async def test_system1_task_execution_enables_tools_and_guides_lookup(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    system1 = System1("System1/worker1")
+    message = TaskAssignMessage(
+        task_id=24,
+        assignee_agent_id_str="System1/worker1",
+        source="System3/root",
+        content="Collect source details",
+    )
+    ctx = MessageContext(
+        sender=AgentId.from_str("System3/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="tool-enabled-task-execution",
+    )
+
+    class _DummyTask:
+        pass
+
+    monkeypatch.setattr(
+        "src.cyberagent.services.tasks.start_task", lambda _task_id: _DummyTask()
+    )
+    monkeypatch.setattr("src.cyberagent.services.tasks.complete_task", lambda *_: None)
+    mocked_run = AsyncMock(
+        return_value=TaskResult(
+            messages=[
+                TextMessage(
+                    content='{"status":"done","result":"Task executed","reasoning":null}',
+                    source="System1/worker1",
+                )
+            ]
+        )
+    )
+    monkeypatch.setattr(system1, "run", mocked_run)
+    system1._publish_message_to_agent = AsyncMock()  # type: ignore[attr-defined]
+
+    await system1.handle_assign_task_message(message=message, ctx=ctx)  # type: ignore[call-arg]
+
+    await_args = mocked_run.await_args
+    assert await_args is not None
+    assert await_args.kwargs["enable_tools"] is True
+    prompts = await_args.kwargs["message_specific_prompts"]
+    assert any("task_search" in prompt for prompt in prompts)
+    assert any("memory_crud" in prompt for prompt in prompts)

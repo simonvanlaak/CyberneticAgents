@@ -30,6 +30,7 @@ from src.cyberagent.services import systems as system_service
 from src.cyberagent.services import teams as team_service
 from src.cyberagent.tools.cli_executor import get_agent_skill_tools
 from src.cyberagent.tools.memory_crud import MemoryCrudTool
+from src.cyberagent.tools.task_search import TaskSearchTool
 
 logger = logging.getLogger(__name__)
 
@@ -130,8 +131,15 @@ class SystemBase(SystemBaseMixin, RoutedAgent):
                 self.available_tools.append(MemoryCrudTool(self.agent_id))
             else:
                 logger.info("memory_crud tool not enabled for system_id=%s", system.id)
+            task_search_allowed, _reason = system_service.can_execute_skill(
+                system.id, "task_search"
+            )
+            if task_search_allowed:
+                self.available_tools.append(TaskSearchTool(self.agent_id))
+            else:
+                logger.info("task_search tool not enabled for system_id=%s", system.id)
         except Exception as exc:
-            logger.warning("Failed to initialize memory_crud tool: %s", exc)
+            logger.warning("Failed to initialize system tools: %s", exc)
         self.tools = self.available_tools
         self._agent = self._build_assistant_agent(
             system_message=f"You are '{self.name}' a helpful assistant.",
@@ -169,17 +177,22 @@ class SystemBase(SystemBaseMixin, RoutedAgent):
         output_content_type: type[BaseModel] | None = None,
         tool_choice_required: bool = False,
         include_memory_context: bool = True,
+        enable_tools: bool | None = None,
     ) -> TaskResult:
         mark_team_active(self.team_id)
         prompts = list(message_specific_prompts)
         if output_content_type is not None:
             prompts.extend(self._build_output_contract_prompts(output_content_type))
 
+        tools_enabled = (
+            output_content_type is None if enable_tools is None else enable_tools
+        )
+
         last_message = chat_messages[-1]
         memory_context = (
             self._build_memory_context(last_message) if include_memory_context else []
         )
-        tools_for_prompt = self.tools if output_content_type is None else []
+        tools_for_prompt = self.tools if tools_enabled else []
         setattr(self, "_active_prompt_tools_override", tools_for_prompt)
         try:
             prompt_result = await self._set_system_prompt(prompts, memory_context)
@@ -205,7 +218,7 @@ class SystemBase(SystemBaseMixin, RoutedAgent):
                 system_message=system_message,
                 output_content_type=output_content_type,
                 tool_choice_required=tool_choice_required,
-                enable_tools=output_content_type is None,
+                enable_tools=tools_enabled,
             )
 
         message_trace_context_raw = (
@@ -300,6 +313,7 @@ class SystemBase(SystemBaseMixin, RoutedAgent):
                         prompts=prompts,
                         output_content_type=output_content_type,
                         tool_choice_required=tool_choice_required,
+                        tools_enabled=tools_enabled,
                     )
                 elif self._is_tool_arguments_json_error(exc):
                     logger.warning(
@@ -451,13 +465,14 @@ class SystemBase(SystemBaseMixin, RoutedAgent):
         prompts: List[str],
         output_content_type: type[BaseModel] | None,
         tool_choice_required: bool,
+        tools_enabled: bool,
     ) -> TaskResult | None:
         logger.warning(
             "Message length exceeded provider limit for %s. Retrying with compacted context.",
             self.agent_id.__str__(),
         )
         compacted_messages = self._compact_chat_messages_for_retry(chat_messages)
-        tools_for_prompt = self.tools if output_content_type is None else []
+        tools_for_prompt = self.tools if tools_enabled else []
         setattr(self, "_active_prompt_tools_override", tools_for_prompt)
         try:
             prompt_result = await self._set_system_prompt(prompts, [])
@@ -474,7 +489,7 @@ class SystemBase(SystemBaseMixin, RoutedAgent):
                 system_message=compacted_system_message,
                 output_content_type=output_content_type,
                 tool_choice_required=tool_choice_required,
-                enable_tools=output_content_type is None,
+                enable_tools=tools_enabled,
             )
         return await self._agent.run(
             task=compacted_messages,

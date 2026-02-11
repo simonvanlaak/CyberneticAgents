@@ -66,10 +66,16 @@ def test_handle_onboarding_seeds_system1_with_pkm_access_skills(tmp_path: Path) 
 
     # Team envelope must allow the skills.
     allowed = set(teams_service.list_allowed_skills(team.id))
-    assert {"git-readonly-sync", "file-reader", "notion"}.issubset(allowed)
+    assert {"git-readonly-sync", "file-reader", "notion", "task_search"}.issubset(
+        allowed
+    )
 
     # System1 should have grants needed to sync + load PKM details.
     grants = set(systems_service.list_granted_skills(system1.id))
-    assert {"memory_crud", "git-readonly-sync", "file-reader", "notion"}.issubset(
-        grants
-    )
+    assert {
+        "memory_crud",
+        "task_search",
+        "git-readonly-sync",
+        "file-reader",
+        "notion",
+    }.issubset(grants)

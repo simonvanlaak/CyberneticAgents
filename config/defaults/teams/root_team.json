@@ -11,6 +11,7 @@
     "speech-to-text",
     "message-routing",
     "memory_crud",
+    "task_search",
     "git-readonly-sync",
     "file-reader",
     "notion",
@@ -35,6 +36,7 @@
       "agent_id": "System1/root",
       "skill_grants": [
         "memory_crud",
+        "task_search",
         "git-readonly-sync",
         "file-reader",
         "notion",

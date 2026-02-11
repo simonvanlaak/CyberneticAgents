@@ -22,6 +22,7 @@ def test_root_team_defaults_grant_obsidian_skills_to_system1() -> None:
     allowed = set(data.get("allowed_skills") or [])
     assert "obsidian-search" in allowed
     assert "obsidian-get" in allowed
+    assert "task_search" in allowed
 
     systems = data.get("systems") or []
     system1 = next((s for s in systems if s.get("agent_id") == "System1/root"), None)
@@ -30,3 +31,4 @@ def test_root_team_defaults_grant_obsidian_skills_to_system1() -> None:
     grants = set(system1.get("skill_grants") or [])
     assert "obsidian-search" in grants
     assert "obsidian-get" in grants
+    assert "task_search" in grants

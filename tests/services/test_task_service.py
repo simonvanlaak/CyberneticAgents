@@ -59,6 +59,97 @@ def test_complete_task_sets_result() -> None:
     assert task.updated is True
 
 
+def test_complete_task_persists_result_to_team_memory_for_sqlalchemy_task(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.cyberagent.services import tasks as task_service
+    from src.cyberagent.db.models.task import Task
+
+    task = Task(
+        team_id=1,
+        initiative_id=1,
+        name="Collect profile links",
+        content="Collect profile links",
+        assignee="System1/root",
+    )
+
+    calls: dict[str, object] = {}
+    monkeypatch.setattr(task_service, "_persist_task", lambda _task: None)
+    monkeypatch.setattr(
+        task_service,
+        "_store_task_result_in_team_memory",
+        lambda _task: calls.__setitem__("stored_task_id", _task.id),
+    )
+
+    task.id = 42
+    task_service.complete_task(task, "done")
+
+    assert task.result == "done"
+    assert calls["stored_task_id"] == 42
+
+
+def test_store_task_result_in_team_memory_creates_team_entry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.cyberagent.services import tasks as task_service
+    from src.cyberagent.db.models.task import Task
+    from src.enums import Status, SystemType
+
+    class _FakeMemoryService:
+        def __init__(self, **_kwargs) -> None:
+            pass
+
+        def create_entries(self, *, actor, requests):  # type: ignore[no-untyped-def]
+            captured["actor"] = actor
+            captured["requests"] = requests
+            return []
+
+    class _ControlSystem:
+        id = 7
+        team_id = 1
+        type = SystemType.CONTROL
+        agent_id_str = "System3/root"
+
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        task_service.systems_service,
+        "get_system_by_type",
+        lambda team_id, system_type: _ControlSystem(),
+    )
+    monkeypatch.setattr(task_service, "load_memory_backend_config", lambda: object())
+    monkeypatch.setattr(task_service, "build_memory_registry", lambda _config: object())
+    monkeypatch.setattr(task_service, "build_memory_metrics", lambda: object())
+    monkeypatch.setattr(task_service, "LoggingMemoryAuditSink", lambda: object())
+    monkeypatch.setattr(task_service, "MemoryCrudService", _FakeMemoryService)
+
+    task = Task(
+        team_id=1,
+        initiative_id=3,
+        name="Collect user identity",
+        content="Collect user identity",
+        assignee="System1/root",
+    )
+    task.id = 11
+    task.status = Status.COMPLETED
+    task.result = "User identity confirmed"
+
+    task_service._store_task_result_in_team_memory(task)
+
+    from src.cyberagent.memory.crud import MemoryActorContext, MemoryCreateRequest
+
+    actor = cast(MemoryActorContext, captured["actor"])
+    requests = cast(list[MemoryCreateRequest], captured["requests"])
+    assert actor.agent_id == "System3/root"
+    assert actor.team_id == 1
+    assert len(requests) == 1
+    request = requests[0]
+    assert request.namespace == "team:1"
+    assert request.content.startswith("Task #11")
+    assert request.tags is not None
+    assert "task_result" in request.tags
+    assert "task:11" in request.tags
+
+
 def test_create_task_builds_task(monkeypatch: pytest.MonkeyPatch) -> None:
     from src.cyberagent.services import tasks as task_service
 

@@ -1,10 +1,34 @@
 """Task orchestration helpers."""
 
 import json
+import logging
 
 from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.models.task import Task, get_task as _get_task
+from src.cyberagent.memory.config import (
+    build_memory_registry,
+    load_memory_backend_config,
+)
+from src.cyberagent.memory.crud import (
+    MemoryActorContext,
+    MemoryCreateRequest,
+    MemoryCrudService,
+)
+from src.cyberagent.memory.models import (
+    MemoryLayer,
+    MemoryPriority,
+    MemoryScope,
+    MemorySource,
+)
+from src.cyberagent.memory.observability import (
+    LoggingMemoryAuditSink,
+    build_memory_metrics,
+)
+from src.cyberagent.services import systems as systems_service
 from src.enums import Status
+from src.enums import SystemType
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_TASK_TRANSITIONS: dict[Status, set[Status]] = {
     Status.PENDING: {Status.IN_PROGRESS, Status.REJECTED},
@@ -50,6 +74,8 @@ def complete_task(task: Task, result: str) -> None:
     task.result = result
     _transition_task(task, Status.COMPLETED)
     _persist_task(task)
+    if isinstance(task, Task):
+        _store_task_result_in_team_memory(task)
 
 
 def mark_task_blocked(task: Task, reasoning: str) -> None:
@@ -258,3 +284,67 @@ def _resolve_task_status(raw_status: object) -> Status | None:
         return Status(str(raw_status))
     except ValueError:
         return None
+
+
+def _store_task_result_in_team_memory(task: Task) -> None:
+    """Persist completed task output into team-scope memory for reuse."""
+    result_text = (task.result or "").strip()
+    if not result_text:
+        return
+    try:
+        control_system = systems_service.get_system_by_type(
+            task.team_id, SystemType.CONTROL
+        )
+        actor = MemoryActorContext(
+            agent_id=control_system.agent_id_str,
+            system_id=control_system.id,
+            team_id=control_system.team_id,
+            system_type=control_system.type,
+        )
+        service = MemoryCrudService(
+            registry=build_memory_registry(load_memory_backend_config()),
+            metrics=build_memory_metrics(),
+            audit_sink=LoggingMemoryAuditSink(),
+        )
+        status_text = (
+            task.status.value if isinstance(task.status, Status) else str(task.status)
+        )
+        content_lines = [
+            f"Task #{task.id}: {task.name}",
+            f"Status: {status_text}",
+            f"Assignee: {task.assignee or '-'}",
+            f"Task content: {task.content}",
+            f"Task result: {result_text}",
+        ]
+        if task.reasoning:
+            content_lines.append(f"Task reasoning: {task.reasoning}")
+        service.create_entries(
+            actor=actor,
+            requests=[
+                MemoryCreateRequest(
+                    content="\n".join(content_lines),
+                    namespace=f"team:{task.team_id}",
+                    scope=MemoryScope.TEAM,
+                    tags=[
+                        "task_result",
+                        f"task:{task.id}",
+                        (
+                            f"initiative:{task.initiative_id}"
+                            if task.initiative_id
+                            else "initiative:none"
+                        ),
+                    ],
+                    priority=MemoryPriority.HIGH,
+                    source=MemorySource.TOOL,
+                    confidence=0.95,
+                    expires_at=None,
+                    layer=MemoryLayer.LONG_TERM,
+                )
+            ],
+        )
+    except Exception as exc:
+        logger.warning(
+            "Unable to persist task result %s to team memory: %s",
+            getattr(task, "id", "?"),
+            exc,
+        )
