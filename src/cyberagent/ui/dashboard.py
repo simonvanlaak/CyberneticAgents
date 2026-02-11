@@ -143,6 +143,116 @@ def _render_case_judgement(st: Any, case_judgement: str | None) -> None:
     )
 
 
+def _render_execution_log(st: Any, execution_log: str | None) -> None:
+    if not execution_log:
+        st.caption("No execution log recorded.")
+        return
+    try:
+        parsed = json.loads(execution_log)
+    except json.JSONDecodeError:
+        if hasattr(st, "code"):
+            st.code(execution_log)
+        else:
+            st.write(execution_log)
+        return
+    if not isinstance(parsed, list) or len(parsed) == 0:
+        if hasattr(st, "code"):
+            st.code(execution_log)
+        else:
+            st.write(execution_log)
+        return
+
+    rows = _build_execution_log_rows(parsed)
+    if hasattr(st, "dataframe"):
+        st.dataframe(rows, width="stretch", hide_index=True)
+    else:
+        st.write(rows)
+    _render_execution_log_details(st, parsed)
+
+
+def _build_execution_log_rows(entries: list[object]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for index, entry in enumerate(entries, 1):
+        if isinstance(entry, dict):
+            step_type = str(entry.get("type", "-"))
+            source = str(entry.get("source", "-"))
+            summary = _summarize_execution_entry(entry)
+        else:
+            step_type = type(entry).__name__
+            source = "-"
+            summary = _truncate_text(str(entry), 200)
+        rows.append(
+            {
+                "step": index,
+                "type": step_type,
+                "source": source,
+                "summary": summary,
+            }
+        )
+    return rows
+
+
+def _render_execution_log_details(st: Any, entries: list[object]) -> None:
+    if not hasattr(st, "expander"):
+        return
+    for index, entry in enumerate(entries, 1):
+        with st.expander(f"Step {index} details"):
+            if hasattr(st, "code"):
+                st.code(json.dumps(entry, indent=2, ensure_ascii=True, default=str))
+            else:
+                st.write(entry)
+
+
+def _summarize_execution_entry(entry: dict[str, object]) -> str:
+    chunks: list[str] = []
+    name = entry.get("name")
+    if isinstance(name, str) and name.strip():
+        chunks.append(name.strip())
+    model_text = entry.get("model_text")
+    if isinstance(model_text, str) and model_text.strip():
+        chunks.append(_truncate_text(model_text.strip(), 200))
+    content = entry.get("content")
+    content_summary = _summarize_execution_content(content)
+    if content_summary is not None:
+        chunks.append(content_summary)
+    if not chunks:
+        return "-"
+    deduped: list[str] = []
+    for chunk in chunks:
+        if chunk not in deduped:
+            deduped.append(chunk)
+    return " | ".join(deduped[:2])
+
+
+def _summarize_execution_content(content: object) -> str | None:
+    if content is None:
+        return None
+    if isinstance(content, str):
+        return _truncate_text(content.strip(), 200)
+    if isinstance(content, list):
+        if len(content) == 0:
+            return "[]"
+        first = _summarize_execution_content(content[0]) or str(content[0])
+        if len(content) == 1:
+            return first
+        return f"{first} (+{len(content) - 1} more)"
+    if isinstance(content, dict):
+        name = content.get("name")
+        payload = content.get("content")
+        if isinstance(name, str) and isinstance(payload, str):
+            return f"{name}: {_truncate_text(payload.strip(), 160)}"
+        if isinstance(payload, str):
+            return _truncate_text(payload.strip(), 200)
+        return _truncate_text(json.dumps(content, ensure_ascii=True, default=str), 200)
+    return _truncate_text(str(content), 200)
+
+
+def _truncate_text(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    return f"{text[:limit]}..."
+
+
 def _enrich_case_judgement_with_policy_content(
     rows: list[dict[str, object]],
 ) -> list[dict[str, object]]:
@@ -202,11 +312,7 @@ def _render_task_details_page(st: Any, title_col: Any) -> None:
     st.subheader("Task Result")
     st.write(task.result or "-")
     st.subheader("Execution Log")
-    execution_log = task.execution_log or "-"
-    if execution_log != "-" and hasattr(st, "code"):
-        st.code(execution_log)
-    else:
-        st.write(execution_log)
+    _render_execution_log(st, task.execution_log)
     st.subheader("Case Judgement")
     _render_case_judgement(st, task.case_judgement)
     if st.button("Back to Kanban"):

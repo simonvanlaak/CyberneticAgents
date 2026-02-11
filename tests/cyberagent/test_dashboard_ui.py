@@ -391,7 +391,10 @@ def test_render_inbox_page_answers_only_first_pending_question(monkeypatch) -> N
 
 
 def test_render_task_details_shows_status_reasoning(monkeypatch) -> None:
-    writes: list[str] = []
+    writes: list[object] = []
+    code_values: list[str] = []
+    dataframe_data: list[object] = []
+    expander_labels: list[str] = []
 
     class _TitleCol:
         def __enter__(self):
@@ -422,8 +425,25 @@ def test_render_task_details_shows_status_reasoning(monkeypatch) -> None:
         def markdown(self, _text: str) -> None:
             return None
 
-        def write(self, text: str) -> None:
+        def write(self, text: object) -> None:
             writes.append(text)
+
+        def code(self, text: str) -> None:
+            code_values.append(text)
+
+        def dataframe(self, data: object, **_kwargs: object) -> None:
+            dataframe_data.append(data)
+
+        class _ExpanderCtx:
+            def __enter__(self):
+                return None
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+        def expander(self, label: str):
+            expander_labels.append(label)
+            return self._ExpanderCtx()
 
         def button(self, _text: str) -> bool:
             return False
@@ -459,7 +479,21 @@ def test_render_task_details_shows_status_reasoning(monkeypatch) -> None:
     dashboard._render_task_details_page(st, _TitleCol())
 
     assert "Waiting for OAuth credentials from ops." in writes
-    assert '[{"type":"ToolCallExecutionEvent","name":"task_search"}]' in writes
+    assert len(dataframe_data) == 1
+    rows = dataframe_data[0]
+    assert isinstance(rows, list)
+    assert rows[0]["type"] == "ToolCallExecutionEvent"
+    assert "task_search" in str(rows[0]["summary"])
+    assert len(expander_labels) == 1
+    assert len(code_values) == 1
+
+
+def test_render_execution_log_fallbacks_to_code_for_invalid_json() -> None:
+    fake_st = _FakeStreamlit()
+
+    dashboard._render_execution_log(fake_st, "not-json")
+
+    assert fake_st.code_values == ["not-json"]
 
 
 def test_render_memory_page_shows_entries(monkeypatch) -> None:
