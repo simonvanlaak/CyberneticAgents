@@ -219,7 +219,16 @@ class SystemBaseMixin:
         self,
         message_specific_prompts: List[str] = [],
         memory_context: list[str] | None = None,
+        active_tools: list[Any] | None = None,
     ) -> str:
+        has_explicit_tools = active_tools is not None
+        tools_for_prompt = active_tools
+        if tools_for_prompt is None:
+            tools_for_prompt = getattr(self, "_active_prompt_tools_override", None)
+            if tools_for_prompt is not None:
+                has_explicit_tools = True
+        if tools_for_prompt is None:
+            tools_for_prompt = self.tools
         messages: list[str] = []
         messages.append("# IDENTITY")
         messages.append(self.identity_prompt)
@@ -237,7 +246,14 @@ class SystemBaseMixin:
         messages.append("# RESPONSIBILITIES")
         messages.extend(self.responsibility_prompts)
         messages.append("# MEMORY")
-        messages.extend(self._memory_prompt_entries())
+        tool_names = {
+            str(getattr(tool, "name", tool.__class__.__name__))
+            for tool in tools_for_prompt
+        }
+        if not has_explicit_tools or "memory_crud" in tool_names:
+            messages.extend(self._memory_prompt_entries())
+        else:
+            messages.append("Memory tool unavailable for this run.")
         if memory_context:
             messages.append("# MEMORY CONTEXT")
             messages.extend(memory_context)
@@ -248,8 +264,8 @@ class SystemBaseMixin:
         else:
             messages.append("No skills available")
         messages.append("# TOOLS")
-        if self.tools:
-            for tool in self.tools:
+        if tools_for_prompt:
+            for tool in tools_for_prompt:
                 name = getattr(tool, "name", tool.__class__.__name__)
                 description = getattr(tool, "description", "")
                 messages.append(f"{name}: {description}")

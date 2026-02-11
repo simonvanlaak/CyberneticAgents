@@ -179,7 +179,13 @@ class SystemBase(SystemBaseMixin, RoutedAgent):
         memory_context = (
             self._build_memory_context(last_message) if include_memory_context else []
         )
-        prompt_result = await self._set_system_prompt(prompts, memory_context)
+        tools_for_prompt = self.tools if output_content_type is None else []
+        setattr(self, "_active_prompt_tools_override", tools_for_prompt)
+        try:
+            prompt_result = await self._set_system_prompt(prompts, memory_context)
+        finally:
+            if hasattr(self, "_active_prompt_tools_override"):
+                delattr(self, "_active_prompt_tools_override")
         system_message = (
             prompt_result
             if isinstance(prompt_result, str)
@@ -266,7 +272,9 @@ class SystemBase(SystemBaseMixin, RoutedAgent):
 
                 provider_error_summary = None
                 try:
-                    from src.agents.provider_errors import extract_provider_error_details
+                    from src.agents.provider_errors import (
+                        extract_provider_error_details,
+                    )
 
                     details = extract_provider_error_details(exc)
                     if details is not None and details.status_code is not None:
@@ -449,7 +457,13 @@ class SystemBase(SystemBaseMixin, RoutedAgent):
             self.agent_id.__str__(),
         )
         compacted_messages = self._compact_chat_messages_for_retry(chat_messages)
-        prompt_result = await self._set_system_prompt(prompts, [])
+        tools_for_prompt = self.tools if output_content_type is None else []
+        setattr(self, "_active_prompt_tools_override", tools_for_prompt)
+        try:
+            prompt_result = await self._set_system_prompt(prompts, [])
+        finally:
+            if hasattr(self, "_active_prompt_tools_override"):
+                delattr(self, "_active_prompt_tools_override")
         compacted_system_message = (
             prompt_result
             if isinstance(prompt_result, str)
