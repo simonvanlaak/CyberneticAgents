@@ -201,6 +201,12 @@ def _render_task_details_page(st: Any, title_col: Any) -> None:
     st.write(task.reasoning or "-")
     st.subheader("Task Result")
     st.write(task.result or "-")
+    st.subheader("Execution Log")
+    execution_log = task.execution_log or "-"
+    if execution_log != "-" and hasattr(st, "code"):
+        st.code(execution_log)
+    else:
+        st.write(execution_log)
     st.subheader("Case Judgement")
     _render_case_judgement(st, task.case_judgement)
     if st.button("Back to Kanban"):

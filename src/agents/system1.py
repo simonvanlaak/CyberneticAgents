@@ -1,4 +1,5 @@
-from typing import Literal
+import json
+from typing import Any, Literal
 
 from autogen_core import AgentId, MessageContext, message_handler
 from pydantic import BaseModel
@@ -38,6 +39,61 @@ def _parse_task_execution_result(raw_result: str) -> TaskExecutionResult:
             reasoning="Task marked done without a concrete result.",
         )
     return execution
+
+
+def _serialize_execution_value(value: Any) -> Any:
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, list):
+        return [_serialize_execution_value(item) for item in value]
+    if isinstance(value, tuple):
+        return [_serialize_execution_value(item) for item in value]
+    if isinstance(value, dict):
+        serialized: dict[str, object] = {}
+        for key, item in value.items():
+            serialized[str(key)] = _serialize_execution_value(item)
+        return serialized
+    if hasattr(value, "model_dump"):
+        try:
+            dumped = value.model_dump()
+        except Exception:
+            return str(value)
+        return _serialize_execution_value(dumped)
+    if hasattr(value, "__dict__"):
+        try:
+            payload = dict(vars(value))
+        except Exception:
+            return str(value)
+        return _serialize_execution_value(payload)
+    return str(value)
+
+
+def _build_task_execution_log(messages: list[Any]) -> str:
+    """
+    Build a stable JSON execution trace from all task run messages.
+
+    The trace includes intermediate model text, tool-call events, and metadata so
+    System3/System1 can review how the task was resolved.
+    """
+    execution_entries: list[dict[str, object]] = []
+    for message in messages:
+        entry: dict[str, object] = {"type": message.__class__.__name__}
+        source = getattr(message, "source", None)
+        if source is not None:
+            entry["source"] = str(source)
+        if hasattr(message, "to_model_text"):
+            try:
+                entry["model_text"] = message.to_model_text()
+            except Exception:
+                entry["model_text"] = str(message)
+        content = getattr(message, "content", None)
+        if content is not None:
+            entry["content"] = _serialize_execution_value(content)
+        metadata = getattr(message, "metadata", None)
+        if metadata:
+            entry["metadata"] = _serialize_execution_value(metadata)
+        execution_entries.append(entry)
+    return json.dumps(execution_entries, ensure_ascii=True)
 
 
 class System1(SystemBase):
@@ -84,6 +140,10 @@ class System1(SystemBase):
             ],
             output_content_type=TaskExecutionResult,
             enable_tools=True,
+        )
+        task_service.set_task_execution_log(
+            task,
+            _build_task_execution_log(getattr(response, "messages", [])),
         )
         latest_message = self._get_last_message(response)
         raw_result = (

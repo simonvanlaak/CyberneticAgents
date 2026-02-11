@@ -27,6 +27,7 @@ class TaskCard:
     content: str
     result: Optional[str]
     reasoning: Optional[str]
+    execution_log: Optional[str]
     case_judgement: Optional[str]
 
 
@@ -88,6 +89,7 @@ def load_task_cards(
     conn = _connect_db()
     result_expr = _task_column_expr(conn, "result")
     reasoning_expr = _task_column_expr(conn, "reasoning")
+    execution_log_expr = _task_column_expr(conn, "execution_log")
     case_judgement_expr = _task_column_expr(conn, "case_judgement")
     query = f"""
         SELECT
@@ -106,6 +108,7 @@ def load_task_cards(
             t.content AS task_content,
             {result_expr} AS task_result,
             {reasoning_expr} AS task_reasoning,
+            {execution_log_expr} AS task_execution_log,
             {case_judgement_expr} AS case_judgement
         FROM tasks t
         JOIN teams tm ON tm.id = t.team_id
@@ -175,6 +178,11 @@ def load_task_cards(
                 reasoning=(
                     str(row["task_reasoning"])
                     if row["task_reasoning"] is not None
+                    else None
+                ),
+                execution_log=(
+                    str(row["task_execution_log"])
+                    if row["task_execution_log"] is not None
                     else None
                 ),
                 case_judgement=(

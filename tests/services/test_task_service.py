@@ -12,6 +12,7 @@ class _FakeTask:
         self.policy_judgement = None
         self.policy_judgement_reasoning = None
         self.case_judgement = None
+        self.execution_log = None
         self.updated = False
 
     def set_status(self, status) -> None:
@@ -272,6 +273,17 @@ def test_set_task_case_judgement_updates_policy_judgement_fields() -> None:
     assert task.case_judgement is not None
     assert task.policy_judgement == "Violated"
     assert task.policy_judgement_reasoning == "missing evidence"
+    assert task.updated is True
+
+
+def test_set_task_execution_log_updates_field() -> None:
+    from src.cyberagent.services import tasks as task_service
+    from src.cyberagent.db.models.task import Task
+
+    task = cast(Task, _FakeTask())
+    task_service.set_task_execution_log(task, '[{"type":"TextMessage"}]')
+
+    assert task.execution_log == '[{"type":"TextMessage"}]'
     assert task.updated is True
 
 

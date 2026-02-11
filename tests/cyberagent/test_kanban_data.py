@@ -67,6 +67,7 @@ def _seed_task(
     result: str | None = None,
     reasoning: str | None = None,
     case_judgement: str | None = None,
+    execution_log: str | None = None,
 ) -> None:
     session = next(get_db())
     try:
@@ -80,6 +81,7 @@ def _seed_task(
             result=result,
             reasoning=reasoning,
             case_judgement=case_judgement,
+            execution_log=execution_log,
         )
         session.add(task)
         session.commit()
@@ -232,6 +234,22 @@ def test_load_task_cards_includes_case_judgement() -> None:
     )
 
 
+def test_load_task_cards_includes_execution_log() -> None:
+    team_id, _, _, initiative_id = _seed_team_hierarchy("exec-log")
+    _seed_task(
+        team_id=team_id,
+        initiative_id=initiative_id,
+        name="Execution traced",
+        status=Status.APPROVED,
+        assignee="System1/root",
+        execution_log='[{"type":"ToolCallExecutionEvent","content":"ok"}]',
+    )
+
+    cards = load_task_cards(team_id=team_id)
+    card = next(task for task in cards if task.name == "Execution traced")
+    assert card.execution_log == '[{"type":"ToolCallExecutionEvent","content":"ok"}]'
+
+
 def test_load_task_detail_returns_full_payload() -> None:
     team_id, purpose_id, strategy_id, initiative_id = _seed_team_hierarchy("detail")
     _seed_task(
@@ -243,6 +261,7 @@ def test_load_task_detail_returns_full_payload() -> None:
         result="Completed result",
         reasoning="Blocked waiting for external dependency.",
         case_judgement='[{"policy_id":2,"judgement":"Vague","reasoning":"needs clarification"}]',
+        execution_log='[{"type":"TextMessage","content":"Attempted steps"}]',
     )
 
     task_id = next(
@@ -261,3 +280,6 @@ def test_load_task_detail_returns_full_payload() -> None:
     assert detail.reasoning == "Blocked waiting for external dependency."
     assert detail.case_judgement is not None
     assert '"judgement":"Vague"' in detail.case_judgement
+    assert (
+        detail.execution_log == '[{"type":"TextMessage","content":"Attempted steps"}]'
+    )

@@ -55,6 +55,7 @@ def _seed_task_with_hierarchy() -> int:
             status=Status.BLOCKED,
             result="Task result body.",
             reasoning="Task reasoning body.",
+            execution_log='[{"type":"ToolCallExecutionEvent","name":"task_search"}]',
             case_judgement=(
                 '[{"policy_id":2,"judgement":"Violated","reasoning":"Missing proof."}]'
             ),
@@ -93,6 +94,8 @@ def test_task_command_prints_task_details(
     assert "Task reasoning body." in output
     assert "Task Result" in output
     assert "Task result body." in output
+    assert "Execution Log" in output
+    assert "task_search" in output
     assert "Case Judgement" in output
     assert "Violated" in output
 

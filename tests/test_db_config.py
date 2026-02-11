@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from sqlalchemy import text
 
 from src import init_db
 
@@ -125,5 +126,37 @@ def test_recover_sqlite_database_noop_for_memory() -> None:
         init_db.configure_database("sqlite:///:memory:")
         backup = init_db.recover_sqlite_database()
         assert backup is None
+    finally:
+        init_db.configure_database(previous, from_env=previous_from_env)
+
+
+def test_ensure_task_execution_log_column_adds_missing_column(tmp_path: Path) -> None:
+    db_path = tmp_path / "tasks.db"
+    previous = init_db.DATABASE_URL
+    previous_from_env = init_db._DATABASE_URL_FROM_ENV
+    try:
+        init_db.configure_database(f"sqlite:///{db_path.resolve()}")
+        with init_db.engine.begin() as connection:
+            connection.execute(text("""
+                    CREATE TABLE tasks (
+                        id INTEGER PRIMARY KEY,
+                        team_id INTEGER NOT NULL,
+                        initiative_id INTEGER,
+                        status TEXT,
+                        assignee TEXT,
+                        name TEXT,
+                        content TEXT,
+                        result TEXT,
+                        reasoning TEXT,
+                        policy_judgement TEXT,
+                        policy_judgement_reasoning TEXT,
+                        case_judgement TEXT
+                    )
+                    """))
+        init_db._ensure_task_execution_log_column()
+        with init_db.engine.connect() as connection:
+            columns = connection.execute(text("PRAGMA table_info(tasks);")).fetchall()
+        names = {str(column[1]) for column in columns}
+        assert "execution_log" in names
     finally:
         init_db.configure_database(previous, from_env=previous_from_env)

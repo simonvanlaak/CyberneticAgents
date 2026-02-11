@@ -232,6 +232,18 @@ def set_task_case_judgement(task: Task, cases: list[dict[str, object]]) -> None:
     _persist_task(task)
 
 
+def set_task_execution_log(task: Task, execution_log: str) -> None:
+    """
+    Persist serialized task execution messages (tool events + intermediate output).
+
+    Args:
+        task: Task to update.
+        execution_log: JSON serialized execution trace.
+    """
+    task.execution_log = execution_log
+    _persist_task(task)
+
+
 def _persist_task(task: Task) -> None:
     """
     Persist a task mutation using service-level transaction control.

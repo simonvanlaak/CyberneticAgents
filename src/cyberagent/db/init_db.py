@@ -109,6 +109,7 @@ def init_db():
                 _ensure_team_last_active_column()
                 _ensure_task_case_judgement_column()
                 _ensure_task_reasoning_column()
+                _ensure_task_execution_log_column()
                 _ensure_task_policy_judgement_column()
                 _ensure_task_policy_judgement_reasoning_column()
                 return
@@ -116,6 +117,7 @@ def init_db():
     _ensure_team_last_active_column()
     _ensure_task_case_judgement_column()
     _ensure_task_reasoning_column()
+    _ensure_task_execution_log_column()
     _ensure_task_policy_judgement_column()
     _ensure_task_policy_judgement_reasoning_column()
 
@@ -153,6 +155,16 @@ def _ensure_task_reasoning_column() -> None:
         return
     with engine.connect() as connection:
         connection.execute(text("ALTER TABLE tasks ADD COLUMN reasoning TEXT"))
+
+
+def _ensure_task_execution_log_column() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    column_names = _get_sqlite_column_names("tasks")
+    if column_names is None or "execution_log" in column_names:
+        return
+    with engine.connect() as connection:
+        connection.execute(text("ALTER TABLE tasks ADD COLUMN execution_log TEXT"))
 
 
 def _ensure_task_policy_judgement_column() -> None:
@@ -284,6 +296,7 @@ def recover_sqlite_database() -> str | None:
     _ensure_team_last_active_column()
     _ensure_task_case_judgement_column()
     _ensure_task_reasoning_column()
+    _ensure_task_execution_log_column()
     _ensure_task_policy_judgement_column()
     _ensure_task_policy_judgement_reasoning_column()
     return backup_path

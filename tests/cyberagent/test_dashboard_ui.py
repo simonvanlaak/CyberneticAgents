@@ -448,6 +448,7 @@ def test_render_task_details_shows_status_reasoning(monkeypatch) -> None:
             "initiative_id": 5,
             "content": "Do work",
             "result": None,
+            "execution_log": '[{"type":"ToolCallExecutionEvent","name":"task_search"}]',
             "case_judgement": None,
         },
     )()
@@ -458,6 +459,7 @@ def test_render_task_details_shows_status_reasoning(monkeypatch) -> None:
     dashboard._render_task_details_page(st, _TitleCol())
 
     assert "Waiting for OAuth credentials from ops." in writes
+    assert '[{"type":"ToolCallExecutionEvent","name":"task_search"}]' in writes
 
 
 def test_render_memory_page_shows_entries(monkeypatch) -> None:

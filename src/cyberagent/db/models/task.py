@@ -31,6 +31,7 @@ class Task(Base):
     content: Mapped[str] = mapped_column(Text, nullable=False)
     result: Mapped[Optional[str]] = mapped_column(Text)
     reasoning: Mapped[Optional[str]] = mapped_column(Text)
+    execution_log: Mapped[Optional[str]] = mapped_column(Text)
     policy_judgement: Mapped[Optional[str]] = mapped_column(String(50))
     policy_judgement_reasoning: Mapped[Optional[str]] = mapped_column(Text)
     case_judgement: Mapped[Optional[str]] = mapped_column(Text)

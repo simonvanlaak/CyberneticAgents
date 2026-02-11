@@ -34,6 +34,9 @@ def _format_task_detail(task: TaskCard) -> str:
         "Task Result",
         task.result or "-",
         "",
+        "Execution Log",
+        task.execution_log or "-",
+        "",
         "Case Judgement",
     ]
     lines.extend(_format_case_judgement(task.case_judgement))

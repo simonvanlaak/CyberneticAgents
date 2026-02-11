@@ -380,6 +380,13 @@ async def test_system1_requests_structured_task_execution_output(
         "src.cyberagent.services.tasks.start_task", lambda _task_id: _DummyTask()
     )
     monkeypatch.setattr("src.cyberagent.services.tasks.complete_task", lambda *_: None)
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        "src.cyberagent.services.tasks.set_task_execution_log",
+        lambda _task, execution_log: captured.__setitem__(
+            "execution_log", execution_log
+        ),
+    )
     mocked_run = AsyncMock(
         return_value=TaskResult(
             messages=[
@@ -399,6 +406,8 @@ async def test_system1_requests_structured_task_execution_output(
     await_args = mocked_run.await_args
     assert await_args is not None
     assert await_args.kwargs["output_content_type"].__name__ == "TaskExecutionResult"
+    assert isinstance(captured.get("execution_log"), str)
+    assert "Task executed" in str(captured["execution_log"])
 
 
 @pytest.mark.asyncio
