@@ -457,3 +457,60 @@ async def test_system1_task_execution_enables_tools_and_guides_lookup(
     prompts = await_args.kwargs["message_specific_prompts"]
     assert any("task_search" in prompt for prompt in prompts)
     assert any("memory_crud" in prompt for prompt in prompts)
+
+
+@pytest.mark.asyncio
+async def test_system1_marks_task_blocked_when_execution_raises(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    system1 = System1("System1/worker1")
+    message = TaskAssignMessage(
+        task_id=25,
+        assignee_agent_id_str="System1/worker1",
+        source="System3/root",
+        content="Collect user documents",
+    )
+    ctx = MessageContext(
+        sender=AgentId.from_str("System3/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="execution-error",
+    )
+
+    class _DummyTask:
+        pass
+
+    task = _DummyTask()
+    captured: dict[str, object] = {"complete_called": False}
+    monkeypatch.setattr(
+        "src.cyberagent.services.tasks.start_task", lambda _task_id: task
+    )
+    monkeypatch.setattr(
+        "src.cyberagent.services.tasks.complete_task",
+        lambda *_: captured.__setitem__("complete_called", True),
+    )
+    monkeypatch.setattr(
+        "src.cyberagent.services.tasks.mark_task_blocked",
+        lambda _task, reason: captured.__setitem__("reason", reason),
+    )
+    monkeypatch.setattr(
+        system1,
+        "run",
+        AsyncMock(side_effect=RuntimeError("simulated execution failure")),
+    )
+    system1._publish_message_to_agent = AsyncMock()  # type: ignore[attr-defined]
+
+    await system1.handle_assign_task_message(message=message, ctx=ctx)  # type: ignore[call-arg]
+
+    assert captured["complete_called"] is False
+    reason = str(captured.get("reason", ""))
+    assert "simulated execution failure" in reason
+    assert system1._publish_message_to_agent.await_count == 1  # type: ignore[attr-defined]
+    published_args = system1._publish_message_to_agent.await_args.args  # type: ignore[attr-defined]
+    review_message = published_args[0]
+    recipient = published_args[1]
+    assert isinstance(review_message, TaskReviewMessage)
+    assert review_message.task_id == 25
+    assert "simulated execution failure" in review_message.content
+    assert str(recipient) == "System3/root"

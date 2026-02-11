@@ -54,3 +54,28 @@ async def test_build_skill_tools_invokes_cli_tool() -> None:
     assert call["subcommand"] == "run"
     assert call["timeout_seconds"] == 60
     assert call["query"] == "cybernetic"
+
+
+def test_build_skill_tools_exposes_strict_schema() -> None:
+    skill = SkillDefinition(
+        name="file-reader",
+        description="Read local files.",
+        location=Path("skills/file-reader"),
+        tool_name="file_reader",
+        subcommand=None,
+        required_env=(),
+        timeout_class="standard",
+        timeout_seconds=60,
+        input_schema={"properties": {"command": {"type": "string"}}},
+        output_schema={"properties": {"output": {"type": "string"}}},
+        skill_file=Path("skills/file-reader/SKILL.md"),
+        instructions="",
+    )
+    tools = build_skill_tools(_DummyCliTool(), [skill], agent_id="System1/root")
+    assert len(tools) == 1
+    schema = tools[0].schema
+    assert schema.get("strict") is True
+    parameters = schema.get("parameters", {})
+    assert parameters.get("required") == ["arguments_json"]
+    argument_schema = parameters.get("properties", {}).get("arguments_json", {})
+    assert "default" not in argument_schema

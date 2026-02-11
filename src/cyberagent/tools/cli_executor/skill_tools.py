@@ -20,12 +20,14 @@ def build_skill_tools(
     for skill in skills:
         runner = _build_skill_runner(cli_tool, skill, agent_id)
         tool_name = skill.name.replace("-", "_")
-        tools.append(FunctionTool(runner, skill.description, name=tool_name))
+        tools.append(
+            FunctionTool(runner, skill.description, name=tool_name, strict=True)
+        )
     return tools
 
 
 def _build_skill_runner(cli_tool: Any, skill: SkillDefinition, agent_id: str | None):
-    async def run_skill(arguments_json: str = "{}") -> dict[str, Any]:
+    async def run_skill(arguments_json: str) -> dict[str, Any]:
         try:
             arguments = json.loads(arguments_json)
         except json.JSONDecodeError as exc:

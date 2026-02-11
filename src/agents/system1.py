@@ -125,56 +125,72 @@ class System1(SystemBase):
         else:
             self.task_requestor = AgentId.from_str(message.source)
         task = task_service.start_task(message.task_id)
-        response = await self.run(
-            [message],
-            ctx,
-            message_specific_prompts=[
-                (
-                    "If key information is missing, call task_search to inspect "
-                    "previous team task outputs before marking this task blocked."
-                ),
-                (
-                    "If task_search is insufficient, read team/global memory via "
-                    "memory_crud list before escalating."
-                ),
-            ],
-            output_content_type=TaskExecutionResult,
-            enable_tools=True,
-        )
-        task_service.set_task_execution_log(
-            task,
-            _build_task_execution_log(getattr(response, "messages", [])),
-        )
-        latest_message = self._get_last_message(response)
-        raw_result = (
-            latest_message.to_model_text()
-            if hasattr(latest_message, "to_model_text")
-            else str(latest_message)
-        )
+        try:
+            response = await self.run(
+                [message],
+                ctx,
+                message_specific_prompts=[
+                    (
+                        "If key information is missing, call task_search to inspect "
+                        "previous team task outputs before marking this task blocked."
+                    ),
+                    (
+                        "If task_search is insufficient, read team/global memory via "
+                        "memory_crud list before escalating."
+                    ),
+                ],
+                output_content_type=TaskExecutionResult,
+                enable_tools=True,
+            )
+            task_service.set_task_execution_log(
+                task,
+                _build_task_execution_log(getattr(response, "messages", [])),
+            )
+            latest_message = self._get_last_message(response)
+            raw_result = (
+                latest_message.to_model_text()
+                if hasattr(latest_message, "to_model_text")
+                else str(latest_message)
+            )
 
-        execution = _parse_task_execution_result(raw_result)
+            execution = _parse_task_execution_result(raw_result)
 
-        if execution.status == "blocked":
-            reasoning = execution.reasoning or execution.result
-            task_service.mark_task_blocked(task, reasoning)
+            if execution.status == "blocked":
+                reasoning = execution.reasoning or execution.result
+                task_service.mark_task_blocked(task, reasoning)
+                await self._publish_message_to_agent(
+                    TaskReviewMessage(
+                        task_id=message.task_id,
+                        content=reasoning,
+                        assignee_agent_id_str=str(self.agent_id),
+                        source=str(self.agent_id),
+                    ),
+                    self.task_requestor,
+                )
+                return
+
+            task_service.complete_task(task, execution.result)
             await self._publish_message_to_agent(
                 TaskReviewMessage(
                     task_id=message.task_id,
-                    content=reasoning,
+                    content=execution.result,
                     assignee_agent_id_str=str(self.agent_id),
                     source=str(self.agent_id),
                 ),
                 self.task_requestor,
             )
-            return
-
-        task_service.complete_task(task, execution.result)
-        await self._publish_message_to_agent(
-            TaskReviewMessage(
-                task_id=message.task_id,
-                content=execution.result,
-                assignee_agent_id_str=str(self.agent_id),
-                source=str(self.agent_id),
-            ),
-            self.task_requestor,
-        )
+        except Exception as exc:
+            failure_reason = (
+                "Task execution failed due to an internal error: "
+                f"{type(exc).__name__}: {exc}"
+            )
+            task_service.mark_task_blocked(task, failure_reason)
+            await self._publish_message_to_agent(
+                TaskReviewMessage(
+                    task_id=message.task_id,
+                    content=failure_reason,
+                    assignee_agent_id_str=str(self.agent_id),
+                    source=str(self.agent_id),
+                ),
+                self.task_requestor,
+            )
