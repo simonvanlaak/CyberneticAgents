@@ -59,6 +59,12 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
 
+    task_parser = subparsers.add_parser(
+        "task",
+        help="Show detailed information for a task.",
+    )
+    task_parser.add_argument("task_id", type=int, help="Task id.")
+
     suggest_parser = subparsers.add_parser(
         "suggest", help="Send a suggestion payload to System4."
     )

@@ -175,6 +175,7 @@
     "next_start_runtime": "Next: run {start_command} to boot the runtime.",
     "no_log_files": "No log files to inspect.",
     "next_start_or_status": "Next: run {start_command} or check status with {status_command}.",
+    "task_not_found": "Task #{task_id} not found.",
     "invalid_log_level": "Invalid log level. Use: DEBUG, INFO, WARNING, ERROR, CRITICAL.",
     "stopped_following_logs": "Stopped following logs.",
     "unknown_config_command": "Unknown config command.",

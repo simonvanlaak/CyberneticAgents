@@ -59,6 +59,7 @@ from src.cyberagent.cli.message_catalog import get_message
 from src.cyberagent.cli.runtime_resume import queue_in_progress_initiatives
 from src.cyberagent.cli.status import main as status_main
 from src.cyberagent.cli.suggestion_queue import enqueue_suggestion
+from src.cyberagent.cli.task_details import render_task_detail
 from src.cyberagent.cli.transcribe import handle_transcribe
 from src.cyberagent.core.runtime import get_runtime, stop_runtime
 from src.cyberagent.core.paths import get_logs_dir, get_data_dir
@@ -173,6 +174,15 @@ def _handle_status(args: argparse.Namespace) -> int:
     if getattr(args, "details", False):
         res_args.append("--details")
     return status_main(res_args)
+
+
+def _handle_task(args: argparse.Namespace) -> int:
+    rendered = render_task_detail(args.task_id)
+    if rendered is None:
+        print(get_message("cyberagent", "task_not_found", task_id=args.task_id))
+        return 1
+    print(rendered)
+    return 0
 
 
 def _handle_onboarding(args: argparse.Namespace) -> int:
@@ -695,6 +705,7 @@ _HANDLERS = {
     "stop": _handle_stop,
     DASHBOARD_COMMAND: _handle_ui,
     "status": _handle_status,
+    "task": _handle_task,
     "onboarding": _handle_onboarding,
     "suggest": _handle_suggest,
     "inbox": _handle_inbox,
