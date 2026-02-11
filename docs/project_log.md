@@ -191,4 +191,4 @@ Continue with open bugs.
 
 ### 2026-02-11
 Onboarding test command:
-cyberagent onboarding --name "Simon" --pkm github --repo "https://github.com/simonvanlaak/maya-obsidian-vault" --profile-link "simonvanlaak.de"
+cyberagent onboarding --name "Simon" --pkm github --repo "https://github.com/simonvanlaak/maya-obsidian-vault" --profile-link "https://www.simonvanlaak.de,https://www.linkedin.com/in/simon-van-laak/"

@@ -314,10 +314,7 @@ class System5(SystemBase):
             *policy_prompt,
             f"Content: {message.content}",
             "## POLICY WORDING",
-            (
-                "A policy should always forbid specific actions, and never be vague "
-                "like 'ensure requirements are met'."
-            ),
+            "A policy should always forbid specific actions, and never be vague like 'ensure requirements are met'.",
             "## EVALUATION REQUIREMENTS",
             "1. Carefully review the suggested policy change.",
             "2. Assess the reasoning and justification provided.",
