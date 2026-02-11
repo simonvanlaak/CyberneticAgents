@@ -207,8 +207,8 @@ def test_render_inbox_page_excludes_answered_questions_by_default(
 
     assert fake_st.subheaders == [
         "User Prompts",
-        "System Questions",
         "Answer Pending Questions",
+        "System Questions",
         "System Responses",
     ]
     question_rows = fake_st.dataframe_data[1]
@@ -333,6 +333,61 @@ def test_render_inbox_page_rejects_empty_answer(monkeypatch) -> None:
 
     assert called["resolve"] is False
     assert fake_st.error_messages == ["Answer cannot be empty for question #22."]
+
+
+def test_render_inbox_page_answers_only_first_pending_question(monkeypatch) -> None:
+    fake_st = _FakeStreamlit()
+    fake_st.text_input_values["inbox_answer_30"] = "First"
+    fake_st.text_input_values["inbox_answer_31"] = "Second"
+    fake_st.button_values["inbox_answer_submit_30"] = True
+    fake_st.button_values["inbox_answer_submit_31"] = True
+    monkeypatch.setattr(
+        dashboard,
+        "list_inbox_entries",
+        lambda **_: [
+            InboxEntry(
+                entry_id=30,
+                kind="system_question",
+                content="First question",
+                created_at=30.0,
+                channel="cli",
+                session_id="cli-main",
+                status="pending",
+            ),
+            InboxEntry(
+                entry_id=31,
+                kind="system_question",
+                content="Second question",
+                created_at=31.0,
+                channel="cli",
+                session_id="cli-main",
+                status="pending",
+            ),
+        ],
+    )
+    resolved_calls: list[tuple[str, str | None, str | None]] = []
+
+    def _fake_resolve(
+        answer: str, channel: str | None = None, session_id: str | None = None
+    ) -> AnsweredQuestion:
+        resolved_calls.append((answer, channel, session_id))
+        return AnsweredQuestion(
+            question_id=30,
+            content="First question",
+            asked_by="System4/root",
+            created_at=30.0,
+            answer=answer,
+            answered_at=31.0,
+            channel=channel or "cli",
+            session_id=session_id or "cli-main",
+        )
+
+    monkeypatch.setattr(dashboard, "resolve_pending_question", _fake_resolve)
+
+    dashboard.render_inbox_page(fake_st)
+
+    assert resolved_calls == [("First", "cli", "cli-main")]
+    assert fake_st.success_messages == ["Answer submitted for question #30."]
 
 
 def test_render_task_details_shows_status_reasoning(monkeypatch) -> None:

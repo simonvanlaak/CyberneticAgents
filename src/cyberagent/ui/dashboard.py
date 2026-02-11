@@ -245,6 +245,38 @@ def render_inbox_page(st: Any) -> None:
             hide_index=True,
         )
     if system_questions:
+        pending_questions = [
+            entry
+            for entry in system_questions
+            if (entry.status or "pending") == "pending"
+        ]
+        if pending_questions:
+            st.subheader("Answer Pending Questions")
+            entry = pending_questions[0]
+            answer_key = f"inbox_answer_{entry.entry_id}"
+            submit_key = f"inbox_answer_submit_{entry.entry_id}"
+            answer = st.text_input(
+                f"Answer question #{entry.entry_id}: {entry.content}",
+                value="",
+                key=answer_key,
+            )
+            if st.button(
+                f"Submit answer #{entry.entry_id}",
+                key=submit_key,
+            ):
+                normalized = answer.strip()
+                if not normalized:
+                    st.error(f"Answer cannot be empty for question #{entry.entry_id}.")
+                else:
+                    resolved = resolve_pending_question(
+                        normalized,
+                        channel=entry.channel,
+                        session_id=entry.session_id,
+                    )
+                    if resolved is None:
+                        st.error(f"Question #{entry.entry_id} is no longer pending.")
+                    else:
+                        st.success(f"Answer submitted for question #{entry.entry_id}.")
         st.subheader("System Questions")
         st.dataframe(
             [
@@ -262,39 +294,6 @@ def render_inbox_page(st: Any) -> None:
             width="stretch",
             hide_index=True,
         )
-        pending_questions = [
-            entry
-            for entry in system_questions
-            if (entry.status or "pending") == "pending"
-        ]
-        if pending_questions:
-            st.subheader("Answer Pending Questions")
-            for entry in pending_questions:
-                answer_key = f"inbox_answer_{entry.entry_id}"
-                submit_key = f"inbox_answer_submit_{entry.entry_id}"
-                answer = st.text_input(
-                    f"Answer question #{entry.entry_id}: {entry.content}",
-                    value="",
-                    key=answer_key,
-                )
-                if not st.button(
-                    f"Submit answer #{entry.entry_id}",
-                    key=submit_key,
-                ):
-                    continue
-                normalized = answer.strip()
-                if not normalized:
-                    st.error(f"Answer cannot be empty for question #{entry.entry_id}.")
-                    continue
-                resolved = resolve_pending_question(
-                    normalized,
-                    channel=entry.channel,
-                    session_id=entry.session_id,
-                )
-                if resolved is None:
-                    st.error(f"Question #{entry.entry_id} is no longer pending.")
-                    continue
-                st.success(f"Answer submitted for question #{entry.entry_id}.")
     if system_responses:
         st.subheader("System Responses")
         st.dataframe(
