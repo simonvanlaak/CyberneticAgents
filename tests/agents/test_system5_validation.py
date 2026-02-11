@@ -194,6 +194,14 @@ async def test_system5_policy_suggestion_missing_policy(
         message=message, ctx=ctx
     )  # type: ignore[call-arg]
     assert result.content == "ok"
+    await_args = system5.run.await_args
+    assert await_args is not None
+    prompts = await_args.args[2]
+    assert "## POLICY WORDING" in prompts
+    assert (
+        "A policy should always forbid specific actions, and never be vague like "
+        "'ensure requirements are met'." in prompts
+    )
 
 
 @pytest.mark.asyncio
