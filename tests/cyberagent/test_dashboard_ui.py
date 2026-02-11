@@ -392,9 +392,7 @@ def test_render_inbox_page_answers_only_first_pending_question(monkeypatch) -> N
 
 def test_render_task_details_shows_status_reasoning(monkeypatch) -> None:
     writes: list[object] = []
-    code_values: list[str] = []
     dataframe_data: list[object] = []
-    expander_labels: list[str] = []
 
     class _TitleCol:
         def __enter__(self):
@@ -428,22 +426,8 @@ def test_render_task_details_shows_status_reasoning(monkeypatch) -> None:
         def write(self, text: object) -> None:
             writes.append(text)
 
-        def code(self, text: str) -> None:
-            code_values.append(text)
-
         def dataframe(self, data: object, **_kwargs: object) -> None:
             dataframe_data.append(data)
-
-        class _ExpanderCtx:
-            def __enter__(self):
-                return None
-
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-        def expander(self, label: str):
-            expander_labels.append(label)
-            return self._ExpanderCtx()
 
         def button(self, _text: str) -> bool:
             return False
@@ -483,9 +467,8 @@ def test_render_task_details_shows_status_reasoning(monkeypatch) -> None:
     rows = dataframe_data[0]
     assert isinstance(rows, list)
     assert rows[0]["type"] == "ToolCallExecutionEvent"
+    assert rows[0]["tool"] == "task_search"
     assert "task_search" in str(rows[0]["summary"])
-    assert len(expander_labels) == 1
-    assert len(code_values) == 1
 
 
 def test_render_execution_log_fallbacks_to_code_for_invalid_json() -> None:

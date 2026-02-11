@@ -167,7 +167,6 @@ def _render_execution_log(st: Any, execution_log: str | None) -> None:
         st.dataframe(rows, width="stretch", hide_index=True)
     else:
         st.write(rows)
-    _render_execution_log_details(st, parsed)
 
 
 def _build_execution_log_rows(entries: list[object]) -> list[dict[str, object]]:
@@ -175,16 +174,21 @@ def _build_execution_log_rows(entries: list[object]) -> list[dict[str, object]]:
     for index, entry in enumerate(entries, 1):
         if isinstance(entry, dict):
             step_type = str(entry.get("type", "-"))
+            tool_name = (
+                _extract_tool_name(entry) if _is_tool_call_event(step_type) else "-"
+            )
             source = str(entry.get("source", "-"))
             summary = _summarize_execution_entry(entry)
         else:
             step_type = type(entry).__name__
+            tool_name = "-"
             source = "-"
             summary = _truncate_text(str(entry), 200)
         rows.append(
             {
                 "step": index,
                 "type": step_type,
+                "tool": tool_name,
                 "source": source,
                 "summary": summary,
             }
@@ -192,15 +196,29 @@ def _build_execution_log_rows(entries: list[object]) -> list[dict[str, object]]:
     return rows
 
 
-def _render_execution_log_details(st: Any, entries: list[object]) -> None:
-    if not hasattr(st, "expander"):
-        return
-    for index, entry in enumerate(entries, 1):
-        with st.expander(f"Step {index} details"):
-            if hasattr(st, "code"):
-                st.code(json.dumps(entry, indent=2, ensure_ascii=True, default=str))
-            else:
-                st.write(entry)
+def _is_tool_call_event(step_type: str) -> bool:
+    normalized = step_type.strip().lower()
+    return "toolcall" in normalized or ("tool" in normalized and "call" in normalized)
+
+
+def _extract_tool_name(entry: dict[str, object]) -> str:
+    name = entry.get("name")
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+
+    content = entry.get("content")
+    if isinstance(content, dict):
+        content_name = content.get("name")
+        if isinstance(content_name, str) and content_name.strip():
+            return content_name.strip()
+    if isinstance(content, list):
+        for item in content:
+            if isinstance(item, dict):
+                item_name = item.get("name")
+                if isinstance(item_name, str) and item_name.strip():
+                    return item_name.strip()
+
+    return "-"
 
 
 def _summarize_execution_entry(entry: dict[str, object]) -> str:
