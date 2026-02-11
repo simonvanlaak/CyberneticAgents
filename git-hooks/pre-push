@@ -1,8 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Check Python file size limits first.
-tracked_py_files=$(git ls-files '*.py' || true)
+# Check Python file size limits for files changed in commits being pushed.
+# This prevents legacy oversized files from blocking unrelated pushes.
+tracked_py_files=""
+upstream_ref="$(git rev-parse --abbrev-ref --symbolic-full-name @{upstream} 2>/dev/null || true)"
+if [[ -n "${upstream_ref}" ]]; then
+  merge_base="$(git merge-base HEAD "${upstream_ref}" 2>/dev/null || true)"
+  if [[ -n "${merge_base}" ]]; then
+    tracked_py_files="$(git diff --name-only --diff-filter=AM "${merge_base}"...HEAD -- '*.py' || true)"
+  fi
+fi
+if [[ -z "${tracked_py_files}" ]]; then
+  tracked_py_files="$(git diff --name-only --diff-filter=AM HEAD~1..HEAD -- '*.py' || true)"
+fi
 line_count_fail=0
 if [[ -n "${tracked_py_files}" ]]; then
   while IFS= read -r file; do
