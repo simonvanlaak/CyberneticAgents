@@ -67,6 +67,8 @@ def start_discovery_background(
     # Background discovery should not block the onboarding interview, but we still
     # want it to enqueue the onboarding discovery prompt once the sync completes
     # so the agent can incorporate PKM/profile context as soon as it's available.
+    completion_callback = on_complete or _default_background_on_complete(team_id)
+
     def _run_and_finalize() -> None:
         summary_path = _run_discovery_pipeline(
             args=args,
@@ -74,10 +76,10 @@ def start_discovery_background(
             allow_prompt=False,
             enqueue_prompt=True,
         )
-        if summary_path is None or on_complete is None:
+        if summary_path is None or completion_callback is None:
             return
         try:
-            on_complete(summary_path)
+            completion_callback(summary_path)
         except Exception:  # pragma: no cover - defensive logging in daemon thread.
             logger.exception("Failed to apply background onboarding discovery output.")
 
@@ -86,6 +88,32 @@ def start_discovery_background(
         daemon=True,
     )
     thread.start()
+
+
+def _default_background_on_complete(
+    team_id: int,
+) -> Callable[[Path], None] | None:
+    try:
+        from src.cyberagent.cli import onboarding as onboarding_cli
+        from src.cyberagent.cli.onboarding_defaults import (
+            get_default_strategy_name,
+            load_root_team_defaults,
+        )
+    except Exception:  # pragma: no cover - import errors are environment-specific.
+        logger.exception("Unable to initialize background onboarding apply callback.")
+        return None
+
+    team_defaults = load_root_team_defaults()
+    strategy_name = get_default_strategy_name(team_defaults)
+
+    def _apply(summary_path: Path) -> None:
+        onboarding_cli._apply_onboarding_output(
+            team_id=team_id,
+            summary_path=summary_path,
+            onboarding_strategy_name=strategy_name,
+        )
+
+    return _apply
 
 
 def _run_discovery_pipeline(

@@ -383,6 +383,44 @@ def test_start_discovery_background_calls_on_complete_with_summary(
     assert calls == [summary_path]
 
 
+def test_start_discovery_background_uses_default_on_complete(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    summary_path = tmp_path / "summary.md"
+    summary_path.write_text("summary", encoding="utf-8")
+    calls: list[tuple[int, Path]] = []
+
+    class _FakeThread:
+        def __init__(
+            self,
+            *,
+            target: object,
+            kwargs: dict[str, object] | None = None,
+            **_kw: object,
+        ) -> None:
+            self._target = target
+            self._kwargs = kwargs or {}
+
+        def start(self) -> None:
+            assert callable(self._target)
+            self._target(**self._kwargs)
+
+    monkeypatch.delenv("CYBERAGENT_DISABLE_BACKGROUND_DISCOVERY", raising=False)
+    monkeypatch.setattr(threading, "Thread", _FakeThread)
+    monkeypatch.setattr(
+        onboarding_discovery, "_run_discovery_pipeline", lambda **_kwargs: summary_path
+    )
+    monkeypatch.setattr(
+        onboarding_discovery,
+        "_default_background_on_complete",
+        lambda team_id: lambda resolved_path: calls.append((team_id, resolved_path)),
+    )
+
+    onboarding_discovery.start_discovery_background(_default_args(), team_id=7)
+
+    assert calls == [(7, summary_path)]
+
+
 def test_prompt_continue_without_pkm_handles_eof(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
