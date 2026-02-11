@@ -189,16 +189,27 @@ def finalize_task_review(task: Task, cases: list[dict[str, object]]) -> None:
     """
     Persist review cases and finalize task status from review outcomes.
 
-    A task is approved only when all review cases are judged as ``Satisfied``.
-    Otherwise task status remains unchanged for policy follow-up handling.
+    A completed task is approved only when all review cases are ``Satisfied``.
+    If at least one case is ``Vague``, status remains unchanged so System5 can
+    clarify policy wording and retrigger review. If there are no vague cases
+    and at least one ``Violated`` case, a completed task is rejected.
     """
     set_task_case_judgement(task, cases)
+    judgements = [str(case.get("judgement", "")) for case in cases]
+    has_vague = any(judgement == "Vague" for judgement in judgements)
+    has_violated = any(judgement == "Violated" for judgement in judgements)
     all_satisfied = len(cases) > 0 and all(
-        str(case.get("judgement", "")) == "Satisfied" for case in cases
+        judgement == "Satisfied" for judgement in judgements
     )
+    current_status = _resolve_task_status(getattr(task, "status", None))
     if not all_satisfied:
+        if has_vague:
+            return
+        if has_violated and current_status == Status.COMPLETED:
+            _transition_task(task, Status.REJECTED)
+            _persist_task(task)
         return
-    if _resolve_task_status(getattr(task, "status", None)) != Status.COMPLETED:
+    if current_status != Status.COMPLETED:
         return
     _transition_task(task, Status.APPROVED)
     _persist_task(task)
