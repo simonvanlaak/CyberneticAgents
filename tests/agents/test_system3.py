@@ -21,7 +21,7 @@ from src.agents.messages import (
     PolicySuggestionMessage,
     TaskReviewMessage,
 )
-from src.enums import PolicyJudgement, Status, SystemType
+from src.enums import PolicyJudgement, Status
 
 
 class TestSystem3Basic:
@@ -256,39 +256,36 @@ async def test_system3_task_review_processes_blocked_tasks() -> None:
         id = 42
         assignee = "System1/root"
         status = Status.BLOCKED
+        name = "Blocked task"
+        content = "Task content"
+        reasoning = "Need additional context from user."
+        result = None
 
-    class DummySystem5:
-        def get_agent_id(self):
-            return AgentId.from_str("System5/root")
-
-    mocked_run.return_value = object()
+    mocked_run.return_value = TaskResult(
+        messages=[TextMessage(content="resolved", source="System3/root")]
+    )
 
     with (
         patch("src.cyberagent.services.tasks._get_task", return_value=DummyTask()),
-        patch(
-            "src.cyberagent.services.policies._get_system_policy_prompts",
-            return_value=["Policy #1"],
-        ),
-        patch.object(system3, "_get_systems_by_type", return_value=[DummySystem5()]),
+        patch.object(system3, "run", mocked_run),
         patch.object(
             system3,
-            "_get_structured_message",
-            return_value=CasesResponse(
-                cases=[
-                    PolicyJudgeResponse(
-                        policy_id=1,
-                        judgement=PolicyJudgement.VIOLATED,
-                        reasoning="blocked for valid reason",
-                    )
-                ]
-            ),
+            "_was_tool_called",
+            side_effect=lambda _response, tool_name: tool_name
+            == "request_research_tool",
         ),
-        patch.object(system3, "run", mocked_run),
     ):
         await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
 
     assert mocked_run.await_count == 1
-    assert system3._publish_message_to_agent.await_count == 1
+    await_args = mocked_run.await_args
+    assert await_args is not None
+    joined_prompts = "\n".join(await_args.args[2])
+    assert "task is currently blocked" in joined_prompts.lower()
+    assert "request_research_tool" in joined_prompts
+    assert "escalate_blocked_task_tool" in joined_prompts
+    assert "modify_task_tool" in joined_prompts
+    system3._publish_message_to_agent.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -317,34 +314,23 @@ async def test_system3_task_review_processes_blocked_tasks_with_prefixed_status(
         id = 42
         assignee = "System1/root"
         status = "Status.BLOCKED"
+        name = "Blocked task"
+        content = "Task content"
+        reasoning = "Need clarification from prior results."
+        result = None
 
-    class DummySystem5:
-        def get_agent_id(self):
-            return AgentId.from_str("System5/root")
-
-    mocked_run.return_value = object()
+    mocked_run.return_value = TaskResult(
+        messages=[TextMessage(content="resolved", source="System3/root")]
+    )
 
     with (
         patch("src.cyberagent.services.tasks._get_task", return_value=DummyTask()),
-        patch(
-            "src.cyberagent.services.policies._get_system_policy_prompts",
-            return_value=["Policy #1"],
-        ),
-        patch.object(system3, "_get_systems_by_type", return_value=[DummySystem5()]),
+        patch.object(system3, "run", mocked_run),
         patch.object(
             system3,
-            "_get_structured_message",
-            return_value=CasesResponse(
-                cases=[
-                    PolicyJudgeResponse(
-                        policy_id=1,
-                        judgement=PolicyJudgement.VIOLATED,
-                        reasoning="blocked for valid reason",
-                    )
-                ]
-            ),
+            "_was_tool_called",
+            side_effect=lambda _response, tool_name: tool_name == "modify_task_tool",
         ),
-        patch.object(system3, "run", mocked_run),
     ):
         await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
 
@@ -816,10 +802,15 @@ async def test_system3_capability_gap_prompt_includes_exact_task_context(
 
 
 @pytest.mark.asyncio
-async def test_system3_blocked_task_with_insufficient_info_requests_system4_research():
-    """When a task is blocked due to insufficient information, System3 should request System4 research."""
+async def test_system3_blocked_task_without_keyword_still_uses_block_resolution():
+    """Blocked task review should run proactive blocked-resolution regardless of exact wording."""
     system3 = System3("System3/controller1")
     system3._publish_message_to_agent = AsyncMock()
+    mocked_run = AsyncMock(
+        return_value=TaskResult(
+            messages=[TextMessage(content="resolved", source="System3/root")]
+        )
+    )
 
     message = TaskReviewMessage(
         task_id=33,
@@ -841,40 +832,23 @@ async def test_system3_blocked_task_with_insufficient_info_requests_system4_rese
         status = Status.BLOCKED
         name = "Collect user identity and disambiguation links"
         content = "Gather user name and confirm public profile links"
-        reasoning = "Insufficient information: No user identity or disambiguation links are available to retrieve."
-
-    class DummySystem4:
-        def get_agent_id(self):
-            return AgentId.from_str("System4/root")
-
-    class DummySystem5:
-        def get_agent_id(self):
-            return AgentId.from_str("System5/root")
+        reasoning = "Need clarification on source location."
+        result = None
 
     with (
         patch("src.cyberagent.services.tasks._get_task", return_value=DummyTask()),
+        patch.object(system3, "run", mocked_run),
         patch.object(
             system3,
-            "_get_systems_by_type",
-            side_effect=lambda system_type: (
-                [DummySystem4()]
-                if system_type == SystemType.INTELLIGENCE
-                else [DummySystem5()]
-            ),
+            "_was_tool_called",
+            side_effect=lambda _response, tool_name: tool_name
+            == "escalate_blocked_task_tool",
         ),
-        patch(
-            "src.cyberagent.services.policies._get_system_policy_prompts",
-            return_value=["Policy #1"],
-        ),
-        patch.object(system3, "run", new=AsyncMock()),
     ):
         await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
 
-    # First message should be a research request to System4.
-    assert system3._publish_message_to_agent.await_count >= 1
-    published = [
-        call.args[0] for call in system3._publish_message_to_agent.await_args_list
-    ]
-    from src.agents.messages import ResearchRequestMessage
-
-    assert any(isinstance(msg, ResearchRequestMessage) for msg in published)
+    assert mocked_run.await_count == 1
+    await_args = mocked_run.await_args
+    assert await_args is not None
+    joined_prompts = "\n".join(await_args.args[2])
+    assert "Need clarification on source location." in joined_prompts

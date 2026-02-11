@@ -7,7 +7,6 @@ from autogen_agentchat.messages import StructuredMessage, TextMessage
 from autogen_core import AgentId, CancellationToken, MessageContext
 
 from src.agents.messages import (
-    CapabilityGapMessage,
     StrategyRequestMessage,
     TaskReviewMessage,
     UserMessage,
@@ -206,7 +205,11 @@ async def test_product_discovery_feedback_loop_creates_tasks(
         )
 
     async def system1_run(
-        chat_messages, ctx, message_specific_prompts=None, output_content_type=None
+        chat_messages,
+        ctx,
+        message_specific_prompts=None,
+        output_content_type=None,
+        **_kwargs,
     ):
         return TaskResult(
             messages=[TextMessage(content="Completed task.", source=system1.name)]
@@ -299,12 +302,6 @@ async def test_product_discovery_feedback_loop_creates_tasks(
             for message in collected_reviews
             if isinstance(message, TaskReviewMessage)
         ]
-        capability_gaps = [
-            message
-            for message in collected_reviews
-            if isinstance(message, CapabilityGapMessage)
-        ]
         assert len(task_reviews) == len(tasks)
-        assert len(capability_gaps) == len(tasks)
     finally:
         db.close()

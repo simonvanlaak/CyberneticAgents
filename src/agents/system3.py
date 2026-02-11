@@ -91,6 +91,24 @@ class System3(SystemBase):
                 "Escalate a capability gap to System5 when no viable System1 can execute a task.",
             )
         )
+        self.tools.append(
+            FunctionTool(
+                self.request_research_tool,
+                "Request System4 research to resolve a blocked task.",
+            )
+        )
+        self.tools.append(
+            FunctionTool(
+                self.escalate_blocked_task_tool,
+                "Escalate blocked-task resolution guidance to System5.",
+            )
+        )
+        self.tools.append(
+            FunctionTool(
+                self.modify_task_tool,
+                "Update task content/reasoning and optionally restart blocked execution.",
+            )
+        )
 
     def _extract_parse_failure_retry_count(self, task: Any) -> int:
         raw_case_judgement = getattr(task, "case_judgement", None)
@@ -156,14 +174,50 @@ class System3(SystemBase):
             system_5_id,
         )
 
-    def _is_insufficient_information_blocked_task(self, task: object) -> bool:
+    def _is_blocked_task(self, task: object) -> bool:
         raw_status = getattr(task, "status", None)
         status_value = getattr(raw_status, "value", raw_status)
         status_text = str(status_value).strip().lower()
-        if "blocked" not in status_text:
-            return False
-        reasoning = str(getattr(task, "reasoning", "") or "").strip().lower()
-        return "insufficient information" in reasoning
+        return "blocked" in status_text
+
+    async def _resolve_blocked_task(
+        self,
+        message: TaskReviewMessage,
+        ctx: MessageContext,
+        task: object,
+    ) -> None:
+        blocked_context = {
+            "task_id": getattr(task, "id", None),
+            "task_name": getattr(task, "name", ""),
+            "task_content": getattr(task, "content", ""),
+            "task_reasoning": getattr(task, "reasoning", ""),
+            "task_result": getattr(task, "result", ""),
+            "task_assignee": getattr(task, "assignee", ""),
+            "review_message_content": message.content,
+        }
+        message_specific_prompts = [
+            "Task is currently blocked and needs proactive resolution before policy review.",
+            "## BLOCKED TASK CONTEXT",
+            json.dumps(blocked_context, indent=4),
+            "Analyze why this task is blocked and resolve it now.",
+            "You must call exactly one of these tools:",
+            f"- {self.request_research_tool.__name__}: when more external/user information is needed.",
+            f"- {self.escalate_blocked_task_tool.__name__}: when policy/capability guidance from System5 is needed.",
+            f"- {self.modify_task_tool.__name__}: when task wording/reasoning should be adjusted and execution should restart.",
+            "Do not perform policy judgement in this step.",
+        ]
+        response = await self.run(
+            [message],
+            ctx,
+            message_specific_prompts,
+            include_memory_context=False,
+        )
+        if not (
+            self._was_tool_called(response, self.request_research_tool.__name__)
+            or self._was_tool_called(response, self.escalate_blocked_task_tool.__name__)
+            or self._was_tool_called(response, self.modify_task_tool.__name__)
+        ):
+            raise ValueError("No blocked-task resolution tool was called.")
 
     @message_handler
     async def handle_initiative_assign_message(
@@ -363,26 +417,16 @@ class System3(SystemBase):
         if not task_service.is_review_eligible_for_task(task):
             return
 
-        # If the task is blocked due to missing/insufficient information, proactively
-        # request System4 (intelligence) to research/unblock before running policy review.
-        if self._is_insufficient_information_blocked_task(task):
-            intelligence_systems = self._get_systems_by_type(SystemType.INTELLIGENCE)
-            if intelligence_systems:
-                system_4_id = intelligence_systems[0].get_agent_id()
-                await self._publish_message_to_agent(
-                    ResearchRequestMessage(
-                        source=self.name,
-                        content=(
-                            "Task is blocked due to insufficient information. "
-                            "Please research or otherwise obtain the missing info, "
-                            "and if needed ask the user for the exact missing details.\n\n"
-                            f"Task ID: {task.id}\n"
-                            f"Task name: {getattr(task, 'name', '')}\n"
-                            f"Task content: {getattr(task, 'content', '')}\n"
-                            f"Blocked reasoning: {getattr(task, 'reasoning', '')}"
-                        ),
-                    ),
-                    system_4_id,
+        if self._is_blocked_task(task):
+            try:
+                await self._resolve_blocked_task(message, ctx, task)
+            except Exception as exc:
+                if isinstance(exc, InternalErrorRoutedError):
+                    return
+                await self._route_internal_error_to_policy_system(
+                    failed_message_type=message.__class__.__name__,
+                    error_summary=str(exc),
+                    task_id=getattr(task, "id", None),
                 )
             return
 
@@ -546,6 +590,66 @@ class System3(SystemBase):
             ),
             assignee.get_agent_id(),
         )
+
+    async def request_research_tool(self, task_id: int, content: str) -> bool:
+        task = task_service.get_task_by_id(task_id)
+        intelligence_systems = self._get_systems_by_type(SystemType.INTELLIGENCE)
+        if not intelligence_systems:
+            raise ValueError("No intelligence system found for blocked-task research.")
+        await self._publish_message_to_agent(
+            ResearchRequestMessage(
+                source=self.name,
+                content=(
+                    f"{content}\n\n"
+                    f"Task ID: {task.id}\n"
+                    f"Task name: {getattr(task, 'name', '')}\n"
+                    f"Task content: {getattr(task, 'content', '')}\n"
+                    f"Blocked reasoning: {getattr(task, 'reasoning', '')}"
+                ),
+            ),
+            intelligence_systems[0].get_agent_id(),
+        )
+        return True
+
+    async def escalate_blocked_task_tool(self, task_id: int, content: str) -> bool:
+        policy_systems = self._get_systems_by_type(SystemType.POLICY)
+        if not policy_systems:
+            raise ValueError("No policy system found for blocked-task escalation.")
+        await self._publish_message_to_agent(
+            PolicySuggestionMessage(
+                policy_id=None,
+                task_id=task_id,
+                content=content,
+                source=self.name,
+            ),
+            policy_systems[0].get_agent_id(),
+        )
+        return True
+
+    def modify_task_tool(
+        self,
+        task_id: int,
+        content: str | None = None,
+        reasoning: str | None = None,
+        restart_execution: bool = False,
+    ) -> dict[str, object]:
+        if restart_execution:
+            task = task_service.start_task(task_id)
+        else:
+            task = task_service.get_task_by_id(task_id)
+
+        if content is not None:
+            task.content = content
+        if reasoning is not None:
+            task.reasoning = reasoning
+        task.update()
+        return {
+            "task_id": task_id,
+            "status": str(getattr(task, "status", "")),
+            "content_updated": content is not None,
+            "reasoning_updated": reasoning is not None,
+            "restart_execution": restart_execution,
+        }
 
     def execute_procedure_tool(
         self, procedure_id: int, strategy_id: int

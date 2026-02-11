@@ -9,7 +9,6 @@ from unittest.mock import AsyncMock
 
 from src.agents.system1 import System1
 from src.agents.messages import (
-    CapabilityGapMessage,
     TaskAssignMessage,
     TaskReviewMessage,
 )
@@ -226,17 +225,12 @@ async def test_system1_blocked_marks_task_and_escalates_to_system3(
 
     assert captured["complete_called"] is False
     assert captured["reason"] == "Missing API key"
-    assert system1._publish_message_to_agent.await_count == 2  # type: ignore[attr-defined]
+    assert system1._publish_message_to_agent.await_count == 1  # type: ignore[attr-defined]
     first_args = system1._publish_message_to_agent.await_args_list[0].args  # type: ignore[attr-defined]
-    second_args = system1._publish_message_to_agent.await_args_list[1].args  # type: ignore[attr-defined]
     assert isinstance(first_args[0], TaskReviewMessage)
     assert first_args[0].task_id == 9
     assert first_args[0].content == "Missing API key"
     assert str(first_args[1]) == "System3/root"
-    assert isinstance(second_args[0], CapabilityGapMessage)
-    assert second_args[0].task_id == 9
-    assert second_args[0].content == "Missing API key"
-    assert str(second_args[1]) == "System3/root"
 
 
 @pytest.mark.asyncio
@@ -298,13 +292,12 @@ async def test_system1_ambiguous_output_marks_task_blocked(
 
     assert captured["complete_called"] is False
     assert isinstance(captured.get("reason"), str)
-    assert system1._publish_message_to_agent.await_count == 2  # type: ignore[attr-defined]
+    assert system1._publish_message_to_agent.await_count == 1  # type: ignore[attr-defined]
     published_types = [
         type(call.args[0]).__name__
         for call in system1._publish_message_to_agent.await_args_list  # type: ignore[attr-defined]
     ]
-    assert TaskReviewMessage.__name__ in published_types
-    assert CapabilityGapMessage.__name__ in published_types
+    assert published_types == [TaskReviewMessage.__name__]
 
 
 @pytest.mark.asyncio

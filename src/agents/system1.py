@@ -6,7 +6,7 @@ from pydantic import BaseModel
 from src.agents.system_base import SystemBase
 from src.cyberagent.services import tasks as task_service
 
-from .messages import CapabilityGapMessage, TaskAssignMessage, TaskReviewMessage
+from .messages import TaskAssignMessage, TaskReviewMessage
 
 
 class TaskExecutionResult(BaseModel):
@@ -99,15 +99,6 @@ class System1(SystemBase):
             task_service.mark_task_blocked(task, reasoning)
             await self._publish_message_to_agent(
                 TaskReviewMessage(
-                    task_id=message.task_id,
-                    content=reasoning,
-                    assignee_agent_id_str=str(self.agent_id),
-                    source=str(self.agent_id),
-                ),
-                self.task_requestor,
-            )
-            await self._publish_message_to_agent(
-                CapabilityGapMessage(
                     task_id=message.task_id,
                     content=reasoning,
                     assignee_agent_id_str=str(self.agent_id),
