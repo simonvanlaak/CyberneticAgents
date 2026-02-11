@@ -1,6 +1,27 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Check Python file size limits first.
+tracked_py_files=$(git ls-files '*.py' || true)
+line_count_fail=0
+if [[ -n "${tracked_py_files}" ]]; then
+  while IFS= read -r file; do
+    if [[ -f "${file}" ]]; then
+      line_count=$(wc -l < "${file}" | tr -d ' ')
+      if (( line_count > 1000 )); then
+        echo "ERROR: ${file} has ${line_count} lines (limit is 1000)." >&2
+        line_count_fail=1
+      elif (( line_count > 700 )); then
+        echo "WARNING: ${file} has ${line_count} lines (warning at 700)." >&2
+      fi
+    fi
+  done <<< "${tracked_py_files}"
+fi
+
+if (( line_count_fail != 0 )); then
+  exit 1
+fi
+
 PYTHON_BIN="python3"
 if [[ -x ".venv/bin/python" ]]; then
   PYTHON_BIN=".venv/bin/python"
@@ -10,11 +31,14 @@ if [[ -x ".venv/bin/basedpyright" ]]; then
   BASEDPYRIGHT_BIN=".venv/bin/basedpyright"
 fi
 
-echo "Running full test suite with coverage (min 70%)..."
-${PYTHON_BIN} -m pytest tests/ -v --cov=src --cov-report=term-missing --cov-fail-under=70
+echo "Running black --check on src/ and tests/..."
+${PYTHON_BIN} -m black --check src tests
 
 echo "Running ruff on src/ and tests/..."
 ${PYTHON_BIN} -m ruff check src tests
 
 echo "Running basedpyright on src/ and tests/..."
 ${BASEDPYRIGHT_BIN} --pythonpath ${PYTHON_BIN}
+
+echo "Running full test suite with coverage (min 70%)..."
+${PYTHON_BIN} -m pytest tests/ -v --cov=src --cov-report=term-missing --cov-fail-under=70

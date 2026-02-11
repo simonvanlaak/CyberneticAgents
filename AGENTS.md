@@ -193,8 +193,8 @@ ln -sf ../../git-hooks/pre-commit .git/hooks/pre-commit
 ln -sf ../../git-hooks/pre-push .git/hooks/pre-push
 ```
 Hooks behavior:
-- `pre-commit`: runs `black --check` on staged Python files and `pytest` on staged test files.
-- `pre-push`: runs the full test suite (`python3 -m pytest tests/ -v`).
+- `pre-commit`: first enforces staged Python file line limits (warning at 700, fail at 1000), then runs `black --check`, `ruff check`, `basedpyright`, and staged `pytest` (with coverage when staged `src/` files exist).
+- `pre-push`: first enforces tracked Python file line limits (warning at 700, fail at 1000), then runs `black --check`, `ruff check`, `basedpyright`, and finally the full test suite with coverage.
 
 You have to always pass git-hooks, never use --no-verify.
 
