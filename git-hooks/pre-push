@@ -33,6 +33,13 @@ if (( line_count_fail != 0 )); then
   exit 1
 fi
 
+changed_py=()
+if [[ -n "${tracked_py_files}" ]]; then
+  while IFS= read -r file; do
+    [[ -n "${file}" ]] && changed_py+=("${file}")
+  done <<< "${tracked_py_files}"
+fi
+
 PYTHON_BIN="python3"
 if [[ -x ".venv/bin/python" ]]; then
   PYTHON_BIN=".venv/bin/python"
@@ -42,14 +49,18 @@ if [[ -x ".venv/bin/basedpyright" ]]; then
   BASEDPYRIGHT_BIN=".venv/bin/basedpyright"
 fi
 
-echo "Running black --check on src/ and tests/..."
-${PYTHON_BIN} -m black --check src tests
+if (( ${#changed_py[@]} > 0 )); then
+  echo "Running black --check on changed Python files..."
+  ${PYTHON_BIN} -m black --check "${changed_py[@]}"
 
-echo "Running ruff on src/ and tests/..."
-${PYTHON_BIN} -m ruff check src tests
+  echo "Running ruff on changed Python files..."
+  ${PYTHON_BIN} -m ruff check "${changed_py[@]}"
 
-echo "Running basedpyright on src/ and tests/..."
-${BASEDPYRIGHT_BIN} --pythonpath ${PYTHON_BIN}
+  echo "Running basedpyright on changed Python files..."
+  ${BASEDPYRIGHT_BIN} --pythonpath ${PYTHON_BIN} "${changed_py[@]}"
+else
+  echo "No changed Python files for black/ruff/basedpyright."
+fi
 
 echo "Running full test suite with coverage (min 70%)..."
 ${PYTHON_BIN} -m pytest tests/ -v --cov=src --cov-report=term-missing --cov-fail-under=70
