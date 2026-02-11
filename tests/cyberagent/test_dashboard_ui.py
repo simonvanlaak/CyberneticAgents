@@ -93,14 +93,13 @@ def test_render_teams_page_uses_width_stretch(
 
     dashboard.render_teams_page(fake_st)
 
-    assert len(fake_st.dataframe_calls) == 1
+    assert len(fake_st.dataframe_calls) == 2
     kwargs = fake_st.dataframe_calls[0]
     assert kwargs.get("width") == "stretch"
     assert "use_container_width" not in kwargs
-    assert any(
-        caption == "Team policies: p1: policy content" for caption in fake_st.captions
-    )
-    rows = cast(list[dict[str, object]], fake_st.dataframe_data[0])
+    policy_rows = cast(list[dict[str, object]], fake_st.dataframe_data[0])
+    assert policy_rows == [{"policy": "p1", "description": "policy content"}]
+    rows = cast(list[dict[str, object]], fake_st.dataframe_data[1])
     assert rows[0]["system_policies"] == "sp1: system policy content"
 
 

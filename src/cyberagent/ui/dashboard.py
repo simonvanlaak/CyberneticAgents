@@ -507,11 +507,13 @@ def render_teams_page(st: Any) -> None:
     for team in teams:
         st.subheader(f"Team {team.team_name} ({team.team_id})")
         team_policy_values = getattr(team, "policy_details", None) or team.policies
-        team_policies_text = (
-            ", ".join(team_policy_values) if team_policy_values else "-"
-        )
         team_permissions_text = ", ".join(team.permissions) if team.permissions else "-"
-        st.caption(f"Team policies: {team_policies_text}")
+        st.caption("Team policies")
+        st.dataframe(
+            _build_policy_table_rows(team_policy_values),
+            width="stretch",
+            hide_index=True,
+        )
         st.caption(f"Team permissions: {team_permissions_text}")
         if not team.members:
             st.caption("No team members")
@@ -539,6 +541,25 @@ def render_teams_page(st: Any) -> None:
             width="stretch",
             hide_index=True,
         )
+
+
+def _build_policy_table_rows(policy_values: list[str]) -> list[dict[str, str]]:
+    if not policy_values:
+        return [{"policy": "-", "description": "-"}]
+    rows: list[dict[str, str]] = []
+    for value in policy_values:
+        policy_text = str(value).strip()
+        if ": " not in policy_text:
+            rows.append({"policy": policy_text or "-", "description": "-"})
+            continue
+        policy_name, policy_description = policy_text.split(": ", 1)
+        rows.append(
+            {
+                "policy": policy_name.strip() or "-",
+                "description": policy_description.strip() or "-",
+            }
+        )
+    return rows
 
 
 def main() -> None:
