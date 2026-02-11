@@ -68,11 +68,13 @@ def test_system1_identity_task_injects_onboarding_profile_by_tags(monkeypatch) -
 
     calls: list[dict[str, object]] = []
 
-    def _fake_search_entries(*, tags=None, query_text=None, **kwargs):  # type: ignore[no-untyped-def]
+    def _fake_search_entries(*_args, tags=None, query_text=None, **kwargs):  # type: ignore[no-untyped-def]
         calls.append({"tags": tags, "query_text": query_text, **kwargs})
         # Simulate semantic search returning nothing, then tag search returning the profile.
         if tags:
-            return MemoryListResult(items=[_make_entry("mem-onboarding")], next_cursor=None, has_more=False)
+            return MemoryListResult(
+                items=[_make_entry("mem-onboarding")], next_cursor=None, has_more=False
+            )
         return MemoryListResult(items=[], next_cursor=None, has_more=False)
 
     monkeypatch.setattr(
@@ -81,9 +83,13 @@ def test_system1_identity_task_injects_onboarding_profile_by_tags(monkeypatch) -
     )
 
     agent = _DummyAgent()
-    message = TextMessage(content="Collect user identity and links", source="System3/root")
+    message = TextMessage(
+        content="Collect user identity and links", source="System3/root"
+    )
 
     context = agent._build_memory_context(message)
 
     assert any("mem-onboarding" in line for line in context)
-    assert any(call.get("tags") for call in calls), "expected a tag-based fallback query"
+    assert any(
+        call.get("tags") for call in calls
+    ), "expected a tag-based fallback query"

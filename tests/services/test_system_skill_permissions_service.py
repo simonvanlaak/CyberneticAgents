@@ -72,15 +72,16 @@ def test_add_skill_grant_requires_team_envelope() -> None:
 def test_add_skill_grant_enforces_max_limit() -> None:
     team_id = _create_team_id()
     system_id = _create_system_id(team_id)
+    max_grants = 10
 
-    for index in range(6):
+    for index in range(max_grants + 1):
         teams_service.add_allowed_skill(
             team_id=team_id,
             skill_name=f"skill.limit.{index}",
             actor_id="system5/root",
         )
 
-    for index in range(5):
+    for index in range(max_grants):
         assert (
             systems_service.add_skill_grant(
                 system_id=system_id,
@@ -93,11 +94,11 @@ def test_add_skill_grant_enforces_max_limit() -> None:
     with pytest.raises(PermissionError, match="system_skill_limit"):
         systems_service.add_skill_grant(
             system_id=system_id,
-            skill_name="skill.limit.5",
+            skill_name=f"skill.limit.{max_grants}",
             actor_id="system5/root",
         )
 
-    assert len(systems_service.list_granted_skills(system_id)) == 5
+    assert len(systems_service.list_granted_skills(system_id)) == max_grants
 
 
 def test_can_execute_skill_reloads_policy_after_clear() -> None:

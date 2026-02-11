@@ -222,17 +222,18 @@ async def test_system5_rejects_grant_over_limit(
 ) -> None:
     team_id = _create_team_id()
     system_id = _create_system_id(team_id)
+    max_grants = 10
     monkeypatch.setenv("CYBERAGENT_ACTIVE_TEAM_ID", str(team_id))
     system5 = System5("System5/policy1")
 
-    for index in range(6):
+    for index in range(max_grants + 1):
         teams_service.add_allowed_skill(
             team_id=team_id,
             skill_name=f"skill.limit.{index}",
             actor_id="system5/root",
         )
 
-    for index in range(5):
+    for index in range(max_grants):
         message = SystemSkillGrantUpdateMessage(
             system_id=system_id,
             skill_name=f"skill.limit.{index}",
@@ -247,9 +248,9 @@ async def test_system5_rejects_grant_over_limit(
 
     message = SystemSkillGrantUpdateMessage(
         system_id=system_id,
-        skill_name="skill.limit.5",
+        skill_name=f"skill.limit.{max_grants}",
         action="add",
-        content="Grant skill.limit.5 to system.",
+        content=f"Grant skill.limit.{max_grants} to system.",
         source="System3/control1",
     )
 
@@ -258,4 +259,4 @@ async def test_system5_rejects_grant_over_limit(
     )  # type: ignore[call-arg]
 
     assert response.is_error is True
-    assert len(systems_service.list_granted_skills(system_id)) == 5
+    assert len(systems_service.list_granted_skills(system_id)) == max_grants
