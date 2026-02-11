@@ -35,6 +35,10 @@ from src.cyberagent.cli.onboarding_memory import (
     store_onboarding_memory,
     store_onboarding_memory_entry,
 )
+from src.cyberagent.cli.onboarding_discovery_sync import (
+    is_interpreter_shutdown_error as _is_interpreter_shutdown_error,
+    sync_obsidian_repo_with_git as _sync_obsidian_repo_with_git,
+)
 from src.cyberagent.core.paths import get_repo_root, resolve_data_path
 from src.cyberagent.db.models.system import get_system_by_type
 from src.cyberagent.memory.models import MemoryLayer, MemoryPriority, MemorySource
@@ -406,10 +410,6 @@ def _repo_name_from_url(repo_url: str) -> str:
     return name[:-4] if name.endswith(".git") else name
 
 
-def _is_interpreter_shutdown_error(error: str) -> bool:
-    return "cannot schedule new futures after interpreter shutdown" in error.lower()
-
-
 def prepare_obsidian_vault_path_env(*, pkm_source: str, repo_url: str) -> str | None:
     source = pkm_source.strip().lower()
     normalized_repo = repo_url.strip()
@@ -473,6 +473,23 @@ def _sync_obsidian_repo(
                 "PKM repo sync hit interpreter-shutdown scheduling race. Retrying once."
             )
             continue
+        if _is_interpreter_shutdown_error(last_error):
+            logger.warning(
+                "PKM repo sync failed after retry due to interpreter-shutdown race. "
+                "Falling back to direct git sync."
+            )
+            fallback_success, fallback_error = _sync_obsidian_repo_with_git(
+                repo_url=repo_url,
+                branch=branch,
+                dest=dest,
+                token_env=token_env,
+                token_username=token_username,
+            )
+            if fallback_success:
+                os.environ["OBSIDIAN_VAULT_PATH"] = str(dest.resolve())
+                return dest, True
+            if fallback_error:
+                last_error = fallback_error
         break
 
     error_text = last_error or "Unknown error"
