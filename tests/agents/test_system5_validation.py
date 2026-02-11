@@ -245,6 +245,70 @@ async def test_system5_policy_suggestion_bootstraps_policies_and_retries_review(
 
 
 @pytest.mark.asyncio
+async def test_system5_policy_vague_retriggers_task_review():
+    system5 = System5("System5/root")
+    system5._publish_message_to_agent = AsyncMock()
+    system5.run = AsyncMock(return_value=object())
+    system5._get_structured_message = lambda *_args, **_kwargs: SimpleNamespace(
+        content="clarified",
+        is_error=False,
+    )
+
+    class DummyTask:
+        id = 88
+        assignee = "System1/root"
+        result = "Completed task output"
+        name = "Task 88"
+
+        def to_prompt(self) -> list[str]:
+            return ['{"id":88}']
+
+    class DummyPolicy:
+        def to_prompt(self) -> list[str]:
+            return ['{"id":3}']
+
+    class DummySystem3:
+        def get_agent_id(self):
+            from autogen_core import AgentId
+
+            return AgentId.from_str("System3/root")
+
+    from unittest.mock import patch
+
+    with (
+        patch(
+            "src.agents.system5.task_service.get_task_by_id", return_value=DummyTask()
+        ),
+        patch(
+            "src.agents.system5.policy_service.get_policy_by_id",
+            return_value=DummyPolicy(),
+        ),
+        patch.object(system5, "_get_systems_by_type", return_value=[DummySystem3()]),
+    ):
+        result = await system5.handle_policy_vague_message(
+            PolicyVagueMessage(
+                task_id=88,
+                policy_id=3,
+                content="Unclear policy details",
+                source="System3/root",
+            ),
+            SimpleNamespace(),
+        )  # type: ignore[arg-type]
+
+    assert result.content == "clarified"
+    assert result.is_error is False
+    system5._publish_message_to_agent.assert_awaited_once()
+    await_args = system5._publish_message_to_agent.await_args
+    assert await_args is not None
+    published = await_args.args[0]
+    recipient = await_args.args[1]
+    assert isinstance(published, TaskReviewMessage)
+    assert published.task_id == 88
+    assert published.assignee_agent_id_str == "System1/root"
+    assert str(recipient) == "System3/root"
+
+
+@pytest.mark.asyncio
 async def test_system5_no_conflicts():
     """Test that System5 has no structured output conflicts."""
     system5 = System5("System5/policy1")

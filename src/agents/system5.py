@@ -117,12 +117,16 @@ class System5(SystemBase):
         except Exception:
             policy = None
 
-        task_prompt = task.to_prompt() if task is not None else [
-            f"Task {message.task_id} not found in DB."
-        ]
-        policy_prompt = policy.to_prompt() if policy is not None else [
-            f"Policy {message.policy_id} not found in DB."
-        ]
+        task_prompt = (
+            task.to_prompt()
+            if task is not None
+            else [f"Task {message.task_id} not found in DB."]
+        )
+        policy_prompt = (
+            policy.to_prompt()
+            if policy is not None
+            else [f"Policy {message.policy_id} not found in DB."]
+        )
 
         message_specific_prompts = [
             "## POLICY VIOLATION REVIEW",
@@ -240,6 +244,17 @@ class System5(SystemBase):
         parsed: ConfirmationResponse = self._get_structured_message(
             response, ConfirmationResponse
         )
+        control_systems = self._get_systems_by_type(SystemType.CONTROL)
+        if task.assignee and control_systems:
+            await self._publish_message_to_agent(
+                TaskReviewMessage(
+                    task_id=task.id,
+                    assignee_agent_id_str=task.assignee,
+                    source=self.name,
+                    content=task.result or task.name,
+                ),
+                control_systems[0].get_agent_id(),
+            )
         return ConfirmationMessage(
             content=parsed.content,
             is_error=parsed.is_error,
