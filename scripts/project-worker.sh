@@ -7,14 +7,26 @@ set -euo pipefail
 # - Moves Ready -> In progress immediately
 # - When complete: In progress -> In review
 # - When blocked: move to Backlog + leave explicit questions
+#
+# NOTE: This script is designed to run non-interactively (cron/CI). It avoids jq
+# and uses python3 for JSON parsing to keep dependencies minimal.
 
 OWNER="simonvanlaak"
 PROJECT_NUMBER="1"
+REPO_DIR="/root/.openclaw/workspace/CyberneticAgents"
 
 export PATH="/home/node/.local/bin:$PATH"
 
+require_cmd() {
+  command -v "$1" >/dev/null 2>&1 || { echo "ERROR: missing required command: $1" >&2; exit 1; }
+}
+
+require_cmd gh
+require_cmd python3
+
 # ---- Auth (non-interactive) ----
 if [[ -z "${GH_TOKEN:-}" ]]; then
+  require_cmd op
   # Do NOT print token.
   GH_TOKEN="$(op item get 'GitHub Personal Access Token' --vault OpenClaw --fields token --reveal 2>/dev/null || true)"
   export GH_TOKEN
@@ -28,7 +40,6 @@ fi
 gh auth status -h github.com >/dev/null
 
 # ---- Repo ----
-REPO_DIR="/root/.openclaw/workspace/CyberneticAgents"
 cd "$REPO_DIR"
 
 git config --global --add safe.directory "$REPO_DIR" >/dev/null 2>&1 || true
@@ -44,27 +55,44 @@ fi
 
 # ---- Project metadata ----
 project_json="$(gh project view "$PROJECT_NUMBER" --owner "$OWNER" --format json)"
-PROJECT_ID="$(jq -r '.id' <<<"$project_json")"
-
 fields_json="$(gh project field-list "$PROJECT_NUMBER" --owner "$OWNER" --format json)"
-STATUS_FIELD_ID="$(jq -r '.fields[] | select(.name=="Status") | .id' <<<"$fields_json")"
 
-if [[ -z "$PROJECT_ID" || "$PROJECT_ID" == "null" ]]; then
+PROJECT_ID="$(
+  printf '%s' "$project_json" | python3 -c 'import json,sys; obj=json.load(sys.stdin); print(obj.get("id") or "")'
+)"
+
+STATUS_FIELD_ID="$(
+  printf '%s' "$fields_json" | python3 -c 'import json,sys
+obj=json.load(sys.stdin)
+for f in obj.get("fields", []):
+  if f.get("name") == "Status":
+    print(f.get("id") or "")
+    break'
+)"
+
+if [[ -z "$PROJECT_ID" ]]; then
   echo "ERROR: Could not resolve project id" >&2
   exit 1
 fi
-if [[ -z "$STATUS_FIELD_ID" || "$STATUS_FIELD_ID" == "null" ]]; then
+if [[ -z "$STATUS_FIELD_ID" ]]; then
   echo "ERROR: Could not resolve Status field id" >&2
   exit 1
 fi
 
 status_option_id() {
   local name="$1"
-  jq -r --arg n "$name" '.fields[]
-    | select(.name=="Status")
-    | .options[]
-    | select(.name==$n)
-    | .id' <<<"$fields_json"
+  printf '%s' "$fields_json" | python3 -c 'import json,sys
+name=sys.argv[1]
+obj=json.load(sys.stdin)
+for f in obj.get("fields", []):
+  if f.get("name") != "Status":
+    continue
+  for opt in f.get("options", []) or []:
+    if opt.get("name") == name:
+      print(opt.get("id") or "")
+      raise SystemExit(0)
+print("")
+' "$name"
 }
 
 OPT_READY="$(status_option_id "Ready")"
@@ -73,7 +101,7 @@ OPT_IN_REVIEW="$(status_option_id "In review")"
 OPT_BACKLOG="$(status_option_id "Backlog")"
 
 for v in OPT_READY OPT_IN_PROGRESS OPT_IN_REVIEW OPT_BACKLOG; do
-  if [[ -z "${!v}" || "${!v}" == "null" ]]; then
+  if [[ -z "${!v}" ]]; then
     echo "ERROR: Could not resolve Status option id for ${v#OPT_}" >&2
     exit 1
   fi
@@ -93,19 +121,21 @@ move_status() {
 pick_next_item() {
   # Always use: gh project item-list 1 --owner simonvanlaak --limit 200 --format json
   # The CLI returns: { items: [...], totalCount: N }
-  # We treat array order as the "top-most" order.
   gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" --limit 200 --format json \
-  | jq -c '
-      .items
-      | (map(select(.status=="In progress")) | .[0])
-        // (map(select(.status=="Ready")) | .[0])
-        // empty
-    '
+  | python3 -c 'import json,sys
+obj=json.load(sys.stdin)
+items=obj.get("items") or []
+for s in ("In progress", "Ready"):
+  for it in items:
+    if it.get("status") == s:
+      print(json.dumps(it))
+      raise SystemExit(0)
+' || true
 }
 
 comment_issue() {
-  local issue_ref="$1"; shift
-  local body="$*"
+  local issue_ref="$1"
+  local body="$2"
   gh issue comment "$issue_ref" --body "$body" >/dev/null
 }
 
@@ -117,21 +147,21 @@ while true; do
     exit 0
   fi
 
-  item_json="$(pick_next_item || true)"
+  item_json="$(pick_next_item)"
   if [[ -z "$item_json" ]]; then
     exit 0
   fi
 
-  item_id="$(jq -r '.id' <<<"$item_json")"
-  item_status="$(jq -r '.status' <<<"$item_json")"
-  issue_url="$(jq -r '.content.url // empty' <<<"$item_json")"
-  title="$(jq -r '.content.title // .title // ""' <<<"$item_json")"
+  item_id="$(printf '%s' "$item_json" | python3 -c 'import json,sys; obj=json.load(sys.stdin); print(obj.get("id") or "")')"
+  item_status="$(printf '%s' "$item_json" | python3 -c 'import json,sys; obj=json.load(sys.stdin); print(obj.get("status") or "")')"
+  issue_url="$(printf '%s' "$item_json" | python3 -c 'import json,sys; obj=json.load(sys.stdin); c=obj.get("content") or {}; print(c.get("url") or "")')"
+  title="$(printf '%s' "$item_json" | python3 -c 'import json,sys; obj=json.load(sys.stdin); c=obj.get("content") or {}; print(c.get("title") or obj.get("title") or "")')"
 
-  if [[ -z "$item_id" || "$item_id" == "null" ]]; then
+  if [[ -z "$item_id" ]]; then
     echo "ERROR: Could not parse project item id" >&2
     exit 1
   fi
-  if [[ -z "$issue_url" || "$issue_url" == "null" ]]; then
+  if [[ -z "$issue_url" ]]; then
     echo "ERROR: Project item $item_id has no content.url (draft item?) — unsupported." >&2
     exit 1
   fi
@@ -183,5 +213,4 @@ while true; do
   fi
 
   items_done=$((items_done + 1))
-
 done
