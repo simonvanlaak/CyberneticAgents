@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 import threading
 
@@ -65,6 +66,38 @@ def _stub_messages(monkeypatch: pytest.MonkeyPatch) -> None:
         return "msg"
 
     monkeypatch.setattr(onboarding_discovery, "get_message", _get_message)
+
+
+def test_prepare_obsidian_vault_path_env_sets_expected_path(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.delenv("OBSIDIAN_VAULT_PATH", raising=False)
+    expected = (tmp_path / "obsidian" / "repo").resolve()
+    monkeypatch.setattr(
+        onboarding_discovery, "resolve_data_path", lambda *_parts: expected
+    )
+
+    resolved = onboarding_discovery.prepare_obsidian_vault_path_env(
+        pkm_source="github",
+        repo_url="https://github.com/example/repo",
+    )
+
+    assert resolved == str(expected)
+    assert os.environ.get("OBSIDIAN_VAULT_PATH") == str(expected)
+
+
+def test_prepare_obsidian_vault_path_env_skips_non_github(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OBSIDIAN_VAULT_PATH", raising=False)
+
+    resolved = onboarding_discovery.prepare_obsidian_vault_path_env(
+        pkm_source="notion",
+        repo_url="https://github.com/example/repo",
+    )
+
+    assert resolved is None
+    assert os.environ.get("OBSIDIAN_VAULT_PATH") is None
 
 
 def test_discovery_prompts_and_continues_without_token(
@@ -311,6 +344,43 @@ def test_start_discovery_background_starts_thread(
     onboarding_discovery.start_discovery_background(_default_args(), team_id=1)
 
     assert started["value"] is True
+
+
+def test_start_discovery_background_calls_on_complete_with_summary(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    summary_path = tmp_path / "summary.md"
+    summary_path.write_text("summary", encoding="utf-8")
+    calls: list[Path] = []
+
+    class _FakeThread:
+        def __init__(
+            self,
+            *,
+            target: object,
+            kwargs: dict[str, object] | None = None,
+            **_kw: object,
+        ) -> None:
+            self._target = target
+            self._kwargs = kwargs or {}
+
+        def start(self) -> None:
+            assert callable(self._target)
+            self._target(**self._kwargs)
+
+    monkeypatch.delenv("CYBERAGENT_DISABLE_BACKGROUND_DISCOVERY", raising=False)
+    monkeypatch.setattr(threading, "Thread", _FakeThread)
+    monkeypatch.setattr(
+        onboarding_discovery, "_run_discovery_pipeline", lambda **_kwargs: summary_path
+    )
+
+    onboarding_discovery.start_discovery_background(
+        _default_args(),
+        team_id=1,
+        on_complete=lambda resolved_path: calls.append(resolved_path),
+    )
+
+    assert calls == [summary_path]
 
 
 def test_prompt_continue_without_pkm_handles_eof(

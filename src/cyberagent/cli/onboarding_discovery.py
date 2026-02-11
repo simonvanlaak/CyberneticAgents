@@ -55,7 +55,11 @@ def run_discovery_onboarding(args: object, team_id: int | None = None) -> Path |
     )
 
 
-def start_discovery_background(args: object, team_id: int) -> None:
+def start_discovery_background(
+    args: object,
+    team_id: int,
+    on_complete: Callable[[Path], None] | None = None,
+) -> None:
     if os.environ.get("CYBERAGENT_DISABLE_BACKGROUND_DISCOVERY"):
         logger.info("Background discovery disabled via env override.")
         return
@@ -63,14 +67,22 @@ def start_discovery_background(args: object, team_id: int) -> None:
     # Background discovery should not block the onboarding interview, but we still
     # want it to enqueue the onboarding discovery prompt once the sync completes
     # so the agent can incorporate PKM/profile context as soon as it's available.
+    def _run_and_finalize() -> None:
+        summary_path = _run_discovery_pipeline(
+            args=args,
+            team_id=team_id,
+            allow_prompt=False,
+            enqueue_prompt=True,
+        )
+        if summary_path is None or on_complete is None:
+            return
+        try:
+            on_complete(summary_path)
+        except Exception:  # pragma: no cover - defensive logging in daemon thread.
+            logger.exception("Failed to apply background onboarding discovery output.")
+
     thread = threading.Thread(
-        target=_run_discovery_pipeline,
-        kwargs={
-            "args": args,
-            "team_id": team_id,
-            "allow_prompt": False,
-            "enqueue_prompt": True,
-        },
+        target=_run_and_finalize,
         daemon=True,
     )
     thread.start()
@@ -94,6 +106,7 @@ def _run_discovery_pipeline(
     ).strip()
     if not pkm_source:
         pkm_source = "github" if repo_url else "skip"
+    prepare_obsidian_vault_path_env(pkm_source=pkm_source, repo_url=repo_url)
     agent_id = _resolve_agent_id(team_id)
     if agent_id is None:
         logger.warning("Unable to resolve agent_id for onboarding discovery.")
@@ -358,6 +371,20 @@ def _repo_name_from_url(repo_url: str) -> str:
     return name[:-4] if name.endswith(".git") else name
 
 
+def prepare_obsidian_vault_path_env(*, pkm_source: str, repo_url: str) -> str | None:
+    source = pkm_source.strip().lower()
+    normalized_repo = repo_url.strip()
+    if source != "github" or not normalized_repo:
+        return None
+    repo_name = _repo_name_from_url(normalized_repo)
+    if not repo_name:
+        return None
+    vault_path = resolve_data_path("obsidian", repo_name).resolve()
+    resolved = str(vault_path)
+    os.environ["OBSIDIAN_VAULT_PATH"] = resolved
+    return resolved
+
+
 def _sync_obsidian_repo(
     *,
     cli_tool: CliTool,
@@ -393,6 +420,7 @@ def _sync_obsidian_repo(
             error = f"Unknown error (result={result})" if result else "Unknown error"
         print(get_message("onboarding_discovery", "failed_sync_repo", error=error))
         return dest, False
+    os.environ["OBSIDIAN_VAULT_PATH"] = str(dest.resolve())
     return dest, True
 
 
