@@ -347,6 +347,34 @@ class SystemBase(SystemBaseMixin, RoutedAgent):
                         task=tool_name_retry_messages,
                         cancellation_token=ctx.cancellation_token,
                     )
+                elif (
+                    output_content_type is not None
+                    and self._is_non_strict_tool_parse_error(exc)
+                ):
+                    logger.warning(
+                        "Structured parse rejected non-strict tools for %s. Retrying with unstructured generation while keeping tool access.",
+                        self.agent_id.__str__(),
+                    )
+                    strict_fallback_messages: list[BaseTextChatMessage] = [
+                        *chat_messages,
+                        TextMessage(
+                            source=self.name,
+                            content=self._build_output_fallback_instruction(
+                                output_content_type
+                            ),
+                        ),
+                    ]
+                    if not isinstance(getattr(self._agent, "run", None), AsyncMock):
+                        self._agent = self._build_assistant_agent(
+                            system_message=system_message,
+                            output_content_type=None,
+                            tool_choice_required=False,
+                            enable_tools=tools_enabled,
+                        )
+                    retry_result = await self._agent.run(
+                        task=strict_fallback_messages,
+                        cancellation_token=ctx.cancellation_token,
+                    )
                 if retry_result is not None:
                     task_result = retry_result
                 elif self._is_required_tool_choice_missing_call_error(

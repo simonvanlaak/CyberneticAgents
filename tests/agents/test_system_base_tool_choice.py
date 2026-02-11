@@ -300,6 +300,59 @@ async def test_run_falls_back_to_unstructured_when_json_generation_fails(
 
 
 @pytest.mark.asyncio
+async def test_run_falls_back_when_structured_parse_rejects_non_strict_tools(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    system = DummySystem()
+
+    async def fake_set_system_prompt(
+        _prompts: list[str], _memory_context: list[str] | None = None
+    ) -> None:
+        return None
+
+    monkeypatch.setattr(system, "_set_system_prompt", fake_set_system_prompt)
+    monkeypatch.setattr(system, "_build_memory_context", lambda *_args: [])
+    monkeypatch.setattr(
+        "src.agents.system_base.mark_team_active", lambda *_args, **_kwargs: None
+    )
+    monkeypatch.setattr(
+        "src.agents.system_base.get_model_client",
+        lambda *_args, **_kwargs: DummyModelClient(),
+    )
+    system._agent.run = AsyncMock(
+        side_effect=[
+            ValueError(
+                "`file_reader` is not strict. Only `strict` function tools can be auto-parsed"
+            ),
+            TaskResult(
+                messages=[TextMessage(content='{"value":"ok"}', source="System4/root")]
+            ),
+        ]
+    )
+
+    message = TextMessage(content="hello", source="User")
+    context = MessageContext(
+        sender=AgentId.from_str("User/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="structured_non_strict_tool_fallback_test",
+    )
+
+    await system.run(
+        [message],
+        context,
+        output_content_type=DummyStructuredResponse,
+        enable_tools=True,
+    )
+    assert system._agent.run.await_count == 2
+    second_call = system._agent.run.await_args_list[1]
+    retry_messages = second_call.kwargs["task"]
+    assert len(retry_messages) == 2
+    assert "Return strict JSON only with this schema" in retry_messages[-1].content
+
+
+@pytest.mark.asyncio
 async def test_run_routes_unhandled_errors_to_team_system5(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

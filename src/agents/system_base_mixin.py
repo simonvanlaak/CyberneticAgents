@@ -149,6 +149,13 @@ class SystemBaseMixin:
         text = str(exc).lower()
         return "json_validate_failed" in text or "failed to generate json" in text
 
+    def _is_non_strict_tool_parse_error(self, exc: Exception) -> bool:
+        text = str(exc).lower()
+        return (
+            "only `strict` function tools can be auto-parsed" in text
+            or "default arguments are not allowed in strict mode" in text
+        )
+
     def _is_tool_arguments_json_error(self, exc: Exception) -> bool:
         text = str(exc).lower()
         return (
