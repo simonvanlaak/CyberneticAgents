@@ -35,6 +35,7 @@ from src.cyberagent.cli import dev as dev_cli
 from src.cyberagent.cli import dashboard_launcher
 from src.cyberagent.cli.env_loader import load_op_service_account_token
 from src.cyberagent.cli import log_filters
+from src.cyberagent.cli.log_session import get_session_log_files
 from src.cyberagent.cli import onboarding as onboarding_cli
 from src.cyberagent.cli.cli_log_state import check_recent_runtime_errors
 from src.cyberagent.cli.cyberagent_helpers import handle_help, handle_login
@@ -355,7 +356,7 @@ def _handle_logs(args: argparse.Namespace) -> int:
             get_message("cyberagent", "next_start_runtime", start_command=START_COMMAND)
         )
         return 0
-    log_files = sorted(LOGS_DIR.glob("*.log"), key=os.path.getmtime)
+    log_files = get_session_log_files(LOGS_DIR)
     if not log_files:
         print(get_message("cyberagent", "no_log_files"))
         print(
@@ -368,14 +369,20 @@ def _handle_logs(args: argparse.Namespace) -> int:
         )
         return 0
     target = log_files[-1]
-    lines = target.read_text(encoding="utf-8", errors="ignore").splitlines()
+    lines: list[str] = []
+    for log_file in log_files:
+        lines.extend(log_file.read_text(encoding="utf-8", errors="ignore").splitlines())
     levels = log_filters.resolve_log_levels(
         args.level, default_to_errors=args.level is None
     )
     if levels is None and args.level:
         print(get_message("cyberagent", "invalid_log_level"))
         return 2
-    filtered = log_filters.filter_logs(lines, args.filter, args.limit, levels)
+    effective_limit = args.limit
+    if args.level is None and args.filter is None and args.limit == 200:
+        # Default logs view should show all errors in the active runtime session.
+        effective_limit = max(200, len(lines))
+    filtered = log_filters.filter_logs(lines, args.filter, effective_limit, levels)
     for line in filtered:
         print(line)
     if args.follow:
