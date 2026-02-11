@@ -8,6 +8,7 @@ from src.cyberagent.tools.cli_executor.skill_loader import (
     load_skill_definitions,
     load_skill_instructions,
 )
+from src.cyberagent.tools.cli_executor.skill_runtime import DEFAULT_SKILLS_ROOT
 
 
 def _write_skill(root: Path, skill_name: str, body: str = "Use this skill.") -> None:
@@ -162,3 +163,11 @@ def test_load_skill_definitions_rejects_invalid_schema_type(
 
     with pytest.raises(ValueError, match="schema"):
         load_skill_definitions(tmp_path)
+
+
+def test_default_obsidian_skills_do_not_require_vault_secret() -> None:
+    skills = load_skill_definitions(DEFAULT_SKILLS_ROOT)
+    by_name = {skill.name: skill for skill in skills}
+
+    assert by_name["obsidian-get"].required_env == ()
+    assert by_name["obsidian-search"].required_env == ()

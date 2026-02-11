@@ -5,8 +5,6 @@ metadata:
   cyberagent:
     tool: obsidian-search
     timeout_class: standard
-    required_env:
-      - OBSIDIAN_VAULT_PATH
 input_schema:
   type: object
   properties:
