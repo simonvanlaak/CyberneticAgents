@@ -319,6 +319,7 @@ do not switch branches / check out a different branch unless explicitly requeste
 running multiple agents is OK as long as each agent has its own session.
 when you see unrecognized files, keep going; focus on your changes and commit only those.
 only stage your changes, when you are about to commit them.
+if unrelated or unexpected working-tree changes appear, do not stop; continue your task, keep those files unstaged, and commit only your own changes.
 when you see unrecognized or unrelated changes, proceed without asking; do not revert them and do not stage them unless explicitly requested.
 if unexpected changes are already staged, unstage them, commit only your changes, then re-stage the unexpected changes.
 focus reports on your edits; avoid guard-rail disclaimers unless truly blocked; when multiple agents touch the same file, continue if safe; end with a brief “other files present” note only if relevant.

@@ -189,4 +189,6 @@ Debuged a lot of little issues, to ensure tasks get executed as expected.
 Switched provider & model to openai and gpt-5 nano, to prevent issues with structured output.
 Continue with open bugs.
 
-### 2026-02-09
+### 2026-02-11
+Onboarding test command:
+cyberagent onboarding --name "Simon" --pkm github --repo "https://github.com/simonvanlaak/maya-obsidian-vault" --profile-link "simonvanlaak.de"
