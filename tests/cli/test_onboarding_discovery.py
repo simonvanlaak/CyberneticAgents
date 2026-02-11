@@ -648,8 +648,39 @@ def test_sync_repo_reports_stderr_when_error_missing(
         token_username="x-access-token",
     )
 
-    captured = capsys.readouterr().out
-    assert "boom" in captured
+    assert "boom" in capsys.readouterr().out
+
+
+def test_sync_repo_retries_after_interpreter_shutdown_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = {"count": 0}
+
+    def _fake_run_cli_tool(
+        *_args: object, agent_id: str | None, **_kwargs: object
+    ) -> dict[str, object]:
+        assert agent_id == "System4/root"
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return {
+                "success": False,
+                "error": "cannot schedule new futures after interpreter shutdown",
+            }
+        return {"success": True}
+
+    monkeypatch.setattr(onboarding_discovery, "_run_cli_tool", _fake_run_cli_tool)
+
+    _, success = onboarding_discovery._sync_obsidian_repo(
+        cli_tool=cast(CliTool, object()),
+        agent_id="System4/root",
+        repo_url="https://github.com/example/repo",
+        branch="main",
+        token_env="TOKEN",
+        token_username="x-access-token",
+    )
+
+    assert success is True
+    assert calls["count"] == 2
 
 
 def test_fetch_profile_links_calls_callback(

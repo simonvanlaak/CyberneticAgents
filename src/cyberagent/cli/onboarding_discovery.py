@@ -406,6 +406,10 @@ def _repo_name_from_url(repo_url: str) -> str:
     return name[:-4] if name.endswith(".git") else name
 
 
+def _is_interpreter_shutdown_error(error: str) -> bool:
+    return "cannot schedule new futures after interpreter shutdown" in error.lower()
+
+
 def prepare_obsidian_vault_path_env(*, pkm_source: str, repo_url: str) -> str | None:
     source = pkm_source.strip().lower()
     normalized_repo = repo_url.strip()
@@ -433,30 +437,47 @@ def _sync_obsidian_repo(
     dest = resolve_data_path("obsidian", repo_name)
     dest_arg = _container_repo_relative_path(dest)
     dest.parent.mkdir(parents=True, exist_ok=True)
-    stop_event = _start_sync_notifier()
-    result = _run_cli_tool(
-        cli_tool,
-        "git-readonly-sync",
-        agent_id=agent_id,
-        repo=repo_url,
-        dest=dest_arg,
-        branch=branch,
-        depth=1,
-        timeout_seconds=GIT_SYNC_TIMEOUT_SECONDS,
-        **{
-            "token-env": token_env,
-            "token-username": token_username,
-        },
-    )
-    stop_event.set()
-    if not result.get("success"):
-        error = result.get("error") or result.get("stderr") or result.get("raw_output")
-        if not error:
-            error = f"Unknown error (result={result})" if result else "Unknown error"
-        print(get_message("onboarding_discovery", "failed_sync_repo", error=error))
-        return dest, False
-    os.environ["OBSIDIAN_VAULT_PATH"] = str(dest.resolve())
-    return dest, True
+    last_error: str | None = None
+    for attempt in range(2):
+        stop_event = _start_sync_notifier()
+        result = _run_cli_tool(
+            cli_tool,
+            "git-readonly-sync",
+            agent_id=agent_id,
+            repo=repo_url,
+            dest=dest_arg,
+            branch=branch,
+            depth=1,
+            timeout_seconds=GIT_SYNC_TIMEOUT_SECONDS,
+            **{
+                "token-env": token_env,
+                "token-username": token_username,
+            },
+        )
+        stop_event.set()
+        if result.get("success"):
+            os.environ["OBSIDIAN_VAULT_PATH"] = str(dest.resolve())
+            return dest, True
+
+        error_obj = (
+            result.get("error") or result.get("stderr") or result.get("raw_output")
+        )
+        if error_obj:
+            last_error = str(error_obj)
+        else:
+            last_error = (
+                f"Unknown error (result={result})" if result else "Unknown error"
+            )
+        if attempt == 0 and _is_interpreter_shutdown_error(last_error):
+            logger.warning(
+                "PKM repo sync hit interpreter-shutdown scheduling race. Retrying once."
+            )
+            continue
+        break
+
+    error_text = last_error or "Unknown error"
+    print(get_message("onboarding_discovery", "failed_sync_repo", error=error_text))
+    return dest, False
 
 
 def _container_repo_relative_path(path: Path) -> str:
