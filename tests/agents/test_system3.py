@@ -446,6 +446,71 @@ async def test_system3_task_review_falls_back_on_json_validate_failure():
 
 
 @pytest.mark.asyncio
+async def test_system3_task_review_includes_task_result_context_in_prompts() -> None:
+    system3 = System3("System3/controller1")
+    system3._publish_message_to_agent = AsyncMock()
+
+    message = TaskReviewMessage(
+        task_id=42,
+        assignee_agent_id_str="System1/root",
+        source="System1/root",
+        content="message-level task result",
+    )
+    context = MessageContext(
+        sender=AgentId.from_str("System1/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="task_review_context_prompt",
+    )
+
+    class DummyTask:
+        id = 42
+        assignee = "System1/root"
+        status = Status.COMPLETED
+        name = "Collect identity links"
+        content = "Collect disambiguation links."
+        result = "GitHub and personal website identified."
+
+    class DummySystem5:
+        def get_agent_id(self):
+            return AgentId.from_str("System5/root")
+
+    mocked_run = AsyncMock(return_value=object())
+
+    with (
+        patch("src.cyberagent.services.tasks._get_task", return_value=DummyTask()),
+        patch(
+            "src.cyberagent.services.policies._get_system_policy_prompts",
+            return_value=['{"id":1,"content":"p1","system_id":1,"team_id":1}'],
+        ),
+        patch.object(system3, "_get_systems_by_type", return_value=[DummySystem5()]),
+        patch.object(system3, "run", mocked_run),
+        patch.object(
+            system3,
+            "_get_structured_message",
+            return_value=CasesResponse(
+                cases=[
+                    PolicyJudgeResponse(
+                        policy_id=1,
+                        judgement=PolicyJudgement.SATISFIED,
+                        reasoning="ok",
+                    )
+                ]
+            ),
+        ),
+        patch("src.cyberagent.services.tasks.finalize_task_review"),
+    ):
+        await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
+
+    first_call = mocked_run.await_args_list[0]
+    prompts = first_call.args[2]
+    assert any("## Task Review Context" in line for line in prompts)
+    assert any("task_result" in line for line in prompts)
+    assert any("GitHub and personal website identified." in line for line in prompts)
+
+
+@pytest.mark.asyncio
 async def test_system3_task_review_persists_case_judgements() -> None:
     system3 = System3("System3/controller1")
     system3._publish_message_to_agent = AsyncMock()
@@ -791,9 +856,11 @@ async def test_system3_blocked_task_with_insufficient_info_requests_system4_rese
         patch.object(
             system3,
             "_get_systems_by_type",
-            side_effect=lambda system_type: [DummySystem4()]
-            if system_type == SystemType.INTELLIGENCE
-            else [DummySystem5()],
+            side_effect=lambda system_type: (
+                [DummySystem4()]
+                if system_type == SystemType.INTELLIGENCE
+                else [DummySystem5()]
+            ),
         ),
         patch(
             "src.cyberagent.services.policies._get_system_policy_prompts",
@@ -805,7 +872,9 @@ async def test_system3_blocked_task_with_insufficient_info_requests_system4_rese
 
     # First message should be a research request to System4.
     assert system3._publish_message_to_agent.await_count >= 1
-    published = [call.args[0] for call in system3._publish_message_to_agent.await_args_list]
+    published = [
+        call.args[0] for call in system3._publish_message_to_agent.await_args_list
+    ]
     from src.agents.messages import ResearchRequestMessage
 
     assert any(isinstance(msg, ResearchRequestMessage) for msg in published)

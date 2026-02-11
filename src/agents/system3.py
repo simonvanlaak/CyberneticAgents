@@ -411,11 +411,24 @@ class System3(SystemBase):
         policy_chunks = [
             policy_chunk[i : i + 5] for i in range(0, len(policy_chunk), 5)
         ]
+        task_review_context = {
+            "task_id": task.id,
+            "task_name": getattr(task, "name", ""),
+            "task_description": getattr(task, "content", ""),
+            "task_result": getattr(task, "result", ""),
+            "review_message_content": message.content,
+            "task_status": str(getattr(task, "status", "")),
+            "task_assignee": task.assignee,
+        }
         all_cases: list[dict[str, object]] = []
         try:
             for policy_chunk in policy_chunks:
                 message_specific_prompts = [
-                    f"Review task result {task.id} for if it violates any policy."
+                    f"Review task result {task.id} for if it violates any policy.",
+                    "## Task Review Context",
+                    json.dumps(task_review_context, indent=4),
+                    "Use task_result as the primary evidence.",
+                    "If task_result is missing, use review_message_content.",
                     "## Policies",
                     *policy_chunk,
                     "## Response",
