@@ -155,10 +155,31 @@ async def _handle_stop(_: argparse.Namespace) -> int:
 
 
 def _stop_background_runtime_process() -> None:
-    pid = _load_runtime_pid()
-    if pid is None:
-        return
-    if not _runtime_pid_is_running():
+    for pid in _discover_runtime_pids():
+        _stop_runtime_pid(pid)
+
+
+def _discover_runtime_pids() -> list[int]:
+    runtime_pids: set[int] = set()
+    pid_from_file = _load_runtime_pid()
+    if pid_from_file is not None:
+        runtime_pids.add(pid_from_file)
+
+    proc_root = Path("/proc")
+    if proc_root.exists():
+        for entry in proc_root.iterdir():
+            if not entry.name.isdigit():
+                continue
+            pid = int(entry.name)
+            if pid == os.getpid():
+                continue
+            if _pid_looks_like_runtime(pid):
+                runtime_pids.add(pid)
+    return sorted(runtime_pids)
+
+
+def _stop_runtime_pid(pid: int) -> None:
+    if not _is_pid_running(pid):
         return
     if not _pid_looks_like_runtime(pid):
         return

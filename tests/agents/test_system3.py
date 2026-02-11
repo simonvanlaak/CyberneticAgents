@@ -19,6 +19,7 @@ from src.agents.messages import (
     CapabilityGapMessage,
     InitiativeAssignMessage,
     PolicySuggestionMessage,
+    TaskAssignMessage,
     TaskReviewMessage,
 )
 from src.enums import PolicyJudgement, Status
@@ -852,3 +853,80 @@ async def test_system3_blocked_task_without_keyword_still_uses_block_resolution(
     assert await_args is not None
     joined_prompts = "\n".join(await_args.args[2])
     assert "Need clarification on source location." in joined_prompts
+
+
+@pytest.mark.asyncio
+async def test_system3_modify_task_tool_restart_execution_redispatches_task() -> None:
+    system3 = System3("System3/controller1")
+    system3._publish_message_to_agent = AsyncMock()
+
+    class DummyTask:
+        def __init__(self) -> None:
+            self.id = 42
+            self.name = "Retry task"
+            self.assignee = "System1/root"
+            self.status = Status.BLOCKED
+            self.content = "Original content"
+            self.reasoning = "Original reasoning"
+            self.updated = False
+
+        def update(self) -> None:
+            self.updated = True
+
+    task = DummyTask()
+
+    with (
+        patch("src.cyberagent.services.tasks.get_task_by_id", return_value=task),
+        patch("src.cyberagent.services.tasks.start_task", return_value=task) as restart,
+    ):
+        result = await system3.modify_task_tool(
+            task_id=42,
+            reasoning="Retry with revised prompt",
+            restart_execution=True,
+        )
+
+    restart.assert_called_once_with(42)
+    assert task.reasoning == "Retry with revised prompt"
+    assert task.updated is True
+    assert result["restart_execution"] is True
+    assert result["status"] == str(task.status)
+    system3._publish_message_to_agent.assert_awaited_once()
+    publish_call = system3._publish_message_to_agent.await_args
+    assert publish_call is not None
+    published_message = publish_call.args[0]
+    recipient = publish_call.args[1]
+    assert isinstance(published_message, TaskAssignMessage)
+    assert published_message.task_id == 42
+    assert published_message.assignee_agent_id_str == "System1/root"
+    assert str(recipient) == "System1/root"
+
+
+@pytest.mark.asyncio
+async def test_system3_modify_task_tool_restart_execution_requires_assignee() -> None:
+    system3 = System3("System3/controller1")
+    system3._publish_message_to_agent = AsyncMock()
+
+    class DummyTask:
+        def __init__(self) -> None:
+            self.id = 42
+            self.name = "Retry task"
+            self.assignee = None
+            self.status = Status.BLOCKED
+            self.content = "Original content"
+            self.reasoning = "Original reasoning"
+
+        def update(self) -> None:
+            return None
+
+    task = DummyTask()
+
+    with (
+        patch("src.cyberagent.services.tasks.get_task_by_id", return_value=task),
+        patch("src.cyberagent.services.tasks.start_task", return_value=task),
+    ):
+        with pytest.raises(
+            ValueError, match="Cannot restart task execution without a valid assignee"
+        ):
+            await system3.modify_task_tool(task_id=42, restart_execution=True)
+
+    system3._publish_message_to_agent.assert_not_awaited()

@@ -305,6 +305,98 @@ class TestSystem3RefactoredImplementation:
             system3.assign_task.assert_awaited_once_with(1, 101)
 
     @pytest.mark.asyncio
+    async def test_handle_initiative_assign_message_falls_back_when_assignment_task_missing(
+        self,
+    ) -> None:
+        """Fallback to first available task when model returns an invalid task id."""
+        system3 = System3("System3/controller1")
+
+        initiative_message = InitiativeAssignMessage(
+            initiative_id=1, source="System4/strategy1", content="Start initiative 1."
+        )
+
+        from autogen_core import CancellationToken
+
+        context = MessageContext(
+            sender=AgentId.from_str("System4/strategy1"),
+            topic_id=None,
+            is_rpc=False,
+            cancellation_token=CancellationToken(),
+            message_id="test_msg_invalid_assignment_fallback",
+        )
+
+        class DummyTask:
+            def __init__(self, task_id: int) -> None:
+                self.id = task_id
+                self.name = f"Task {task_id}"
+                self.assignee = None
+
+            def to_prompt(self):
+                return [f"task-{self.id}"]
+
+        class DummyInitiative:
+            def __init__(self) -> None:
+                self.id = 1
+                self.status = ""
+                self.updated = False
+
+            def set_status(self, status):  # noqa: ANN001
+                self.status = str(status)
+
+            def update(self):
+                self.updated = True
+
+            def get_tasks(self):
+                return [DummyTask(101), DummyTask(102)]
+
+        class DummySystem:
+            def __init__(self, system_id: int) -> None:
+                self.id = system_id
+                self.name = "System1/root"
+                self.type = "operation"
+                self.agent_id_str = "System1/root"
+
+        with (
+            patch("src.agents.system3.init_db", lambda: None),
+            patch(
+                "src.cyberagent.services.initiatives._get_initiative",
+                return_value=DummyInitiative(),
+            ),
+            patch(
+                "src.cyberagent.services.tasks.has_tasks_for_initiative",
+                return_value=True,
+            ),
+            patch.object(
+                system3, "_get_systems_by_type", return_value=[DummySystem(1)]
+            ),
+        ):
+            from autogen_agentchat.base import Response
+            from autogen_agentchat.messages import TextMessage
+
+            system3.run = AsyncMock(
+                return_value=Response(
+                    chat_message=TextMessage(
+                        content="Assignments prepared",
+                        source="System3/controller1",
+                    ),
+                    inner_messages=[],
+                )
+            )
+            system3._get_structured_message = MagicMock(
+                return_value=TasksAssignResponse(
+                    assignments=[TaskAssignmentResponse(system_id=1, task_id=999)]
+                )
+            )
+            system3.assign_task = AsyncMock()
+
+            await system3.handle_initiative_assign_message(
+                message=initiative_message,
+                ctx=context,
+            )  # type: ignore[call-arg]
+
+            system3.assign_task.assert_awaited_once_with(1, 101)
+
+    @pytest.mark.asyncio
     async def test_handle_initiative_assign_message_redelivers_pending_assigned_task(
         self,
     ) -> None:
@@ -427,6 +519,72 @@ class TestSystem3RefactoredImplementation:
 
             system3.run.assert_not_called()
             system3._publish_message_to_agent.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_handle_initiative_assign_message_redelivers_all_in_progress_assigned_tasks(
+        self,
+    ) -> None:
+        system3 = System3("System3/controller1")
+        initiative_message = InitiativeAssignMessage(
+            initiative_id=1, source="System4/strategy1", content="Resume initiative 1."
+        )
+
+        from autogen_core import CancellationToken
+
+        context = MessageContext(
+            sender=AgentId.from_str("System4/strategy1"),
+            topic_id=None,
+            is_rpc=False,
+            cancellation_token=CancellationToken(),
+            message_id="test_msg_redeliver_all_in_progress",
+        )
+
+        class DummyTask:
+            def __init__(self, task_id: int, name: str) -> None:
+                self.id = task_id
+                self.name = name
+                self.assignee = "System1/root"
+                self.status = "in_progress"
+
+        class DummyInitiative:
+            def __init__(self) -> None:
+                self.id = 1
+                self.status = ""
+                self.updated = False
+
+            def set_status(self, status):  # noqa: ANN001
+                self.status = str(status)
+
+            def update(self):
+                self.updated = True
+
+            def get_tasks(self):
+                return [
+                    DummyTask(8, "Collect user identity"),
+                    DummyTask(9, "Collect docs"),
+                ]
+
+        with (
+            patch("src.agents.system3.init_db", lambda: None),
+            patch(
+                "src.cyberagent.services.initiatives._get_initiative",
+                return_value=DummyInitiative(),
+            ),
+            patch(
+                "src.cyberagent.services.tasks.has_tasks_for_initiative",
+                return_value=True,
+            ),
+        ):
+            system3.run = AsyncMock()
+            system3._publish_message_to_agent = AsyncMock()
+
+            await system3.handle_initiative_assign_message(
+                message=initiative_message,
+                ctx=context,
+            )  # type: ignore[call-arg]
+
+            system3.run.assert_not_called()
+            assert system3._publish_message_to_agent.await_count == 2
 
 
 class TestSystem3MessageCompatibility:

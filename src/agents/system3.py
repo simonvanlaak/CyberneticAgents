@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime, timezone
 from typing import Any, List, cast
 
@@ -25,6 +26,8 @@ from src.cyberagent.services import tasks as task_service
 from src.cyberagent.db.models.system import get_system_from_agent_id
 from src.enums import PolicyJudgement, SystemType
 from src.cyberagent.db.init_db import init_db
+
+logger = logging.getLogger(__name__)
 
 
 class PolicyJudgeResponse(BaseModel):
@@ -234,17 +237,37 @@ class System3(SystemBase):
                 status_value = getattr(raw_status, "value", raw_status)
                 return str(status_value).lower()
 
-            pending_assigned_tasks = [
+            in_progress_assigned_tasks = [
                 task
                 for task in all_tasks
                 if getattr(task, "assignee", None)
                 and _task_status_value(task)
                 in {
-                    "pending",
-                    "status.pending",
                     "in_progress",
                     "status.in_progress",
                 }
+            ]
+            if in_progress_assigned_tasks:
+                for in_progress_task in in_progress_assigned_tasks:
+                    assignee = getattr(in_progress_task, "assignee", None)
+                    if not isinstance(assignee, str):
+                        continue
+                    await self._publish_message_to_agent(
+                        TaskAssignMessage(
+                            task_id=in_progress_task.id,
+                            assignee_agent_id_str=assignee,
+                            source=self.name,
+                            content=in_progress_task.name,
+                        ),
+                        AgentId.from_str(assignee),
+                    )
+                return
+
+            pending_assigned_tasks = [
+                task
+                for task in all_tasks
+                if getattr(task, "assignee", None)
+                and _task_status_value(task) in {"pending", "status.pending"}
             ]
             if pending_assigned_tasks:
                 pending_task = pending_assigned_tasks[0]
@@ -347,6 +370,11 @@ class System3(SystemBase):
 
         assign_tasks_assignment = message_specific_prompts
         task_prompt_lines = [line for task in tasks for line in task.to_prompt()]
+        example_task_id = 1
+        if tasks:
+            first_task_id = getattr(tasks[0], "id", None)
+            if isinstance(first_task_id, int):
+                example_task_id = first_task_id
         assign_tasks_assignment.extend(
             [
                 "## TASKS",
@@ -354,7 +382,7 @@ class System3(SystemBase):
                 "## ASSIGNMENT",
                 "After having created the tasks, assign the one that needs to be completed first to a System 1 agent.",
                 "Return strict JSON only using this schema:",
-                '{"assignments":[{"system_id":1,"task_id":7}]}',
+                f'{{"assignments":[{{"system_id":1,"task_id":{example_task_id}}}]}}',
                 "Rules:",
                 "1. assignments must be a list of objects with integer system_id and integer task_id.",
                 "2. Do not return arrays/tuples like [1,7].",
@@ -377,8 +405,46 @@ class System3(SystemBase):
         self.tools = original_tools
 
         # Process assignments from structured output
+        available_task_ids = {
+            int(getattr(task, "id"))
+            for task in tasks
+            if isinstance(getattr(task, "id", None), int)
+        }
+        validate_assignment_task_ids = len(available_task_ids) > 0
+        assignment_applied = False
         for assignment in tasks_assign_response.assignments:
+            if (
+                validate_assignment_task_ids
+                and assignment.task_id not in available_task_ids
+            ):
+                logger.warning(
+                    "Ignoring invalid task assignment candidate task_id=%s for initiative=%s. Available task ids: %s",
+                    assignment.task_id,
+                    message.initiative_id,
+                    sorted(available_task_ids),
+                )
+                continue
             await self.assign_task(assignment.system_id, assignment.task_id)
+            assignment_applied = True
+
+        if assignment_applied:
+            return
+
+        if not validate_assignment_task_ids:
+            return
+        if not available_task_ids:
+            return
+        if not systems_list:
+            raise ValueError("No available System1 to assign fallback task.")
+        fallback_system_id = int(getattr(systems_list[0], "id"))
+        fallback_task_id = min(available_task_ids)
+        logger.warning(
+            "No valid structured assignment returned for initiative=%s. Falling back to system_id=%s task_id=%s.",
+            message.initiative_id,
+            fallback_system_id,
+            fallback_task_id,
+        )
+        await self.assign_task(fallback_system_id, fallback_task_id)
 
     @message_handler
     async def handle_capability_gap_message(
@@ -632,23 +698,39 @@ class System3(SystemBase):
         )
         return True
 
-    def modify_task_tool(
+    async def modify_task_tool(
         self,
         task_id: int,
         content: str | None = None,
         reasoning: str | None = None,
         restart_execution: bool = False,
     ) -> dict[str, object]:
+        task = task_service.get_task_by_id(task_id)
+
         if restart_execution:
             task = task_service.start_task(task_id)
-        else:
-            task = task_service.get_task_by_id(task_id)
 
         if content is not None:
             task.content = content
         if reasoning is not None:
             task.reasoning = reasoning
         task.update()
+
+        if restart_execution:
+            assignee = getattr(task, "assignee", None)
+            if not isinstance(assignee, str) or not assignee:
+                raise ValueError(
+                    "Cannot restart task execution without a valid assignee."
+                )
+            await self._publish_message_to_agent(
+                TaskAssignMessage(
+                    task_id=task_id,
+                    assignee_agent_id_str=assignee,
+                    source=self.name,
+                    content=task.name,
+                ),
+                AgentId.from_str(assignee),
+            )
         return {
             "task_id": task_id,
             "status": str(getattr(task, "status", "")),

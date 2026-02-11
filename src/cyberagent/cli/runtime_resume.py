@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import uuid
 
 from src.cyberagent.cli.agent_message_queue import enqueue_agent_message
 from src.cyberagent.core.agent_naming import normalize_message_source
@@ -74,6 +75,10 @@ def queue_in_progress_initiatives(team_id: int) -> int:
                 "source": normalize_message_source("System4/root"),
                 "content": f"Resume initiative {initiative_id}.",
             },
+            idempotency_key=(
+                f"resume:team:{team_id}:initiative:{initiative_id}:"
+                f"{uuid.uuid4().hex}"
+            ),
         )
         queued += 1
 
@@ -88,6 +93,9 @@ def queue_in_progress_initiatives(team_id: int) -> int:
                 "source": normalize_message_source(assignee),
                 "content": review_content or f"Review completed task {task_id}.",
             },
+            idempotency_key=(
+                f"resume:team:{team_id}:task_review:{task_id}:{uuid.uuid4().hex}"
+            ),
         )
         queued += 1
     return queued

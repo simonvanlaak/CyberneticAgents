@@ -405,7 +405,7 @@ async def test_system1_requests_structured_task_execution_output(
     assert mocked_run.await_count == 1
     await_args = mocked_run.await_args
     assert await_args is not None
-    assert await_args.kwargs["output_content_type"].__name__ == "TaskExecutionResult"
+    assert "output_content_type" not in await_args.kwargs
     assert isinstance(captured.get("execution_log"), str)
     assert "Task executed" in str(captured["execution_log"])
 
@@ -455,6 +455,12 @@ async def test_system1_task_execution_enables_tools_and_guides_lookup(
     assert await_args is not None
     assert await_args.kwargs["enable_tools"] is True
     prompts = await_args.kwargs["message_specific_prompts"]
+    assert any(
+        "Return a JSON object for the task outcome" in prompt for prompt in prompts
+    )
+    assert any(
+        "Do not call a tool named TaskExecutionResult" in prompt for prompt in prompts
+    )
     assert any("task_search" in prompt for prompt in prompts)
     assert any("memory_crud" in prompt for prompt in prompts)
 

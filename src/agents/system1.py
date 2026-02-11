@@ -131,6 +131,12 @@ class System1(SystemBase):
                 ctx,
                 message_specific_prompts=[
                     (
+                        "Return a JSON object for the task outcome with fields: "
+                        "status ('done' or 'blocked'), result (string), and optional "
+                        "reasoning (string). Do not call a tool named "
+                        "TaskExecutionResult."
+                    ),
+                    (
                         "If key information is missing, call task_search to inspect "
                         "previous team task outputs before marking this task blocked."
                     ),
@@ -139,7 +145,6 @@ class System1(SystemBase):
                         "memory_crud list before escalating."
                     ),
                 ],
-                output_content_type=TaskExecutionResult,
                 enable_tools=True,
             )
             task_service.set_task_execution_log(

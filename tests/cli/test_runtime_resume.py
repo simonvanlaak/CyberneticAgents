@@ -128,3 +128,43 @@ def test_queue_in_progress_initiatives_returns_zero_on_sql_error(
     queued = runtime_resume.queue_in_progress_initiatives(team_id=1)
 
     assert queued == 0
+
+
+def test_queue_in_progress_initiatives_uses_fresh_idempotency_keys(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    db_path = tmp_path / "resume_idempotency.db"
+    _init_resume_db(db_path)
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.execute(
+            "INSERT INTO initiatives (id, team_id, status) VALUES (1, 7, 'in_progress')"
+        )
+        conn.execute(
+            "INSERT INTO systems (id, team_id, type, agent_id_str) "
+            "VALUES (1, 7, 'control', 'System3/root')"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    monkeypatch.setattr(runtime_resume, "get_database_path", lambda: str(db_path))
+    recorded_keys: list[str] = []
+
+    def _fake_enqueue(**kwargs: object) -> Path:
+        key = kwargs.get("idempotency_key")
+        assert isinstance(key, str)
+        recorded_keys.append(key)
+        return tmp_path / "queued.json"
+
+    monkeypatch.setattr(runtime_resume, "enqueue_agent_message", _fake_enqueue)
+
+    first = runtime_resume.queue_in_progress_initiatives(team_id=7)
+    second = runtime_resume.queue_in_progress_initiatives(team_id=7)
+
+    assert first == 1
+    assert second == 1
+    assert len(recorded_keys) == 2
+    assert recorded_keys[0] != recorded_keys[1]
+    assert recorded_keys[0].startswith("resume:team:7:initiative:1:")
+    assert recorded_keys[1].startswith("resume:team:7:initiative:1:")
