@@ -238,7 +238,13 @@ class System3(SystemBase):
                 task
                 for task in all_tasks
                 if getattr(task, "assignee", None)
-                and _task_status_value(task) in {"pending", "status.pending"}
+                and _task_status_value(task)
+                in {
+                    "pending",
+                    "status.pending",
+                    "in_progress",
+                    "status.in_progress",
+                }
             ]
             if pending_assigned_tasks:
                 pending_task = pending_assigned_tasks[0]
