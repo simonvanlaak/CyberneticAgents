@@ -33,8 +33,12 @@ IN_PROGRESS_OPTION_ID="$(gh project field-list "$PROJECT_NUMBER" --owner "$OWNER
 IN_REVIEW_OPTION_ID="$(gh project field-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --jq '.fields[] | select(.name=="Status") | .options[] | select(.name=="In review") | .id')"
 
 # main-only workflow
+# Ensure a clean working tree; this automation is intended to run on a pristine checkout.
+# (Avoids `git pull --rebase` failing due to leftover unstaged changes from prior runs.)
 git fetch origin main --quiet || true
 git checkout -q main || true
+git reset --hard -q
+git clean -fdq
 git pull --rebase --quiet origin main || true
 
 while true; do
