@@ -130,6 +130,9 @@ run_nightly(){
   bash ./scripts/nightly-cyberneticagents.sh
 }
 
+MAX_ITEMS="${MAX_ITEMS:-3}"
+PROCESSED=0
+
 while true; do
   ITEMS_JSON=$(get_items_json)
 
@@ -180,6 +183,11 @@ while true; do
 
   if [ -n "${ISSUE_URL:-}" ] && [ "${ISSUE_URL:-}" != "null" ]; then
     comment_on_issue "$ISSUE_URL" "Moved to **In review** after nightly CyberneticAgents automation.\n\nValidation:\n- Ran `bash ./scripts/nightly-cyberneticagents.sh` (success).\n\nCommits:\n- ${SHA:-No code changes}"
+  fi
+
+  PROCESSED=$((PROCESSED+1))
+  if [ "$PROCESSED" -ge "$MAX_ITEMS" ]; then
+    exit 0
   fi
 
 done
