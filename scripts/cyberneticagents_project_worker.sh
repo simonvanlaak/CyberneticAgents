@@ -1,155 +1,113 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+cd /root/.openclaw/workspace
+
 export PATH="/home/node/.local/bin:$PATH"
 
-# Auth (non-interactive)
-if [[ -z "${GH_TOKEN:-}" ]]; then
-  if command -v op >/dev/null 2>&1; then
-    # Do not print token
-    GH_TOKEN_VAL="$(op item get "GitHub Personal Access Token" --vault OpenClaw --fields token --reveal 2>/dev/null || true)"
-    if [[ -n "$GH_TOKEN_VAL" ]]; then
-      export GH_TOKEN="$GH_TOKEN_VAL"
-    fi
-  fi
-fi
+# Non-interactive GH auth
+if [ -z "${GH_TOKEN:-}" ]; then
+  # Non-interactive: fetch from 1Password.
+  # Note: do NOT echo the token.
+  export GH_TOKEN="$(op item get 'GitHub Personal Access Token' --vault OpenClaw --fields token --reveal 2>/dev/null | tr -d '\r\n')"
 
-if [[ -z "${GH_TOKEN:-}" ]]; then
-  echo "GH_TOKEN is empty and could not be loaded from 1Password (op)." >&2
-  exit 1
+  if [ -z "${GH_TOKEN:-}" ]; then
+    echo "Unexpected: GH_TOKEN was empty and 1Password lookup returned empty. Is op signed in/unlocked (or is the item/vault name wrong)?"
+    exit 2
+  fi
 fi
 
 if ! gh auth status -h github.com >/dev/null 2>&1; then
-  echo "gh not authenticated (gh auth status failed)." >&2
-  exit 1
+  echo "Unexpected: gh is not authenticated for github.com (GH_TOKEN invalid/missing)."
+  exit 2
 fi
 
-# Locate repo
-if [[ -d /root/.openclaw/workspace/CyberneticAgents/.git ]]; then
-  cd /root/.openclaw/workspace/CyberneticAgents
-elif [[ -d /root/.openclaw/workspace/.git ]]; then
-  cd /root/.openclaw/workspace
-else
-  echo "Could not locate CyberneticAgents git repo under /root/.openclaw/workspace" >&2
-  exit 1
-fi
+OWNER="simonvanlaak"
+PROJECT_NUMBER=1
+REPO="simonvanlaak/CyberneticAgents"
 
-# Main-only workflow: sync main
-git fetch origin --prune >/dev/null 2>&1 || true
-if git show-ref --verify --quiet refs/remotes/origin/main; then
-  git checkout -B main origin/main >/dev/null 2>&1
-else
-  echo "origin/main not found; expected main-only workflow" >&2
-  exit 1
-fi
+PROJECT_ID="$(gh project view "$PROJECT_NUMBER" --owner "$OWNER" --format json --jq '.id')"
+STATUS_FIELD_ID="$(gh project field-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --jq '.fields[] | select(.name=="Status") | .id')"
+BACKLOG_OPTION_ID="$(gh project field-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --jq '.fields[] | select(.name=="Status") | .options[] | select(.name=="Backlog") | .id')"
+IN_PROGRESS_OPTION_ID="$(gh project field-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --jq '.fields[] | select(.name=="Status") | .options[] | select(.name=="In progress") | .id')"
+IN_REVIEW_OPTION_ID="$(gh project field-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --jq '.fields[] | select(.name=="Status") | .options[] | select(.name=="In review") | .id')"
 
-project_items_json() {
-  gh project item-list 1 --owner simonvanlaak --limit 200 --format json
-}
-
-pick_item() {
-  # stdin: project JSON -> stdout: picked item JSON; exit 2 if none
-  node -e '
-    const fs = require("fs");
-    const input = fs.readFileSync(0, "utf8");
-    if (!input.trim()) process.exit(1);
-    const data = JSON.parse(input);
-    const items = data.items || [];
-    const pick = (status) => items.find(it => it && it.status === status);
-    const it = pick("In progress") || pick("Ready");
-    if (!it) process.exit(2);
-    process.stdout.write(JSON.stringify(it));
-  '
-}
-
-jget() {
-  # usage: jget '<json>' '<js expression on j>'
-  local json="$1"
-  local expr="$2"
-  node -e "const j=JSON.parse(process.argv[1]); const v=(${expr}); if (v===undefined||v===null) process.exit(3); process.stdout.write(String(v));" "$json"
-}
-
-move_status() {
-  local item_id="$1"
-  local status="$2"
-  gh project item-edit 1 --owner simonvanlaak --id "$item_id" --field Status --text "$status" >/dev/null
-}
-
-comment_issue() {
-  local issue_url="$1"
-  local body="$2"
-  gh issue comment "$issue_url" --body "$body" >/dev/null
-}
+# main-only workflow
+git fetch origin main --quiet || true
+git checkout -q main || true
+git pull --rebase --quiet origin main || true
 
 while true; do
-  items_json="$(project_items_json)"
+  ITEMS_JSON="$(gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" --limit 200 --format json)"
 
-  set +e
-  picked_json="$(printf '%s' "$items_json" | pick_item)"
-  pick_rc=$?
-  set -e
+  PICKED="$(printf "%s" "$ITEMS_JSON" | jq -r '(.items | map(select(.status=="In progress")) | .[0]) // (.items | map(select(.status=="Ready")) | .[0]) // empty')"
 
-  if [[ $pick_rc -eq 2 ]]; then
+  if [ -z "$PICKED" ] || [ "$PICKED" = "null" ]; then
     exit 0
   fi
-  if [[ $pick_rc -ne 0 ]]; then
-    echo "Failed to pick project item (rc=$pick_rc)" >&2
+
+  ITEM_ID="$(printf "%s" "$PICKED" | jq -r '.id')"
+  ITEM_STATUS="$(printf "%s" "$PICKED" | jq -r '.status')"
+  ISSUE_NUMBER="$(printf "%s" "$PICKED" | jq -r '.content.number // empty')"
+  TITLE="$(printf "%s" "$PICKED" | jq -r '.title')"
+
+  if [ -z "$ISSUE_NUMBER" ] || [ "$ISSUE_NUMBER" = "null" ]; then
+    echo "Unexpected: picked project item has no linked issue: $TITLE ($ITEM_ID)"
+    exit 2
+  fi
+
+  if [ "$ITEM_STATUS" = "Ready" ]; then
+    gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field-id "$STATUS_FIELD_ID" --single-select-option-id "$IN_PROGRESS_OPTION_ID" >/dev/null
+  fi
+
+  # clean slate per ticket
+  git reset --hard -q
+  git clean -fdq
+  git pull --rebase --quiet origin main || true
+
+  LOG="/tmp/nightly-cyberneticagents-$ISSUE_NUMBER.log"
+  if ! bash ./scripts/nightly-cyberneticagents.sh >"$LOG" 2>&1; then
+    gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field-id "$STATUS_FIELD_ID" --single-select-option-id "$BACKLOG_OPTION_ID" >/dev/null
+    TAIL="$(tail -n 60 "$LOG")"
+    gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "Moved to Backlog: nightly automation failed for **$TITLE**.
+
+Tail of log (last 60 lines):
+
+```
+$TAIL
+```
+
+Questions:
+- Is there any expected env/setup change?
+- Should this ticket be split or have manual steps?" >/dev/null
+
+    echo "Moved issue #$ISSUE_NUMBER to Backlog due to automation failure. Needs attention."
     exit 1
   fi
 
-  item_id="$(jget "$picked_json" 'j.id')"
-  item_status="$(jget "$picked_json" 'j.status || ""')"
-  content_url="$(jget "$picked_json" '(j.content && j.content.url) || ""')"
-  content_type="$(jget "$picked_json" '(j.content && j.content.type) || ""')"
-
-  if [[ -z "$item_id" || -z "$content_url" ]]; then
-    echo "Malformed project item (missing id/url)" >&2
-    exit 1
-  fi
-
-  # Status transitions
-  if [[ "$item_status" == "Ready" ]]; then
-    move_status "$item_id" "In progress"
-  fi
-
-  if [[ "$content_type" != "Issue" ]]; then
-    move_status "$item_id" "Backlog"
-    comment_issue "$content_url" "Moved to Backlog: automation currently supports only GitHub Issues (got content type: $content_type). What should I do with this item?" || true
-    continue
-  fi
-
-  issue_json="$(gh issue view "$content_url" --json number,title,url)"
-  issue_number="$(jget "$issue_json" 'j.number')"
-  issue_title="$(jget "$issue_json" 'j.title')"
-
-  # Quality: run nightly script before pushing
-  set +e
-  bash ./scripts/nightly-cyberneticagents.sh
-  script_rc=$?
-  set -e
-
-  if [[ $script_rc -ne 0 ]]; then
-    move_status "$item_id" "Backlog"
-    comment_issue "$content_url" "Moved to Backlog: ./scripts/nightly-cyberneticagents.sh failed (exit $script_rc).\n\nQuestions:\n- Any prerequisites missing on the runner?\n- Should this item be handled manually?" || true
-    git reset --hard >/dev/null 2>&1 || true
-    continue
-  fi
-
-  # Commit/push directly to main if changes exist
-  if ! git diff --quiet || ! git diff --cached --quiet; then
+  if [ -n "$(git status --porcelain)" ]; then
     git add -A
-    if ! git diff --cached --quiet; then
-      msg="CyberneticAgents: ${issue_title} (#${issue_number})"
-      git commit -m "$msg" >/dev/null
-      sha="$(git rev-parse HEAD)"
-      git push origin main >/dev/null
+    git commit -m "chore: nightly usability auto-fix (#$ISSUE_NUMBER)" >/dev/null
 
-      move_status "$item_id" "In review"
-      comment_issue "$content_url" "Moved to In review.\n\nSummary: Ran ./scripts/nightly-cyberneticagents.sh and committed changes.\nValidation: ./scripts/nightly-cyberneticagents.sh (exit 0).\nCommit: $sha" || true
-    fi
+    # required pre-push run
+    bash ./scripts/nightly-cyberneticagents.sh >/dev/null 2>&1
+
+    git push -q origin main
+    COMMIT_SHA="$(git rev-parse HEAD)"
+    COMMENT="Automation complete for **$TITLE**.
+
+- Ran nightly usability + auto-fix
+- Changes committed + pushed to main
+
+Commit: $COMMIT_SHA"
   else
-    move_status "$item_id" "In review"
-    comment_issue "$content_url" "Moved to In review.\n\nSummary: Ran ./scripts/nightly-cyberneticagents.sh; no repo changes were produced.\nValidation: ./scripts/nightly-cyberneticagents.sh (exit 0)." || true
+    COMMENT="Automation complete for **$TITLE**.
+
+- Ran nightly usability + auto-fix
+- No code changes were necessary."
   fi
+
+  gh project item-edit --id "$ITEM_ID" --project-id "$PROJECT_ID" --field-id "$STATUS_FIELD_ID" --single-select-option-id "$IN_REVIEW_OPTION_ID" >/dev/null
+  gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "$COMMENT" >/dev/null
 
 done
