@@ -136,10 +136,16 @@ PROCESSED=0
 while true; do
   ITEMS_JSON=$(get_items_json)
 
-  # Only pick items that are explicitly Ready.
-  # Do NOT take "In progress" items; those are assumed to be owned by a human (or another worker).
-  ITEM_ID=$(echo "$ITEMS_JSON" | pick_item_id_by_status "Ready")
-  PICKED_STATUS="Ready"
+  # Work selection loop:
+  # 1) Prefer top-most Status=="In progress"
+  # 2) Else pick top-most Status=="Ready"
+  ITEM_ID=$(echo "$ITEMS_JSON" | pick_item_id_by_status "In progress")
+  PICKED_STATUS="In progress"
+
+  if [ -z "$ITEM_ID" ] || [ "$ITEM_ID" = "null" ]; then
+    ITEM_ID=$(echo "$ITEMS_JSON" | pick_item_id_by_status "Ready")
+    PICKED_STATUS="Ready"
+  fi
 
   if [ -z "$ITEM_ID" ] || [ "$ITEM_ID" = "null" ]; then
     exit 0
