@@ -28,21 +28,42 @@ OWNER="simonvanlaak"
 PROJECT_NUMBER=1
 REPO="simonvanlaak/CyberneticAgents"
 
-PROJECT_ID="$(gh project view "$PROJECT_NUMBER" --owner "$OWNER" --format json --jq '.id')"
-STATUS_FIELD_ID="$(gh project field-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --jq '.fields[] | select(.name=="Status") | .id')"
+# Reduce GraphQL read calls:
+# - Cache Project/Status field/option IDs locally (6h TTL)
+# - If GraphQL budget is low, skip this run entirely.
+RATE_REMAINING="$($PYTHON ./scripts/github_outbox.py drain --min-remaining 0 --max-ops 0 2>/dev/null | true)"
+# (Drain is a no-op here; we rely on explicit gh rateLimit check below.)
 
-opt_id() {
-  gh project field-list "$PROJECT_NUMBER" --owner "$OWNER" --format json --jq ".fields[] | select(.name==\"Status\") | .options[] | select(.name==\"$1\") | .id"
-}
+RATE_JSON="$(gh api graphql -f query='{rateLimit{remaining resetAt}}')"
+RATE_LEFT="$(echo "$RATE_JSON" | $PYTHON - <<'PY'
+import json,sys
+print(json.loads(sys.stdin.read())['data']['rateLimit']['remaining'])
+PY
+)"
+RATE_RESET="$(echo "$RATE_JSON" | $PYTHON - <<'PY'
+import json,sys
+print(json.loads(sys.stdin.read())['data']['rateLimit']['resetAt'])
+PY
+)"
 
-BACKLOG_OPTION_ID="$(opt_id Backlog)"
-READY_OPTION_ID="$(opt_id Ready)"
-IN_PROGRESS_OPTION_ID="$(opt_id 'In progress')"
-IN_REVIEW_OPTION_ID="$(opt_id 'In review')"
-BLOCKED_OPTION_ID="$(opt_id Blocked)"
+MIN_READ_BUDGET=200
+if [[ "$RATE_LEFT" -lt "$MIN_READ_BUDGET" ]]; then
+  echo "SKIP: GitHub GraphQL budget low (remaining=$RATE_LEFT resetAt=$RATE_RESET)" >&2
+  exit 0
+fi
 
-if [[ -z "$STATUS_FIELD_ID" || -z "$BACKLOG_OPTION_ID" || -z "$READY_OPTION_ID" || -z "$IN_PROGRESS_OPTION_ID" || -z "$IN_REVIEW_OPTION_ID" || -z "$BLOCKED_OPTION_ID" ]]; then
-  echo "ERROR: Could not resolve project Status field/option IDs" >&2
+# Source cached IDs as environment variables
+# shellcheck disable=SC2046
+source <($PYTHON ./scripts/github_project_cache.py --owner "$OWNER" --project-number "$PROJECT_NUMBER")
+
+BACKLOG_OPTION_ID="$STATUS_OPTION_BACKLOG"
+READY_OPTION_ID="$STATUS_OPTION_READY"
+IN_PROGRESS_OPTION_ID="$STATUS_OPTION_IN_PROGRESS"
+IN_REVIEW_OPTION_ID="$STATUS_OPTION_IN_REVIEW"
+BLOCKED_OPTION_ID="$STATUS_OPTION_BLOCKED"
+
+if [[ -z "${PROJECT_ID:-}" || -z "${STATUS_FIELD_ID:-}" || -z "$BACKLOG_OPTION_ID" || -z "$READY_OPTION_ID" || -z "$IN_PROGRESS_OPTION_ID" || -z "$IN_REVIEW_OPTION_ID" || -z "$BLOCKED_OPTION_ID" ]]; then
+  echo "ERROR: Could not resolve project Status field/option IDs (cache)" >&2
   exit 1
 fi
 
