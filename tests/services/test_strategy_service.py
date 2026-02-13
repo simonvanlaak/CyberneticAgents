@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from typing import cast
 
 import pytest
@@ -39,7 +40,29 @@ def test_get_active_strategy_delegates(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_create_strategy_builds(monkeypatch: pytest.MonkeyPatch) -> None:
     from src.cyberagent.services import strategies as strategy_service
 
+    class _Session:
+        def add(self, _value) -> None:  # type: ignore[no-untyped-def]
+            return None
+
+        def flush(self) -> None:
+            return None
+
+        def commit(self) -> None:
+            return None
+
+        def refresh(self, _value) -> None:  # type: ignore[no-untyped-def]
+            return None
+
+        def expunge(self, _value) -> None:  # type: ignore[no-untyped-def]
+            return None
+
+    @contextmanager
+    def _fake_managed_session(*, commit: bool = False):  # type: ignore[no-untyped-def]
+        del commit
+        yield _Session()
+
     monkeypatch.setattr(strategy_service, "Strategy", _FakeStrategy)
+    monkeypatch.setattr(strategy_service, "managed_session", _fake_managed_session)
 
     strategy = strategy_service.create_strategy(1, 2, "Name", "Desc")
 

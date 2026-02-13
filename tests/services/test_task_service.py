@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from typing import cast
 
 import pytest
@@ -161,7 +162,29 @@ def test_create_task_builds_task(monkeypatch: pytest.MonkeyPatch) -> None:
             super().__init__()
             created.update(kwargs)
 
+    class _Session:
+        def add(self, _value) -> None:  # type: ignore[no-untyped-def]
+            return None
+
+        def flush(self) -> None:
+            return None
+
+        def commit(self) -> None:
+            return None
+
+        def refresh(self, _value) -> None:  # type: ignore[no-untyped-def]
+            return None
+
+        def expunge(self, _value) -> None:  # type: ignore[no-untyped-def]
+            return None
+
+    @contextmanager
+    def _fake_managed_session(*, commit: bool = False):  # type: ignore[no-untyped-def]
+        del commit
+        yield _Session()
+
     monkeypatch.setattr(task_service, "Task", _FactoryTask)
+    monkeypatch.setattr(task_service, "managed_session", _fake_managed_session)
 
     task = task_service.create_task(
         team_id=1,
@@ -413,28 +436,28 @@ def test_persist_task_uses_session_merge_for_sqlalchemy_task(
     class _Session:
         def __init__(self) -> None:
             self.merged = None
-            self.committed = False
             self.closed = False
 
         def merge(self, task) -> None:  # type: ignore[no-untyped-def]
             self.merged = task
-
-        def commit(self) -> None:
-            self.committed = True
 
         def close(self) -> None:
             self.closed = True
 
     session = _Session()
 
-    def _fake_get_db():  # type: ignore[no-untyped-def]
-        yield session
+    @contextmanager
+    def _fake_managed_session(*, commit: bool = False):  # type: ignore[no-untyped-def]
+        assert commit is True
+        try:
+            yield session
+        finally:
+            session.close()
 
-    monkeypatch.setattr(task_service, "get_db", _fake_get_db)
+    monkeypatch.setattr(task_service, "managed_session", _fake_managed_session)
     task = Task(team_id=1, initiative_id=1, name="Task", content="Do it")
 
     task_service.complete_task(task, "done")
 
     assert session.merged is task
-    assert session.committed is True
     assert session.closed is True

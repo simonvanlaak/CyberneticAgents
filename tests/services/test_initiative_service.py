@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from typing import cast
 
 import pytest
@@ -58,7 +59,29 @@ def test_create_initiative_builds(monkeypatch: pytest.MonkeyPatch) -> None:
             self.team_id = kwargs.get("team_id")
             self.strategy_id = kwargs.get("strategy_id")
 
+    class _Session:
+        def add(self, _value) -> None:  # type: ignore[no-untyped-def]
+            return None
+
+        def flush(self) -> None:
+            return None
+
+        def commit(self) -> None:
+            return None
+
+        def refresh(self, _value) -> None:  # type: ignore[no-untyped-def]
+            return None
+
+        def expunge(self, _value) -> None:  # type: ignore[no-untyped-def]
+            return None
+
+    @contextmanager
+    def _fake_managed_session(*, commit: bool = False):  # type: ignore[no-untyped-def]
+        del commit
+        yield _Session()
+
     monkeypatch.setattr(initiative_service, "Initiative", _FactoryInitiative)
+    monkeypatch.setattr(initiative_service, "managed_session", _fake_managed_session)
 
     initiative = initiative_service.create_initiative(1, 2, "Init", "Desc")
 
