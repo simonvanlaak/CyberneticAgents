@@ -74,16 +74,31 @@ def cmd_ensure_labels(args: argparse.Namespace) -> int:
     return 0
 
 
-def _pick_next_issue(*, repo: str) -> dict[str, Any] | None:
+def _is_ready_to_implement_authorized(*, repo: str, issue_number: int, owner_login: str) -> bool:
+    owner, repo_name = repo.split("/", 1)
+    events = _gh_api(
+        f"repos/{owner}/{repo_name}/issues/{issue_number}/events",
+        fields={"per_page": 100},
+    )
+    from src.github_stage_events import is_stage_ready_set_by_owner
+
+    return is_stage_ready_set_by_owner(events, owner_login=owner_login)
+
+
+def _pick_next_issue(*, repo: str, owner_login: str) -> dict[str, Any] | None:
     # Prefer oldest in-progress, else oldest ready-to-implement.
     for stage in (STAGE_IN_PROGRESS, STAGE_READY_TO_IMPLEMENT):
         q = f'repo:{repo} is:issue is:open label:"{stage}" sort:created-asc'
-        data = _gh_api("search/issues", fields={"q": q, "per_page": 1})
+        data = _gh_api("search/issues", fields={"q": q, "per_page": 10})
         items = data.get("items") or []
-        if items:
+        for it in items:
+            n = int(it["number"])
+            if stage == STAGE_READY_TO_IMPLEMENT:
+                if not _is_ready_to_implement_authorized(repo=repo, issue_number=n, owner_login=owner_login):
+                    continue
             return {
-                "number": items[0]["number"],
-                "title": items[0]["title"],
+                "number": n,
+                "title": it["title"],
                 "picked_from_stage": stage,
             }
 
@@ -91,7 +106,7 @@ def _pick_next_issue(*, repo: str) -> dict[str, Any] | None:
 
 
 def cmd_pick_next(args: argparse.Namespace) -> int:
-    issue = _pick_next_issue(repo=args.repo)
+    issue = _pick_next_issue(repo=args.repo, owner_login=args.owner_login)
     if not issue:
         return 1
     sys.stdout.write(json.dumps(issue) + "\n")
@@ -124,6 +139,7 @@ def cmd_set_status(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Issue-label-based queue utilities")
     p.add_argument("--repo", required=True)
+    p.add_argument("--owner-login", default="simonvanlaak", help="Only pick ready-to-implement when set by this user")
 
     sub = p.add_subparsers(dest="cmd", required=True)
 

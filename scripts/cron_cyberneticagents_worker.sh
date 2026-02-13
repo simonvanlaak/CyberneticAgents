@@ -41,7 +41,7 @@ process_count=0
 max_process=3
 
 while [[ $process_count -lt $max_process ]]; do
-  PICK_JSON="$("$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" pick-next 2>/dev/null || true)"
+  PICK_JSON="$("$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" --owner-login "simonvanlaak" pick-next 2>/dev/null || true)"
 
   if [[ -z "$PICK_JSON" ]]; then
     exit 0
