@@ -55,21 +55,9 @@ while [[ $process_count -lt $max_process ]]; do
   PICKED_FROM_STAGE="$(printf '%s' "$PICK_JSON" | "$PYTHON" -c 'import json,sys; print(json.loads(sys.stdin.read())["picked_from_stage"])')"
 
   if [[ "$PICKED_FROM_STAGE" == "$STAGE_BACKLOG" ]]; then
-    # Ask clarification questions (priority) and continue bursting through backlog.
+    # Clarification questions are crafted by the Codex cron agent (it pulls repo context).
+    # This script only advances the stage.
     "$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" set-status --issue "$ISSUE_NUMBER" --status "$STAGE_NEEDS_CLARIFICATION"
-
-    ISSUE_JSON="$(gh api "repos/$REPO/issues/$ISSUE_NUMBER" --jq '{title:(.title//""), body:(.body//"")}' 2>/dev/null || echo '{}')"
-    ISSUE_TITLE="$(printf '%s' "$ISSUE_JSON" | "$PYTHON" -c 'import json,sys; print(json.loads(sys.stdin.read()).get("title", ""))')"
-    ISSUE_BODY="$(printf '%s' "$ISSUE_JSON" | "$PYTHON" -c 'import json,sys; print(json.loads(sys.stdin.read()).get("body", ""))')"
-
-    PROMPT_BODY="$("$PYTHON" -c 'from src.clarification_questions import build_clarification_prompt; import sys; print(build_clarification_prompt(sys.argv[1], sys.argv[2]).body)' "$ISSUE_TITLE" "$ISSUE_BODY")"
-
-    # Avoid duplicate prompt spam.
-    LAST_BODY="$(gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments?per_page=1" --jq '.[0].body // ""' 2>/dev/null || true)"
-    SHOULD_POST="$("$PYTHON" -c 'from src.clarification_questions import should_post_prompt; import sys; print("1" if should_post_prompt([sys.argv[1]], sys.argv[2]) else "0")' "$LAST_BODY" "$PROMPT_BODY")"
-    if [[ "$SHOULD_POST" == "1" ]]; then
-      gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments" -f body="$PROMPT_BODY" >/dev/null
-    fi
 
     process_count=$((process_count + 1))
     continue
