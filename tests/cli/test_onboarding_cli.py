@@ -687,6 +687,43 @@ def test_missing_brave_key_explains_vault_and_item(
     assert "BRAVE_API_KEY" in captured
 
 
+def test_check_required_tool_secrets_defers_notion_secret_until_pkm_known(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    notion_skill = SkillDefinition(
+        name="notion-sync",
+        description="Sync Notion",
+        location=Path("src/tools/skills/notion"),
+        tool_name="notion",
+        subcommand=None,
+        required_env=("NOTION_API_KEY",),
+        timeout_class="short",
+        timeout_seconds=30,
+        input_schema={},
+        output_schema={},
+        skill_file=Path("src/tools/skills/notion/SKILL.md"),
+        instructions="",
+    )
+    monkeypatch.setattr(onboarding_cli, "load_skill_definitions", lambda *_: [notion_skill])
+    monkeypatch.delenv("NOTION_API_KEY", raising=False)
+
+    prompt_calls: list[str] = []
+
+    def _prompt_store(**kwargs: object) -> bool:
+        prompt_calls.append(str(kwargs.get("env_name", "")))
+        return False
+
+    monkeypatch.setattr(onboarding_cli, "prompt_store_secret_in_1password", _prompt_store)
+    monkeypatch.setattr(onboarding_cli, "_load_secret_from_1password", lambda **_: None)
+
+    assert onboarding_cli._check_required_tool_secrets(pkm_source=None) is True
+    assert onboarding_cli._check_required_tool_secrets(pkm_source="github") is True
+    assert prompt_calls == []
+
+    assert onboarding_cli._check_required_tool_secrets(pkm_source="notion") is False
+    assert prompt_calls == ["NOTION_API_KEY"]
+
+
 def test_prompt_store_secret_creates_vault_and_item(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
