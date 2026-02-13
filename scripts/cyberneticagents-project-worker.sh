@@ -180,15 +180,15 @@ while true; do
   issue_body="$(gh issue view "$content_url" --json body --jq .body 2>/dev/null || true)"
   if [[ "$status" == "Ready" ]]; then
     if [[ -z "${issue_body//[[:space:]]/}" ]]; then
-      move_status "$item_id" "Backlog" || true
-      comment_issue "$content_url" $'Moved to Backlog: issue body is empty / missing requirements.\n\nPlease add:\n- Expected outcome\n- Acceptance criteria\n- Any constraints/links (docs, PRDs, etc.)'
+      move_status "$item_id" "Blocked" || true
+      comment_issue "$content_url" $'Moved to Blocked: issue body is empty / missing requirements (cannot be solved by the agent alone).\n\nPlease add:\n- Expected outcome\n- Acceptance criteria\n- Any constraints/links (docs, PRDs, etc.)'
       exit 0
     fi
 
     # Common anti-pattern: ticket body is *only* a docs path. That’s not actionable for automation.
     if echo "$issue_body" | tr -d '\r' | grep -Eq '^[[:space:]]*docs/[^[:space:]]+\.md[[:space:]]*$'; then
-      move_status "$item_id" "Backlog" || true
-      comment_issue "$content_url" $'Moved to Backlog: issue body only links a doc path (not an actionable spec).\n\nPlease paste the relevant doc content into the issue (or summarize requirements + acceptance criteria), then move it back to Ready.'
+      move_status "$item_id" "Blocked" || true
+      comment_issue "$content_url" $'Moved to Blocked: issue body only links a doc path (not an actionable spec; cannot be solved by the agent alone).\n\nPlease paste the relevant doc content into the issue (or summarize requirements + acceptance criteria), then move it back to Ready.'
       exit 0
     fi
 

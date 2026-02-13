@@ -32,8 +32,9 @@ BACKLOG_OPTION_ID="$(opt_id Backlog)"
 READY_OPTION_ID="$(opt_id Ready)"
 IN_PROGRESS_OPTION_ID="$(opt_id 'In progress')"
 IN_REVIEW_OPTION_ID="$(opt_id 'In review')"
+BLOCKED_OPTION_ID="$(opt_id Blocked)"
 
-if [[ -z "$STATUS_FIELD_ID" || -z "$BACKLOG_OPTION_ID" || -z "$READY_OPTION_ID" || -z "$IN_PROGRESS_OPTION_ID" || -z "$IN_REVIEW_OPTION_ID" ]]; then
+if [[ -z "$STATUS_FIELD_ID" || -z "$BACKLOG_OPTION_ID" || -z "$READY_OPTION_ID" || -z "$IN_PROGRESS_OPTION_ID" || -z "$IN_REVIEW_OPTION_ID" || -z "$BLOCKED_OPTION_ID" ]]; then
   echo "ERROR: Could not resolve project Status field/option IDs" >&2
   exit 1
 fi
@@ -117,16 +118,19 @@ while [[ $process_count -lt $max_process ]]; do
       --id "$PICK_ID" \
       --project-id "$PROJECT_ID" \
       --field-id "$STATUS_FIELD_ID" \
-      --single-select-option-id "$BACKLOG_OPTION_ID" \
+      --single-select-option-id "$BLOCKED_OPTION_ID" \
       >/dev/null
 
-    gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "Moved to Backlog via automation: no code changes were produced.
+    gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "Moved to Blocked via automation: no code changes were produced.
 
 I ran ./scripts/nightly-cyberneticagents.sh, but there were no commits to review.
 
-Please clarify one of:
-- What concrete code change is expected?
-- Or if this is a docs-only / no-code task, explicitly say so in the issue and describe what 'done' looks like."
+This likely needs human input (clarify requirements) or a non-automatable implementation step.
+
+Please add:
+- Expected outcome + acceptance criteria
+- Any pointers (files/paths) or constraints
+- If this is a docs-only / no-code task, explicitly say so and describe what 'done' looks like."
 
     process_count=$((process_count + 1))
     continue
