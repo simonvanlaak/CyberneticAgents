@@ -19,6 +19,7 @@ from src.agents.messages import (
     CapabilityGapMessage,
     InitiativeAssignMessage,
     PolicySuggestionMessage,
+    PolicyVagueMessage,
     TaskAssignMessage,
     TaskReviewMessage,
 )
@@ -930,3 +931,89 @@ async def test_system3_modify_task_tool_restart_execution_requires_assignee() ->
             await system3.modify_task_tool(task_id=42, restart_execution=True)
 
     system3._publish_message_to_agent.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_system3_routes_vague_review_to_system5_and_keeps_completed_status() -> (
+    None
+):
+    system3 = System3("System3/controller1")
+    system3._publish_message_to_agent = AsyncMock()
+
+    message = TaskReviewMessage(
+        task_id=42,
+        assignee_agent_id_str="System1/root",
+        source="System1/root",
+        content="Task result",
+    )
+    context = MessageContext(
+        sender=AgentId.from_str("System1/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="task_review_vague_route",
+    )
+
+    class DummyTask:
+        def __init__(self) -> None:
+            self.id = 42
+            self.assignee = "System1/root"
+            self.status = Status.COMPLETED
+            self.result = "Task result"
+            self.name = "Task 42"
+            self.case_judgement = None
+            self.policy_judgement = None
+            self.policy_judgement_reasoning = None
+            self.updated = False
+
+        def set_status(self, status) -> None:  # type: ignore[no-untyped-def]
+            self.status = status
+
+        def update(self) -> None:
+            self.updated = True
+
+    class DummySystem5:
+        def get_agent_id(self):
+            return AgentId.from_str("System5/root")
+
+    task = DummyTask()
+    cases_response = CasesResponse(
+        cases=[
+            PolicyJudgeResponse(
+                policy_id=7,
+                judgement=PolicyJudgement.VAGUE,
+                reasoning="Policy wording is ambiguous.",
+            )
+        ]
+    )
+
+    with (
+        patch("src.cyberagent.services.tasks._get_task", return_value=task),
+        patch(
+            "src.cyberagent.services.policies._get_system_policy_prompts",
+            return_value=['{"id":7,"content":"p","system_id":5,"team_id":1}'],
+        ),
+        patch.object(system3, "_get_systems_by_type", return_value=[DummySystem5()]),
+        patch.object(
+            system3,
+            "run",
+            AsyncMock(
+                return_value=TaskResult(
+                    messages=[TextMessage(content="{}", source="System3")]
+                )
+            ),
+        ),
+        patch.object(system3, "_get_structured_message", return_value=cases_response),
+    ):
+        await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
+
+    assert task.status == Status.COMPLETED
+    assert task.updated is True
+    assert task.case_judgement is not None
+    system3._publish_message_to_agent.assert_awaited_once()
+    await_args = system3._publish_message_to_agent.await_args
+    assert await_args is not None
+    published_message = await_args.args[0]
+    assert isinstance(published_message, PolicyVagueMessage)
+    assert published_message.task_id == 42
+    assert published_message.policy_id == 7
