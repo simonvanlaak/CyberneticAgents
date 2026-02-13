@@ -64,3 +64,49 @@ def test_onboarding_starts_background_discovery_when_non_interactive(
 
     assert exit_code == 0
     assert sequence == ["discovery_background"]
+
+
+def test_onboarding_validates_inputs_before_contextual_technical_checks(
+    monkeypatch,
+) -> None:
+    _clear_teams()
+    args = _default_onboarding_args()
+    sequence: list[str] = []
+
+    def _fake_validate(patched_args) -> bool:
+        sequence.append("validate")
+        assert patched_args is args
+        patched_args.pkm_source = "notion"
+        return True
+
+    def _fake_technical_checks(*, pkm_source: str | None = None) -> bool:
+        sequence.append(f"technical:{pkm_source}")
+        return True
+
+    monkeypatch.setattr(onboarding_cli, "_validate_onboarding_inputs", _fake_validate)
+    monkeypatch.setattr(
+        onboarding_cli,
+        "run_technical_onboarding_checks",
+        _fake_technical_checks,
+    )
+    monkeypatch.setattr(
+        onboarding_cli, "start_onboarding_interview", lambda **_kw: None
+    )
+    monkeypatch.setattr(
+        onboarding_cli, "_start_discovery_background", lambda *_a, **_k: None
+    )
+    monkeypatch.setattr(
+        onboarding_cli, "_start_runtime_after_onboarding", lambda *_: None
+    )
+    monkeypatch.setattr(
+        onboarding_cli, "_start_dashboard_after_onboarding", lambda *_: None
+    )
+
+    exit_code = onboarding_cli.handle_onboarding(
+        args,
+        'cyberagent suggest "Describe the task"',
+        "cyberagent inbox",
+    )
+
+    assert exit_code == 0
+    assert sequence[:2] == ["validate", "technical:notion"]
