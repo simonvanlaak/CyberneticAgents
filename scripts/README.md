@@ -28,6 +28,11 @@ This folder contains operational scripts for the CyberneticAgents repo.
 
 ## Utilities
 
+- **`./scripts/execute_issue.sh <repo> <issue_number>`**
+  - Framework for executing one issue in-place on `main`
+  - Fetches/stores issue context under `.tmp/issues/`
+  - Optionally delegates to `scripts/issue_handlers/<issue_number>.sh`
+
 - **`./scripts/github_issue_queue.py`**
   - Ensure labels exist
   - Pick next issue (`status:in-progress` first, else `status:ready`)

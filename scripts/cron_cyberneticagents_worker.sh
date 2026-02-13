@@ -68,9 +68,19 @@ while [[ $process_count -lt $max_process ]]; do
     exit 2
   fi
 
-  # Attempt repo-provided automation if present; otherwise we just validate.
-  if [[ -x ./scripts/auto-fix-issue.sh ]]; then
-    ./scripts/auto-fix-issue.sh "$ISSUE_NUMBER" || true
+  # Execute the issue (framework). For feature work, the calling agent is expected
+  # to implement changes + create multiple atomic commits.
+  if [[ -x ./scripts/execute_issue.sh ]]; then
+    set +e
+    ./scripts/execute_issue.sh "$REPO" "$ISSUE_NUMBER"
+    EXEC_RC=$?
+    set -e
+
+    if [[ "$EXEC_RC" -ne 0 && "$EXEC_RC" -ne 4 ]]; then
+      # Hard failure inside executor.
+      echo "ERROR: execute_issue.sh failed rc=$EXEC_RC for #$ISSUE_NUMBER" >&2
+      exit 1
+    fi
   fi
 
   # Re-run quality gate after any modifications
