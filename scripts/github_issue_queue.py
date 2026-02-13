@@ -22,17 +22,33 @@ from src.github_issue_queue import (
 )
 
 
-def _sh(args: list[str]) -> str:
-    return subprocess.check_output(args, text=True)
+def _sh(args: list[str], *, input_json: dict[str, Any] | None = None) -> str:
+    if input_json is None:
+        return subprocess.check_output(args, text=True)
+    p = subprocess.run(args, input=json.dumps(input_json), text=True, check=False, capture_output=True)
+    if p.returncode != 0:
+        raise RuntimeError(p.stderr.strip() or p.stdout.strip() or f"command failed: {args}")
+    return p.stdout
 
 
-def _gh_json(args: list[str]) -> Any:
+def _gh_api(path: str, *, method: str = "GET", fields: dict[str, Any] | None = None) -> Any:
+    args = ["gh", "api", "--method", method, path]
+    if fields:
+        for k, v in fields.items():
+            # Use -f for form fields (gh will encode)
+            args += ["-f", f"{k}={v}"]
     return json.loads(_sh(args))
 
 
+def _gh_api_json(path: str, *, method: str, body: dict[str, Any]) -> Any:
+    return json.loads(_sh(["gh", "api", "--method", method, path], input_json=body))
+
+
 def cmd_ensure_labels(args: argparse.Namespace) -> int:
-    existing = _gh_json(["gh", "label", "list", "--repo", args.repo, "--json", "name"])
-    names = {row["name"] for row in existing}
+    owner, repo_name = args.repo.split("/", 1)
+
+    labels: list[dict[str, Any]] = _gh_api(f"repos/{owner}/{repo_name}/labels", fields={"per_page": 100})
+    names = {row["name"] for row in labels}
 
     # Use deterministic colors (arbitrary but stable).
     desired = {
@@ -45,19 +61,10 @@ def cmd_ensure_labels(args: argparse.Namespace) -> int:
     for name, color in desired.items():
         if name in names:
             continue
-        subprocess.check_call(
-            [
-                "gh",
-                "label",
-                "create",
-                name,
-                "--repo",
-                args.repo,
-                "--color",
-                color,
-                "--description",
-                "automation status label",
-            ]
+        _gh_api_json(
+            f"repos/{owner}/{repo_name}/labels",
+            method="POST",
+            body={"name": name, "color": color, "description": "automation status label"},
         )
 
     return 0
@@ -66,24 +73,11 @@ def cmd_ensure_labels(args: argparse.Namespace) -> int:
 def _pick_next_issue(*, repo: str) -> dict[str, Any] | None:
     # Prefer oldest in-progress, else oldest ready.
     for status in (STATUS_IN_PROGRESS, STATUS_READY):
-        out = _gh_json(
-            [
-                "gh",
-                "issue",
-                "list",
-                "--repo",
-                repo,
-                "--search",
-                f'is:issue is:open label:"{status}" sort:created-asc',
-                "--limit",
-                "1",
-                "--json",
-                "number,title",
-            ]
-        )
-        if out:
-            issue = out[0]
-            issue["picked_from_status"] = status
+        q = f'repo:{repo} is:issue is:open label:"{status}" sort:created-asc'
+        data = _gh_api("search/issues", fields={"q": q, "per_page": 1})
+        items = data.get("items") or []
+        if items:
+            issue = {"number": items[0]["number"], "title": items[0]["title"], "picked_from_status": status}
             return issue
     return None
 
@@ -97,36 +91,25 @@ def cmd_pick_next(args: argparse.Namespace) -> int:
 
 
 def cmd_set_status(args: argparse.Namespace) -> int:
-    data = _gh_json(
-        [
-            "gh",
-            "issue",
-            "view",
-            str(args.issue),
-            "--repo",
-            args.repo,
-            "--json",
-            "labels",
-        ]
-    )
-    existing_labels = [l["name"] for l in (data.get("labels") or [])]
+    owner, repo_name = args.repo.split("/", 1)
+
+    issue = _gh_api(f"repos/{owner}/{repo_name}/issues/{args.issue}")
+    existing_labels = [l["name"] for l in (issue.get("labels") or [])]
 
     if args.status not in KNOWN_STATUS_LABELS:
         raise SystemExit(f"Unknown --status: {args.status}")
 
-    to_add, to_remove = plan_label_changes(existing_labels, args.status)
+    # Compute full target label list (single-select status label).
+    from src.github_issue_queue import apply_status_label
 
-    edit_cmd = ["gh", "issue", "edit", str(args.issue), "--repo", args.repo]
-    for l in to_add:
-        edit_cmd += ["--add-label", l]
-    for l in to_remove:
-        edit_cmd += ["--remove-label", l]
+    target_labels = sorted(apply_status_label(existing_labels, args.status))
 
-    if len(edit_cmd) == 6:
-        # No changes required.
-        return 0
-
-    subprocess.check_call(edit_cmd)
+    # PATCH issue labels (full list) via REST.
+    _gh_api_json(
+        f"repos/{owner}/{repo_name}/issues/{args.issue}",
+        method="PATCH",
+        body={"labels": target_labels},
+    )
     return 0
 
 

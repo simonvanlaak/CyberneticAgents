@@ -45,23 +45,11 @@ while [[ $process_count -lt $max_process ]]; do
     exit 0
   fi
 
-  ISSUE_NUMBER="$(echo "$PICK_JSON" | "$PYTHON" - <<'PY'
-import json,sys
-print(json.loads(sys.stdin.read())['number'])
-PY
-)"
+  ISSUE_NUMBER="$(printf '%s' "$PICK_JSON" | "$PYTHON" -c 'import json,sys; print(json.loads(sys.stdin.read())["number"])')"
 
-  TITLE="$(echo "$PICK_JSON" | "$PYTHON" - <<'PY'
-import json,sys
-print(json.loads(sys.stdin.read())['title'])
-PY
-)"
+  TITLE="$(printf '%s' "$PICK_JSON" | "$PYTHON" -c 'import json,sys; print(json.loads(sys.stdin.read())["title"])')"
 
-  PICKED_FROM_STATUS="$(echo "$PICK_JSON" | "$PYTHON" - <<'PY'
-import json,sys
-print(json.loads(sys.stdin.read())['picked_from_status'])
-PY
-)"
+  PICKED_FROM_STATUS="$(printf '%s' "$PICK_JSON" | "$PYTHON" -c 'import json,sys; print(json.loads(sys.stdin.read())["picked_from_status"])')"
 
   if [[ "$PICKED_FROM_STATUS" == "$STATUS_READY" ]]; then
     "$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" set-status --issue "$ISSUE_NUMBER" --status "$STATUS_IN_PROGRESS"
