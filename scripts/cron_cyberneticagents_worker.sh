@@ -24,89 +24,47 @@ fi
 
 gh auth status -h github.com >/dev/null
 
-OWNER="simonvanlaak"
-PROJECT_NUMBER=1
 REPO="simonvanlaak/CyberneticAgents"
 
-# Reduce GraphQL read calls:
-# - Cache Project/Status field/option IDs locally (6h TTL)
-# - If GraphQL budget is low, skip this run entirely.
-RATE_REMAINING="$($PYTHON ./scripts/github_outbox.py drain --min-remaining 0 --max-ops 0 2>/dev/null | true)"
-# (Drain is a no-op here; we rely on explicit gh rateLimit check below.)
+# Source of truth: GitHub Issues labels (NOT GitHub Projects).
+# We fully ignore Projects going forward due to Projects v2 GraphQL rate limiting.
+"$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" ensure-labels >/dev/null
 
-RATE_JSON="$(gh api graphql -f query='{rateLimit{remaining resetAt}}')"
-RATE_LEFT="$(echo "$RATE_JSON" | $PYTHON - <<'PY'
-import json,sys
-print(json.loads(sys.stdin.read())['data']['rateLimit']['remaining'])
-PY
-)"
-RATE_RESET="$(echo "$RATE_JSON" | $PYTHON - <<'PY'
-import json,sys
-print(json.loads(sys.stdin.read())['data']['rateLimit']['resetAt'])
-PY
-)"
-
-MIN_READ_BUDGET=200
-if [[ "$RATE_LEFT" -lt "$MIN_READ_BUDGET" ]]; then
-  echo "SKIP: GitHub GraphQL budget low (remaining=$RATE_LEFT resetAt=$RATE_RESET)" >&2
-  exit 0
-fi
-
-# Source cached IDs as environment variables
-# shellcheck disable=SC2046
-source <($PYTHON ./scripts/github_project_cache.py --owner "$OWNER" --project-number "$PROJECT_NUMBER")
-
-BACKLOG_OPTION_ID="$STATUS_OPTION_BACKLOG"
-READY_OPTION_ID="$STATUS_OPTION_READY"
-IN_PROGRESS_OPTION_ID="$STATUS_OPTION_IN_PROGRESS"
-IN_REVIEW_OPTION_ID="$STATUS_OPTION_IN_REVIEW"
-BLOCKED_OPTION_ID="$STATUS_OPTION_BLOCKED"
-
-if [[ -z "${PROJECT_ID:-}" || -z "${STATUS_FIELD_ID:-}" || -z "$BACKLOG_OPTION_ID" || -z "$READY_OPTION_ID" || -z "$IN_PROGRESS_OPTION_ID" || -z "$IN_REVIEW_OPTION_ID" || -z "$BLOCKED_OPTION_ID" ]]; then
-  echo "ERROR: Could not resolve project Status field/option IDs (cache)" >&2
-  exit 1
-fi
+STATUS_READY="status:ready"
+STATUS_IN_PROGRESS="status:in-progress"
+STATUS_IN_REVIEW="status:in-review"
+STATUS_BLOCKED="status:blocked"
 
 process_count=0
 max_process=3
 
 while [[ $process_count -lt $max_process ]]; do
-  ITEMS_JSON="$(gh project item-list "$PROJECT_NUMBER" --owner "$OWNER" --limit 200 --format json)"
+  PICK_JSON="$("$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" pick-next 2>/dev/null || true)"
 
-  PICK_ID="$(echo "$ITEMS_JSON" | jq -r '.items[] | select(.status=="In progress") | .id' | head -n1)"
-  PICK_STATUS="In progress"
-  if [[ -z "$PICK_ID" || "$PICK_ID" == "null" ]]; then
-    PICK_ID="$(echo "$ITEMS_JSON" | jq -r '.items[] | select(.status=="Ready") | .id' | head -n1)"
-    PICK_STATUS="Ready"
-  fi
-
-  # Stop when there is no work
-  if [[ -z "$PICK_ID" || "$PICK_ID" == "null" ]]; then
+  if [[ -z "$PICK_JSON" ]]; then
     exit 0
   fi
 
-  ISSUE_NUMBER="$(echo "$ITEMS_JSON" | jq -r --arg id "$PICK_ID" '.items[] | select(.id==$id) | .content.number // empty')"
-  TITLE="$(echo "$ITEMS_JSON" | jq -r --arg id "$PICK_ID" '.items[] | select(.id==$id) | .title')"
+  ISSUE_NUMBER="$(echo "$PICK_JSON" | "$PYTHON" - <<'PY'
+import json,sys
+print(json.loads(sys.stdin.read())['number'])
+PY
+)"
 
-  # Status transitions (enqueue + drain to reduce GraphQL churn)
-  if [[ "$PICK_STATUS" == "Ready" ]]; then
-    "$PYTHON" ./scripts/github_outbox.py enqueue-status \
-      --project-id "$PROJECT_ID" \
-      --item-id "$PICK_ID" \
-      --field-id "$STATUS_FIELD_ID" \
-      --option-id "$IN_PROGRESS_OPTION_ID" \
-      --quiet
+  TITLE="$(echo "$PICK_JSON" | "$PYTHON" - <<'PY'
+import json,sys
+print(json.loads(sys.stdin.read())['title'])
+PY
+)"
 
-    # Drain the status update if possible. If GitHub is throttling, skip this run
-    # rather than claiming a status change that never happened.
-    DRAIN_OUT="$("$PYTHON" ./scripts/github_outbox.py drain --min-remaining 50 --max-ops 10 2>&1)" || {
-      echo "$DRAIN_OUT" >&2
-      exit 1
-    }
-    if echo "$DRAIN_OUT" | grep -q '^SKIP '; then
-      echo "$DRAIN_OUT" >&2
-      exit 0
-    fi
+  PICKED_FROM_STATUS="$(echo "$PICK_JSON" | "$PYTHON" - <<'PY'
+import json,sys
+print(json.loads(sys.stdin.read())['picked_from_status'])
+PY
+)"
+
+  if [[ "$PICKED_FROM_STATUS" == "$STATUS_READY" ]]; then
+    "$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" set-status --issue "$ISSUE_NUMBER" --status "$STATUS_IN_PROGRESS"
   fi
 
   # Baseline sync
@@ -118,17 +76,7 @@ while [[ $process_count -lt $max_process ]]; do
   bash ./scripts/nightly-cyberneticagents.sh
 
   if [[ -z "$ISSUE_NUMBER" ]]; then
-    # Blocked: no attached issue
-    "$PYTHON" ./scripts/github_outbox.py enqueue-status \
-      --project-id "$PROJECT_ID" \
-      --item-id "$PICK_ID" \
-      --field-id "$STATUS_FIELD_ID" \
-      --option-id "$BACKLOG_OPTION_ID" \
-      --quiet
-
-    "$PYTHON" ./scripts/github_outbox.py drain --quiet || true
-
-    echo "BLOCKED: Project item has no linked issue. Moved to Backlog: $TITLE" >&2
+    echo "ERROR: picked issue missing number" >&2
     exit 2
   fi
 
@@ -155,23 +103,9 @@ while [[ $process_count -lt $max_process ]]; do
   # Guardrail: do NOT move to In review when no code changes were produced.
   # This was causing churn (tickets land in In review with nothing to review).
   if [[ "$AHEAD_COUNT" -eq 0 ]]; then
-    "$PYTHON" ./scripts/github_outbox.py enqueue-status \
-      --project-id "$PROJECT_ID" \
-      --item-id "$PICK_ID" \
-      --field-id "$STATUS_FIELD_ID" \
-      --option-id "$BLOCKED_OPTION_ID" \
-      --quiet
+    "$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" set-status --issue "$ISSUE_NUMBER" --status "$STATUS_BLOCKED"
 
-    DRAIN_OUT="$("$PYTHON" ./scripts/github_outbox.py drain --min-remaining 50 --max-ops 10 2>&1)" || {
-      echo "$DRAIN_OUT" >&2
-      exit 1
-    }
-    if echo "$DRAIN_OUT" | grep -q '^SKIP '; then
-      echo "$DRAIN_OUT" >&2
-      exit 0
-    fi
-
-    # Avoid duplicate comments if the item keeps getting re-picked.
+    # Avoid duplicate comments if the issue keeps getting re-picked.
     LAST_BODY="$(gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments?per_page=1" --jq '.[0].body' 2>/dev/null || true)"
     if echo "$LAST_BODY" | grep -q '^Moved to Blocked via automation:'; then
       process_count=$((process_count + 1))
@@ -193,21 +127,7 @@ Please add:
     continue
   fi
 
-  "$PYTHON" ./scripts/github_outbox.py enqueue-status \
-    --project-id "$PROJECT_ID" \
-    --item-id "$PICK_ID" \
-    --field-id "$STATUS_FIELD_ID" \
-    --option-id "$IN_REVIEW_OPTION_ID" \
-    --quiet
-
-  DRAIN_OUT="$("$PYTHON" ./scripts/github_outbox.py drain --min-remaining 50 --max-ops 10 2>&1)" || {
-    echo "$DRAIN_OUT" >&2
-    exit 1
-  }
-  if echo "$DRAIN_OUT" | grep -q '^SKIP '; then
-    echo "$DRAIN_OUT" >&2
-    exit 0
-  fi
+  "$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" set-status --issue "$ISSUE_NUMBER" --status "$STATUS_IN_REVIEW"
 
   RECENT_SHAS="$(git log --format=%H -n 5)"
   gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "Moved to In review via nightly automation.
