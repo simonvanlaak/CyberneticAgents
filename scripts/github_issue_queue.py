@@ -86,8 +86,8 @@ def _is_ready_to_implement_authorized(*, repo: str, issue_number: int, owner_log
 
 
 def _pick_next_issue(*, repo: str, owner_login: str) -> dict[str, Any] | None:
-    # Prefer oldest in-progress, else oldest ready-to-implement.
-    for stage in (STAGE_IN_PROGRESS, STAGE_READY_TO_IMPLEMENT):
+    # Prefer oldest in-progress, else oldest ready-to-implement, else oldest backlog.
+    for stage in (STAGE_IN_PROGRESS, STAGE_READY_TO_IMPLEMENT, STAGE_BACKLOG):
         q = f'repo:{repo} is:issue is:open label:"{stage}" sort:created-asc'
         data = _gh_api("search/issues", fields={"q": q, "per_page": 10})
         items = data.get("items") or []

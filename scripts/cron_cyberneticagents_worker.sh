@@ -53,6 +53,23 @@ while [[ $process_count -lt $max_process ]]; do
 
   PICKED_FROM_STAGE="$(printf '%s' "$PICK_JSON" | "$PYTHON" -c 'import json,sys; print(json.loads(sys.stdin.read())["picked_from_stage"])')"
 
+  if [[ "$PICKED_FROM_STAGE" == "$STAGE_BACKLOG" ]]; then
+    # Ask clarification questions and stop.
+    "$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" set-status --issue "$ISSUE_NUMBER" --status "$STAGE_NEEDS_CLARIFICATION"
+
+    gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments" -f body="stage:needs-clarification
+
+Please answer:
+1) Expected outcome
+2) Acceptance criteria
+3) Constraints (if any)
+4) How to test
+
+When done, set label to stage:ready-to-implement." >/dev/null
+
+    exit 0
+  fi
+
   if [[ "$PICKED_FROM_STAGE" == "$STAGE_READY_TO_IMPLEMENT" ]]; then
     "$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" set-status --issue "$ISSUE_NUMBER" --status "$STAGE_IN_PROGRESS"
   fi
