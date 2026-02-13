@@ -97,8 +97,16 @@ while [[ $process_count -lt $max_process ]]; do
       --option-id "$IN_PROGRESS_OPTION_ID" \
       --quiet
 
-    # Best-effort drain (may skip if rate limit is low)
-    "$PYTHON" ./scripts/github_outbox.py drain --quiet || true
+    # Drain the status update if possible. If GitHub is throttling, skip this run
+    # rather than claiming a status change that never happened.
+    DRAIN_OUT="$("$PYTHON" ./scripts/github_outbox.py drain --min-remaining 50 --max-ops 10 2>&1)" || {
+      echo "$DRAIN_OUT" >&2
+      exit 1
+    }
+    if echo "$DRAIN_OUT" | grep -q '^SKIP '; then
+      echo "$DRAIN_OUT" >&2
+      exit 0
+    fi
   fi
 
   # Baseline sync
@@ -154,7 +162,21 @@ while [[ $process_count -lt $max_process ]]; do
       --option-id "$BLOCKED_OPTION_ID" \
       --quiet
 
-    "$PYTHON" ./scripts/github_outbox.py drain --quiet || true
+    DRAIN_OUT="$("$PYTHON" ./scripts/github_outbox.py drain --min-remaining 50 --max-ops 10 2>&1)" || {
+      echo "$DRAIN_OUT" >&2
+      exit 1
+    }
+    if echo "$DRAIN_OUT" | grep -q '^SKIP '; then
+      echo "$DRAIN_OUT" >&2
+      exit 0
+    fi
+
+    # Avoid duplicate comments if the item keeps getting re-picked.
+    LAST_BODY="$(gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments?per_page=1" --jq '.[0].body' 2>/dev/null || true)"
+    if echo "$LAST_BODY" | grep -q '^Moved to Blocked via automation:'; then
+      process_count=$((process_count + 1))
+      continue
+    fi
 
     gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "Moved to Blocked via automation: no code changes were produced.
 
@@ -178,7 +200,14 @@ Please add:
     --option-id "$IN_REVIEW_OPTION_ID" \
     --quiet
 
-  "$PYTHON" ./scripts/github_outbox.py drain --quiet || true
+  DRAIN_OUT="$("$PYTHON" ./scripts/github_outbox.py drain --min-remaining 50 --max-ops 10 2>&1)" || {
+    echo "$DRAIN_OUT" >&2
+    exit 1
+  }
+  if echo "$DRAIN_OUT" | grep -q '^SKIP '; then
+    echo "$DRAIN_OUT" >&2
+    exit 0
+  fi
 
   RECENT_SHAS="$(git log --format=%H -n 5)"
   gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "Moved to In review via nightly automation.
