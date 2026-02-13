@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import argparse
 from datetime import datetime
-import inspect
 import json
 import os
 from pathlib import Path
@@ -19,10 +18,7 @@ from src.cyberagent.cli.onboarding_bootstrap import (
     seed_root_team_envelope_from_defaults as _seed_root_team_envelope_from_defaults,
     trigger_onboarding_initiative,
 )
-from src.cyberagent.cli.onboarding_constants import (
-    DEFAULT_GIT_TOKEN_ENV,
-    DEFAULT_NOTION_TOKEN_ENV,
-)
+from src.cyberagent.cli.onboarding_constants import DEFAULT_GIT_TOKEN_ENV
 from src.cyberagent.cli.onboarding_defaults import (
     get_auto_execute_procedure,
     get_default_strategy_name,
@@ -48,6 +44,7 @@ from src.cyberagent.cli.onboarding_output import (
     apply_onboarding_output as _apply_onboarding_output,
     build_onboarding_prompt,
 )
+from src.cyberagent.cli import onboarding_contextual_secrets as technical_context
 from src.cyberagent.cli.onboarding_routing import (
     seed_default_routing_rules,
     seed_procedure_routing_rules,
@@ -101,22 +98,14 @@ FEATURE_READY_MESSAGE_KEYS = {
     "MISTRAL_API_KEY": "feature_ai_ready",
     "TELEGRAM_BOT_TOKEN": "feature_telegram",
 }
-CONDITIONAL_ONBOARDING_SECRETS = {
-    DEFAULT_NOTION_TOKEN_ENV: {"notion"},
-}
 ENV_ROOT_KEY = "CYBERAGENT_ROOT"
 
 _run_discovery_onboarding = run_discovery_onboarding
 _start_discovery_background = start_discovery_background
 
 
-def _resolve_runtime_db_url() -> str:
-    return _resolve_runtime_db_url_impl(DATABASE_URL, get_database_path())
-
-
-def _load_runtime_pid() -> int | None:
-    return _load_runtime_pid_impl(RUNTIME_PID_FILE)
-
+_resolve_runtime_db_url = lambda: _resolve_runtime_db_url_impl(DATABASE_URL, get_database_path())
+_load_runtime_pid = lambda: _load_runtime_pid_impl(RUNTIME_PID_FILE)
 
 _build_onboarding_prompt = build_onboarding_prompt
 
@@ -190,8 +179,11 @@ def handle_onboarding(
     if not _validate_onboarding_inputs(args):
         return 1
 
-    pkm_source = _normalize_pkm_source(getattr(args, "pkm_source", None))
-    if not _run_technical_onboarding_checks_with_context(pkm_source=pkm_source):
+    pkm_source = technical_context.normalize_pkm_source(getattr(args, "pkm_source", None))
+    if not technical_context.run_technical_checks_with_context(
+        run_technical_onboarding_checks,
+        pkm_source=pkm_source,
+    ):
         print(get_message("onboarding", "technical_checks_failed"))
         return 1
 
@@ -333,22 +325,8 @@ def _start_runtime_after_onboarding(team_id: int) -> int | None:
     return proc.pid
 
 
-def _normalize_pkm_source(value: object) -> str | None:
-    if value is None:
-        return None
-    normalized = str(value).strip().lower()
-    return normalized or None
-
-
-def _run_technical_onboarding_checks_with_context(*, pkm_source: str | None) -> bool:
-    params = inspect.signature(run_technical_onboarding_checks).parameters
-    if "pkm_source" in params:
-        return run_technical_onboarding_checks(pkm_source=pkm_source)
-    return run_technical_onboarding_checks()
-
-
 def run_technical_onboarding_checks(*, pkm_source: str | None = None) -> bool:
-    normalized_pkm_source = _normalize_pkm_source(pkm_source)
+    normalized_pkm_source = technical_context.normalize_pkm_source(pkm_source)
     state = _collect_technical_onboarding_state(pkm_source=normalized_pkm_source)
     cached = _load_technical_onboarding_state()
     if cached and cached.get("state") == state and cached.get("ok") is True:
@@ -383,9 +361,7 @@ def run_technical_onboarding_checks(*, pkm_source: str | None = None) -> bool:
     return True
 
 
-def _collect_technical_onboarding_state(
-    *, pkm_source: str | None = None
-) -> dict[str, object]:
+def _collect_technical_onboarding_state(*, pkm_source: str | None = None) -> dict[str, object]:
     llm_provider = os.environ.get("LLM_PROVIDER", "groq").lower()
     return {
         "llm_provider": llm_provider,
@@ -557,12 +533,8 @@ def _check_llm_credentials() -> bool:
     return True
 
 
-def _has_onepassword_auth() -> bool:
-    return has_onepassword_auth()
-
-
-def _get_onepassword_session_env() -> str | None:
-    return get_onepassword_session_env()
+_has_onepassword_auth = has_onepassword_auth
+_get_onepassword_session_env = get_onepassword_session_env
 
 
 def _check_onepassword_auth() -> bool:
@@ -573,22 +545,15 @@ def _check_onepassword_auth() -> bool:
     return False
 
 
-def _should_require_tool_secret(env_name: str, pkm_source: str | None) -> bool:
-    required_for_pkm = CONDITIONAL_ONBOARDING_SECRETS.get(env_name)
-    if required_for_pkm is None:
-        return True
-    return pkm_source in required_for_pkm
-
-
 def _check_required_tool_secrets(*, pkm_source: str | None = None) -> bool:
-    normalized_pkm_source = _normalize_pkm_source(pkm_source)
+    normalized_pkm_source = technical_context.normalize_pkm_source(pkm_source)
     skills = load_skill_definitions(DEFAULT_SKILLS_ROOT)
     required_env = sorted(
         {
             env
             for skill in skills
             for env in skill.required_env
-            if env and _should_require_tool_secret(env, normalized_pkm_source)
+            if env and technical_context.should_require_tool_secret(env, normalized_pkm_source)
         }
     )
     if not required_env:
@@ -597,7 +562,7 @@ def _check_required_tool_secrets(*, pkm_source: str | None = None) -> bool:
     required_by_env: dict[str, list[str]] = {}
     for skill in skills:
         for env in skill.required_env:
-            if not _should_require_tool_secret(env, normalized_pkm_source):
+            if not technical_context.should_require_tool_secret(env, normalized_pkm_source):
                 continue
             required_by_env.setdefault(env, []).append(skill.name)
 
