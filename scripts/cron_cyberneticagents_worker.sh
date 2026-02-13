@@ -6,6 +6,12 @@ cd "$REPO_ROOT"
 
 export PATH="/home/node/.local/bin:$PATH"
 
+PYTHON="$REPO_ROOT/.venv/bin/python"
+if [[ ! -x "$PYTHON" ]]; then
+  # Ensure the repo virtualenv exists (nightly script uses uv to build it).
+  bash ./scripts/nightly-cyberneticagents.sh
+fi
+
 # Auth (non-interactive)
 if [[ -z "${GH_TOKEN:-}" ]]; then
   export GH_TOKEN="$(op item get 'GitHub Personal Access Token' --vault OpenClaw --fields token --reveal 2>/dev/null || true)"
@@ -63,7 +69,7 @@ while [[ $process_count -lt $max_process ]]; do
 
   # Status transitions (enqueue + drain to reduce GraphQL churn)
   if [[ "$PICK_STATUS" == "Ready" ]]; then
-    python3 ./scripts/github_outbox.py enqueue-status \
+    "$PYTHON" ./scripts/github_outbox.py enqueue-status \
       --project-id "$PROJECT_ID" \
       --item-id "$PICK_ID" \
       --field-id "$STATUS_FIELD_ID" \
@@ -71,7 +77,7 @@ while [[ $process_count -lt $max_process ]]; do
       --quiet
 
     # Best-effort drain (may skip if rate limit is low)
-    python3 ./scripts/github_outbox.py drain --quiet || true
+    "$PYTHON" ./scripts/github_outbox.py drain --quiet || true
   fi
 
   # Baseline sync
@@ -84,14 +90,14 @@ while [[ $process_count -lt $max_process ]]; do
 
   if [[ -z "$ISSUE_NUMBER" ]]; then
     # Blocked: no attached issue
-    python3 ./scripts/github_outbox.py enqueue-status \
+    "$PYTHON" ./scripts/github_outbox.py enqueue-status \
       --project-id "$PROJECT_ID" \
       --item-id "$PICK_ID" \
       --field-id "$STATUS_FIELD_ID" \
       --option-id "$BACKLOG_OPTION_ID" \
       --quiet
 
-    python3 ./scripts/github_outbox.py drain --quiet || true
+    "$PYTHON" ./scripts/github_outbox.py drain --quiet || true
 
     echo "BLOCKED: Project item has no linked issue. Moved to Backlog: $TITLE" >&2
     exit 2
@@ -120,14 +126,14 @@ while [[ $process_count -lt $max_process ]]; do
   # Guardrail: do NOT move to In review when no code changes were produced.
   # This was causing churn (tickets land in In review with nothing to review).
   if [[ "$AHEAD_COUNT" -eq 0 ]]; then
-    python3 ./scripts/github_outbox.py enqueue-status \
+    "$PYTHON" ./scripts/github_outbox.py enqueue-status \
       --project-id "$PROJECT_ID" \
       --item-id "$PICK_ID" \
       --field-id "$STATUS_FIELD_ID" \
       --option-id "$BLOCKED_OPTION_ID" \
       --quiet
 
-    python3 ./scripts/github_outbox.py drain --quiet || true
+    "$PYTHON" ./scripts/github_outbox.py drain --quiet || true
 
     gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "Moved to Blocked via automation: no code changes were produced.
 
@@ -144,14 +150,14 @@ Please add:
     continue
   fi
 
-  python3 ./scripts/github_outbox.py enqueue-status \
+  "$PYTHON" ./scripts/github_outbox.py enqueue-status \
     --project-id "$PROJECT_ID" \
     --item-id "$PICK_ID" \
     --field-id "$STATUS_FIELD_ID" \
     --option-id "$IN_REVIEW_OPTION_ID" \
     --quiet
 
-  python3 ./scripts/github_outbox.py drain --quiet || true
+  "$PYTHON" ./scripts/github_outbox.py drain --quiet || true
 
   RECENT_SHAS="$(git log --format=%H -n 5)"
   gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "Moved to In review via nightly automation.

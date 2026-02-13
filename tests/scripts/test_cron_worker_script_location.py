@@ -16,3 +16,5 @@ def test_cron_worker_cd_is_repo_root() -> None:
 
     assert "cd /root/.openclaw/workspace" not in text
     assert "BASH_SOURCE" in text
+    assert "$REPO_ROOT/.venv/bin/python" in text
+    assert '"$PYTHON" ./scripts/github_outbox.py' in text
