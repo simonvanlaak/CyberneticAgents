@@ -38,7 +38,8 @@ STAGE_IN_REVIEW="stage:in-review"
 STAGE_BLOCKED="stage:blocked"
 
 process_count=0
-max_process=3
+# Allow a burst of clarification moves (fast) and/or implementation picks.
+max_process=25
 
 while [[ $process_count -lt $max_process ]]; do
   PICK_JSON="$("$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" --owner-login "simonvanlaak" pick-next 2>/dev/null || true)"
@@ -54,7 +55,7 @@ while [[ $process_count -lt $max_process ]]; do
   PICKED_FROM_STAGE="$(printf '%s' "$PICK_JSON" | "$PYTHON" -c 'import json,sys; print(json.loads(sys.stdin.read())["picked_from_stage"])')"
 
   if [[ "$PICKED_FROM_STAGE" == "$STAGE_BACKLOG" ]]; then
-    # Ask clarification questions and stop.
+    # Ask clarification questions (priority) and continue bursting through backlog.
     "$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" set-status --issue "$ISSUE_NUMBER" --status "$STAGE_NEEDS_CLARIFICATION"
 
     gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments" -f body="stage:needs-clarification
@@ -67,7 +68,8 @@ Please answer:
 
 When done, set label to stage:ready-to-implement." >/dev/null
 
-    exit 0
+    process_count=$((process_count + 1))
+    continue
   fi
 
   if [[ "$PICKED_FROM_STAGE" == "$STAGE_READY_TO_IMPLEMENT" ]]; then

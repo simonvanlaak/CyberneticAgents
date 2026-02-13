@@ -95,13 +95,15 @@ def _has_any_issue_with_label(*, repo: str, label: str) -> bool:
 def _pick_next_issue(*, repo: str, owner_login: str) -> dict[str, Any] | None:
     """Pick next unit of work.
 
-    Burst policy:
-    - Always work on existing stage:in-progress first.
-    - Else work on stage:ready-to-implement (owner-authorized).
-    - Else, ONLY start a new clarification loop (stage:backlog -> stage:needs-clarification)
-      when there are *no* open stage:needs-clarification issues.
+    Priority policy (burst):
+    1) stage:in-progress
+    2) stage:backlog  -> move to stage:needs-clarification and ask questions
+    3) stage:ready-to-implement (owner-authorized) -> implementation
 
-    This prevents spamming clarification prompts every cron tick.
+    Rationale:
+    - Clarification is time-sensitive (human is active) and should be prioritized over
+      starting new implementations.
+    - Implementations can run later (e.g. overnight).
     """
 
     # 1) In progress
@@ -115,19 +117,7 @@ def _pick_next_issue(*, repo: str, owner_login: str) -> dict[str, Any] | None:
             "picked_from_stage": STAGE_IN_PROGRESS,
         }
 
-    # 2) Ready to implement (authorized)
-    q = f'repo:{repo} is:issue is:open label:"{STAGE_READY_TO_IMPLEMENT}" sort:created-asc'
-    data = _gh_api("search/issues", fields={"q": q, "per_page": 10})
-    for it in (data.get("items") or []):
-        n = int(it["number"])
-        if not _is_ready_to_implement_authorized(repo=repo, issue_number=n, owner_login=owner_login):
-            continue
-        return {"number": n, "title": it["title"], "picked_from_stage": STAGE_READY_TO_IMPLEMENT}
-
-    # 3) Only create a new clarification request if none are currently waiting.
-    if _has_any_issue_with_label(repo=repo, label=STAGE_NEEDS_CLARIFICATION):
-        return None
-
+    # 2) Backlog -> needs clarification
     q = f'repo:{repo} is:issue is:open label:"{STAGE_BACKLOG}" sort:created-asc'
     data = _gh_api("search/issues", fields={"q": q, "per_page": 1})
     items = data.get("items") or []
@@ -137,6 +127,15 @@ def _pick_next_issue(*, repo: str, owner_login: str) -> dict[str, Any] | None:
             "title": items[0]["title"],
             "picked_from_stage": STAGE_BACKLOG,
         }
+
+    # 3) Ready to implement (authorized)
+    q = f'repo:{repo} is:issue is:open label:"{STAGE_READY_TO_IMPLEMENT}" sort:created-asc'
+    data = _gh_api("search/issues", fields={"q": q, "per_page": 10})
+    for it in (data.get("items") or []):
+        n = int(it["number"])
+        if not _is_ready_to_implement_authorized(repo=repo, issue_number=n, owner_login=owner_login):
+            continue
+        return {"number": n, "title": it["title"], "picked_from_stage": STAGE_READY_TO_IMPLEMENT}
 
     return None
 
