@@ -8,8 +8,8 @@ import time
 from typing import Protocol
 
 from autogen_core import AgentId, CancellationToken
-from src.agents.messages import InitiativeAssignMessage, TaskReviewMessage, UserMessage
-from src.agents.user_agent import UserAgent
+from src.cyberagent.agents.messages import InitiativeAssignMessage, TaskReviewMessage, UserMessage
+from src.cyberagent.agents.user_agent import UserAgent
 from src.cli_session import forward_user_messages, read_stdin_loop
 from src.cyberagent.channels.inbox import DEFAULT_CHANNEL, DEFAULT_SESSION_ID
 from src.cyberagent.channels.telegram.poller import TelegramPoller
@@ -31,7 +31,7 @@ from src.cyberagent.cli.processed_message_journal import (
 from src.cyberagent.db.init_db import init_db
 from src.cyberagent.core.state import get_last_team_id
 from src.cyberagent.core.logging import configure_autogen_logging
-from src.registry import register_systems
+from src.cyberagent.agents.registry import register_systems
 from src.cyberagent.core.runtime import (
     get_runtime,
     start_cli_executor,

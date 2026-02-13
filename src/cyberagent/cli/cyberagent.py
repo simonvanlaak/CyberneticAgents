@@ -28,7 +28,7 @@ except ImportError:
     KEYRING_AVAILABLE = False
 from autogen_core import AgentId
 
-from src.agents.messages import UserMessage
+from src.cyberagent.agents.messages import UserMessage
 from src.cli_session import list_inbox_entries
 from src.cyberagent.channels.telegram.parser import build_session_id
 from src.cyberagent.cli import dev as dev_cli
@@ -76,7 +76,7 @@ from src.cyberagent.tools.cli_executor.skill_loader import (
     load_skill_definitions,
 )
 from src.cyberagent.tools.cli_executor.skill_runtime import DEFAULT_SKILLS_ROOT
-from src.registry import register_systems
+from src.cyberagent.agents.registry import register_systems
 
 SYSTEM4_AGENT_ID = AgentId(type="System4", key="root")
 LOGS_DIR = get_logs_dir()

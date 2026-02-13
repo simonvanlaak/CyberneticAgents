@@ -8,7 +8,7 @@ from typing import Any, Awaitable, Callable
 
 from autogen_core import AgentId
 
-from src.agents.messages import UserMessage
+from src.cyberagent.agents.messages import UserMessage
 from src.cyberagent.cli.message_catalog import get_message
 
 

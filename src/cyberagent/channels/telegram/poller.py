@@ -9,7 +9,7 @@ from typing import Protocol
 
 from autogen_core import AgentId, CancellationToken
 
-from src.agents.messages import UserMessage
+from src.cyberagent.agents.messages import UserMessage
 from src.cyberagent.channels.inbox import add_inbox_entry
 from src.cyberagent.stt.postprocess import format_timestamped_text
 from src.cyberagent.channels.telegram.client import TelegramClient
