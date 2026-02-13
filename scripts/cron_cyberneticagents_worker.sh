@@ -76,14 +76,30 @@ while [[ $process_count -lt $max_process ]]; do
   # Re-run quality gate after any modifications
   bash ./scripts/quality_gate.sh
 
-  # If we changed files, commit them.
+  # Commit/push policy:
+  # - We want frequent, atomic commits while working an issue.
+  # - Therefore, this worker should NOT auto-commit "git add -A" as a single lump.
+  # - Instead, the issue-specific automation (./scripts/auto-fix-issue.sh) must create
+  #   atomic commits as it makes changes.
+  # - If there are uncommitted changes at this point, block the issue and ask for
+  #   proper commit scoping.
   if ! git diff --quiet; then
-    git add -A
-    # Link commit to issue number; allow no-op if another commit happened.
-    git commit -m "chore: nightly auto-fix for issue #$ISSUE_NUMBER (#$ISSUE_NUMBER)" || true
+    "$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" set-status --issue "$ISSUE_NUMBER" --status "$STATUS_BLOCKED"
+
+    gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments" -f body="Blocked by automation: working tree has uncommitted changes.
+
+Please commit changes as small, atomic commits linked to #$ISSUE_NUMBER (per AGENTS.md), then re-label this issue as status:ready.
+
+Validation run so far:
+- bash ./scripts/quality_gate.sh" >/dev/null
+
+    process_count=$((process_count + 1))
+    continue
   fi
 
   AHEAD_COUNT="$(git rev-list --count origin/main..HEAD)"
+
+  # Always push at the end of working an issue *when there are commits*.
   if [[ "$AHEAD_COUNT" -gt 0 ]]; then
     git push origin main
   fi
