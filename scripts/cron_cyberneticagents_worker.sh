@@ -58,15 +58,18 @@ while [[ $process_count -lt $max_process ]]; do
     # Ask clarification questions (priority) and continue bursting through backlog.
     "$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" set-status --issue "$ISSUE_NUMBER" --status "$STAGE_NEEDS_CLARIFICATION"
 
-    gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments" -f body="stage:needs-clarification
+    ISSUE_JSON="$(gh api "repos/$REPO/issues/$ISSUE_NUMBER" --jq '{title:(.title//""), body:(.body//"")}' 2>/dev/null || echo '{}')"
+    ISSUE_TITLE="$(printf '%s' "$ISSUE_JSON" | "$PYTHON" -c 'import json,sys; print(json.loads(sys.stdin.read()).get("title", ""))')"
+    ISSUE_BODY="$(printf '%s' "$ISSUE_JSON" | "$PYTHON" -c 'import json,sys; print(json.loads(sys.stdin.read()).get("body", ""))')"
 
-Please answer:
-1) Expected outcome
-2) Acceptance criteria
-3) Constraints (if any)
-4) How to test
+    PROMPT_BODY="$("$PYTHON" -c 'from src.clarification_questions import build_clarification_prompt; import sys; print(build_clarification_prompt(sys.argv[1], sys.argv[2]).body)' "$ISSUE_TITLE" "$ISSUE_BODY")"
 
-When done, set label to stage:ready-to-implement." >/dev/null
+    # Avoid duplicate prompt spam.
+    LAST_BODY="$(gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments?per_page=1" --jq '.[0].body // ""' 2>/dev/null || true)"
+    SHOULD_POST="$("$PYTHON" -c 'from src.clarification_questions import should_post_prompt; import sys; print("1" if should_post_prompt([sys.argv[1]], sys.argv[2]) else "0")' "$LAST_BODY" "$PROMPT_BODY")"
+    if [[ "$SHOULD_POST" == "1" ]]; then
+      gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments" -f body="$PROMPT_BODY" >/dev/null
+    fi
 
     process_count=$((process_count + 1))
     continue
