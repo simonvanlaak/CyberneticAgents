@@ -3,62 +3,57 @@ from __future__ import annotations
 import argparse
 from datetime import datetime
 import json
-import shutil
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import urllib.request
-from sqlalchemy.exc import SQLAlchemyError
 
-from src.cyberagent.cli.agent_message_queue import enqueue_agent_message
-from src.cyberagent.db.db_utils import get_db
-from src.cyberagent.db.init_db import (
-    DATABASE_URL,
-    get_database_path,
-    init_db,
-    recover_sqlite_database,
+from src.cyberagent.cli.message_catalog import get_message
+from src.cyberagent.cli.onboarding_bootstrap import (
+    ensure_team_systems as _ensure_team_systems,
+    seed_default_procedures as _seed_default_procedures,
+    seed_default_team_envelope as _seed_default_team_envelope,
+    seed_root_team_envelope_from_defaults as _seed_root_team_envelope_from_defaults,
+    trigger_onboarding_initiative,
 )
-from src.cyberagent.db.models.procedure import Procedure
-from src.cyberagent.db.models.procedure_run import ProcedureRun
-from src.cyberagent.db.models.strategy import Strategy
-from src.cyberagent.db.models.system import System
-from src.cyberagent.db.models.system import ensure_default_systems_for_team
-from src.cyberagent.db.models.system import get_system_by_type
-from src.cyberagent.db.models.team import Team
-from src.cyberagent.services import procedures as procedures_service
-from src.cyberagent.services import purposes as purposes_service
-from src.cyberagent.cli.onboarding_routing import (
-    seed_default_routing_rules,
-    seed_procedure_routing_rules,
+from src.cyberagent.cli.onboarding_constants import DEFAULT_GIT_TOKEN_ENV
+from src.cyberagent.cli.onboarding_defaults import (
+    get_auto_execute_procedure,
+    get_default_strategy_name,
+    get_default_team_name,
+    load_procedure_defaults,
+    load_root_team_defaults,
 )
-from src.cyberagent.services import strategies as strategies_service
-from src.cyberagent.services import systems as systems_service
-from src.cyberagent.services import teams as teams_service
-from src.cyberagent.tools.cli_executor.skill_loader import (
-    SkillDefinition,
-    load_skill_definitions,
+from src.cyberagent.cli.onboarding_discovery import (
+    run_discovery_onboarding,
+    start_discovery_background,
 )
 from src.cyberagent.cli.onboarding_docker import (
     check_cli_tools_image_available,
     check_docker_available,
     check_docker_socket_access,
 )
-from src.cyberagent.tools.cli_executor.skill_runtime import DEFAULT_SKILLS_ROOT
-from src.cyberagent.cli.onboarding_defaults import (
-    get_auto_execute_procedure,
-    get_default_purpose_name,
-    get_default_strategy_name,
-    get_default_team_name,
-    load_procedure_defaults,
-    load_root_team_defaults,
-)
-from src.cyberagent.cli.onboarding_discovery import run_discovery_onboarding
-from src.cyberagent.cli.onboarding_discovery import start_discovery_background
 from src.cyberagent.cli.onboarding_interview import start_onboarding_interview
-from src.cyberagent.cli.onboarding_prompts import _prompt_for_missing_inputs
-from src.cyberagent.cli.message_catalog import get_message
-from src.cyberagent.cli.onboarding_constants import DEFAULT_GIT_TOKEN_ENV
+from src.cyberagent.cli.onboarding_optional import (
+    _offer_optional_telegram_setup,
+    _warn_optional_api_keys,
+)
+from src.cyberagent.cli.onboarding_output import (
+    apply_onboarding_output as _apply_onboarding_output,
+    build_onboarding_prompt,
+)
+from src.cyberagent.cli.onboarding_routing import (
+    seed_default_routing_rules,
+    seed_procedure_routing_rules,
+)
+from src.cyberagent.cli.onboarding_runtime import (
+    load_runtime_pid as _load_runtime_pid_impl,
+    pid_is_running as _pid_is_running,
+    resolve_runtime_db_url as _resolve_runtime_db_url_impl,
+    start_dashboard_after_onboarding as _start_dashboard_after_onboarding,
+)
 from src.cyberagent.cli.onboarding_secrets import (
     VAULT_NAME,
     _parse_env_value,
@@ -67,17 +62,26 @@ from src.cyberagent.cli.onboarding_secrets import (
     load_secret_from_1password,
     load_secret_from_1password_with_error,
 )
-from src.cyberagent.secrets import get_secret
-from src.cyberagent.cli.onboarding_optional import (
-    _offer_optional_telegram_setup,
-    _warn_optional_api_keys,
+from src.cyberagent.cli.onboarding_validation import (
+    validate_onboarding_inputs as _validate_onboarding_inputs,
 )
 from src.cyberagent.cli.onboarding_vault import prompt_store_secret_in_1password
-from src.cyberagent.cli import dashboard_launcher
 from src.cyberagent.cli.runtime_start_health import process_exited_during_startup
-from src.cyberagent.core.paths import get_repo_root, get_logs_dir, get_data_dir
-from src.enums import SystemType
-from src.rbac.enforcer import give_user_tool_permission
+from src.cyberagent.core.paths import get_data_dir, get_logs_dir, get_repo_root
+from src.cyberagent.db.db_utils import get_db
+from src.cyberagent.db.init_db import (
+    DATABASE_URL,
+    get_database_path,
+    init_db,
+    recover_sqlite_database,
+)
+from src.cyberagent.db.models.team import Team
+from src.cyberagent.secrets import get_secret
+from src.cyberagent.tools.cli_executor.skill_loader import (
+    SkillDefinition,
+    load_skill_definitions,
+)
+from src.cyberagent.tools.cli_executor.skill_runtime import DEFAULT_SKILLS_ROOT
 
 LOGS_DIR = get_logs_dir()
 TECH_ONBOARDING_STATE_FILE = LOGS_DIR / "technical_onboarding.json"
@@ -94,6 +98,41 @@ FEATURE_READY_MESSAGE_KEYS = {
     "TELEGRAM_BOT_TOKEN": "feature_telegram",
 }
 ENV_ROOT_KEY = "CYBERAGENT_ROOT"
+
+_run_discovery_onboarding = run_discovery_onboarding
+_start_discovery_background = start_discovery_background
+
+
+def _resolve_runtime_db_url() -> str:
+    return _resolve_runtime_db_url_impl(DATABASE_URL, get_database_path())
+
+
+def _load_runtime_pid() -> int | None:
+    return _load_runtime_pid_impl(RUNTIME_PID_FILE)
+
+
+_build_onboarding_prompt = build_onboarding_prompt
+
+
+def _print_db_write_error(context: str, exc: Exception) -> None:
+    db_path = get_database_path()
+    message = str(exc).lower()
+    hint = get_message("onboarding", "db_write_hint_default")
+    if "disk i/o" in message:
+        backup_path = recover_sqlite_database()
+        if backup_path is not None:
+            print(
+                get_message("onboarding", "db_recovered_hint", backup_path=backup_path)
+            )
+        hint = get_message("onboarding", "db_write_hint_disk_io")
+    location = "in-memory database" if db_path == ":memory:" else db_path
+    print(
+        get_message("onboarding", "db_write_failed", context=context, location=location)
+    )
+    print(get_message("onboarding", "db_write_hint", hint=hint))
+
+
+_trigger_onboarding_initiative = trigger_onboarding_initiative
 
 
 def _repo_root() -> Path | None:
@@ -149,9 +188,8 @@ def handle_onboarding(
     procedures = load_procedure_defaults()
     team_defaults = load_root_team_defaults()
     team_name = get_default_team_name(team_defaults)
-    purpose_name = get_default_purpose_name(team_defaults)
     strategy_name = get_default_strategy_name(team_defaults)
-    auto_execute = get_auto_execute_procedure(team_defaults, procedures)
+    get_auto_execute_procedure(team_defaults, procedures)
     init_db()
     session = next(get_db())
     try:
@@ -243,33 +281,6 @@ def handle_onboarding(
     return 0
 
 
-def _validate_onboarding_inputs(args: argparse.Namespace) -> bool:
-    pkm_source = getattr(args, "pkm_source", None)
-    repo_url = getattr(args, "repo_url", None)
-    if (
-        not pkm_source
-        and repo_url
-        and not sys.stdin.isatty()
-        and not sys.stdout.isatty()
-    ):
-        setattr(args, "pkm_source", "github")
-    if not _prompt_for_missing_inputs(args):
-        return False
-    user_name = getattr(args, "user_name", None)
-    pkm_source = getattr(args, "pkm_source", None)
-    repo_url = getattr(args, "repo_url", None)
-    if not user_name:
-        print(get_message("onboarding", "onboarding_needs_name"))
-        return False
-    if not pkm_source:
-        print(get_message("onboarding", "onboarding_needs_pkm"))
-        return False
-    if pkm_source == "github" and not repo_url:
-        print(get_message("onboarding", "onboarding_needs_repo"))
-        return False
-    return True
-
-
 def _start_runtime_after_onboarding(team_id: int) -> int | None:
     if os.environ.get("CYBERAGENT_TEST_NO_RUNTIME") == "1":
         return None
@@ -310,385 +321,6 @@ def _start_runtime_after_onboarding(team_id: int) -> int | None:
     RUNTIME_PID_FILE.write_text(str(proc.pid), encoding="utf-8")
     print(get_message("onboarding", "runtime_starting", pid=proc.pid))
     return proc.pid
-
-
-def _start_dashboard_after_onboarding(team_id: int) -> int | None:
-    # Skip dashboard launch in non-interactive environments.
-    if not sys.stdin.isatty() and not sys.stdout.isatty():
-        return None
-    dashboard_python = dashboard_launcher.resolve_dashboard_python()
-    if dashboard_python is None:
-        return None
-    dashboard_path = Path(__file__).resolve().parents[1] / "ui" / "dashboard.py"
-    cmd = [dashboard_python, "-m", "streamlit", "run", str(dashboard_path)]
-    env = os.environ.copy()
-    env["CYBERAGENT_ACTIVE_TEAM_ID"] = str(team_id)
-    proc = subprocess.Popen(
-        cmd,
-        env=env,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.STDOUT,
-        close_fds=True,
-    )
-    print(get_message("onboarding", "dashboard_starting", pid=proc.pid))
-    return proc.pid
-
-
-def _resolve_runtime_db_url() -> str:
-    url = DATABASE_URL
-    if not url.startswith("sqlite:///"):
-        return url
-    db_path = Path(get_database_path())
-    if not db_path.is_absolute():
-        db_path = (Path.cwd() / db_path).resolve()
-    return f"sqlite:///{db_path}"
-
-
-def _seed_default_procedures(team_id: int, procedures: list[dict[str, object]]) -> None:
-    ensure_default_systems_for_team(team_id)
-    system4 = get_system_by_type(team_id, SystemType.INTELLIGENCE)
-    system5 = get_system_by_type(team_id, SystemType.POLICY)
-
-    session = next(get_db())
-    try:
-        existing_names = {
-            procedure.name
-            for procedure in session.query(Procedure)
-            .filter(Procedure.team_id == team_id)
-            .all()
-        }
-    finally:
-        session.close()
-
-    for template in procedures:
-        name = template.get("name")
-        if not isinstance(name, str):
-            continue
-        if name in existing_names:
-            continue
-        tasks = template.get("tasks")
-        if not isinstance(tasks, list):
-            tasks = []
-        procedure = procedures_service.create_procedure_draft(
-            team_id=team_id,
-            name=name,
-            description=str(template.get("description", "")),
-            risk_level=str(template.get("risk_level", "")),
-            impact=str(template.get("impact", "")),
-            rollback_plan=str(template.get("rollback_plan", "")),
-            created_by_system_id=system4.id,
-            tasks=tasks,
-        )
-        procedures_service.approve_procedure(
-            procedure_id=procedure.id, approved_by_system_id=system5.id
-        )
-
-
-def _seed_default_team_envelope(team_id: int, team_defaults: dict[str, object]) -> None:
-    allowed = team_defaults.get("allowed_skills")
-    if not isinstance(allowed, list):
-        return
-    skill_names = [skill for skill in allowed if isinstance(skill, str)]
-    teams_service.set_allowed_skills(team_id, skill_names, actor_id="onboarding")
-
-
-def _seed_root_team_envelope_from_defaults(team_defaults: dict[str, object]) -> None:
-    team_name = get_default_team_name(team_defaults)
-    allowed = team_defaults.get("allowed_skills")
-    if not isinstance(allowed, list):
-        return
-    skill_names = [skill for skill in allowed if isinstance(skill, str)]
-    if not skill_names:
-        return
-    session = next(get_db())
-    try:
-        root_team = session.query(Team).filter(Team.name == team_name).first()
-    finally:
-        session.close()
-    if root_team is None:
-        return
-    teams_service.set_allowed_skills(root_team.id, skill_names, actor_id="onboarding")
-
-
-def _ensure_team_systems(team_id: int, team_defaults: dict[str, object]) -> None:
-    systems_block = team_defaults.get("systems")
-    if not isinstance(systems_block, list):
-        ensure_default_systems_for_team(team_id)
-        return
-    session = next(get_db())
-    try:
-        existing = {
-            system.type: system
-            for system in session.query(System).filter(System.team_id == team_id).all()
-        }
-        for entry in systems_block:
-            if not isinstance(entry, dict):
-                continue
-            type_value = entry.get("type")
-            name = entry.get("name")
-            agent_id = entry.get("agent_id")
-            if not isinstance(type_value, str):
-                continue
-            try:
-                system_type = SystemType[type_value]
-            except KeyError:
-                continue
-            if system_type in existing:
-                continue
-            if not isinstance(name, str) or not isinstance(agent_id, str):
-                continue
-            system = System(
-                team_id=team_id,
-                name=name,
-                type=system_type,
-                agent_id_str=agent_id,
-            )
-            session.add(system)
-            existing[system_type] = system
-        session.commit()
-    finally:
-        session.close()
-
-    for entry in systems_block:
-        if not isinstance(entry, dict):
-            continue
-        type_value = entry.get("type")
-        if not isinstance(type_value, str):
-            continue
-        try:
-            system_type = SystemType[type_value]
-        except KeyError:
-            continue
-        systems = (
-            systems_service.get_systems_by_type(team_id, system_type)
-            if system_type == SystemType.OPERATION
-            else [get_system_by_type(team_id, system_type)]
-        )
-        skill_grants = entry.get("skill_grants")
-        if not isinstance(skill_grants, list):
-            continue
-        for system in systems:
-            for skill_name in skill_grants:
-                if isinstance(skill_name, str):
-                    systems_service.add_skill_grant(
-                        system.id, skill_name, actor_id="onboarding"
-                    )
-                    if skill_name in NETWORK_SKILL_NAMES:
-                        give_user_tool_permission(system.agent_id_str, skill_name, "*")
-
-
-def _build_onboarding_prompt(summary_path: Path, summary_text: str) -> str:
-    from src.cyberagent.cli.onboarding_discovery import build_onboarding_prompt
-
-    return build_onboarding_prompt(summary_path=summary_path, summary_text=summary_text)
-
-
-_run_discovery_onboarding = run_discovery_onboarding
-_start_discovery_background = start_discovery_background
-
-
-def _apply_onboarding_output(
-    *,
-    team_id: int,
-    summary_path: Path | str,
-    onboarding_strategy_name: str,
-) -> None:
-    """Apply onboarding discovery output to root context.
-
-    Phase 1 stores onboarding output as free-form text (no strict schema). We:
-    - Persist it (handled inside discovery pipeline when team_id is provided)
-    - Apply it to the active System5 purpose (append-only)
-    - Apply it to the initial System4 strategy description
-    """
-
-    if isinstance(summary_path, str):
-        summary_path = Path(summary_path)
-
-    if not summary_path.exists():
-        return
-    try:
-        summary_text = summary_path.read_text(encoding="utf-8").strip()
-    except OSError:
-        return
-    if not summary_text:
-        return
-
-    # Update purpose (System5 root context). Keep any default purpose content and
-    # append the onboarding output for traceability.
-    purpose = purposes_service.get_or_create_default_purpose(team_id)
-    existing = (purpose.content or "").strip()
-    if summary_text in existing:
-        purpose_block = existing
-    elif not existing:
-        purpose_block = summary_text
-    else:
-        purpose_block = "\n\n".join(
-            [
-                existing,
-                "---",
-                "# Onboarding Output",
-                f"(Source: {summary_path})",
-                "",
-                summary_text,
-            ]
-        )
-    purpose.content = purpose_block
-    try:
-        purpose.update()
-    except SQLAlchemyError as exc:
-        _print_db_write_error("purpose", exc)
-        return
-
-    # Ensure an initial strategy exists and attach the onboarding output.
-    session = next(get_db())
-    try:
-        strategy = (
-            session.query(Strategy)
-            .filter(
-                Strategy.team_id == team_id,
-                Strategy.name == onboarding_strategy_name,
-            )
-            .first()
-        )
-        if strategy is None:
-            strategy = strategies_service.create_strategy(
-                team_id=team_id,
-                purpose_id=purpose.id,
-                name=onboarding_strategy_name,
-                description=summary_text,
-            )
-        else:
-            existing_desc = (strategy.description or "").strip()
-            if summary_text not in existing_desc:
-                strategy.description = (
-                    summary_text
-                    if not existing_desc
-                    else "\n\n".join(
-                        [
-                            existing_desc,
-                            "---",
-                            "# Onboarding Output",
-                            f"(Source: {summary_path})",
-                            "",
-                            summary_text,
-                        ]
-                    )
-                )
-                session.add(strategy)
-                session.commit()
-    except SQLAlchemyError as exc:
-        session.rollback()
-        _print_db_write_error("strategy", exc)
-    finally:
-        session.close()
-
-
-def _trigger_onboarding_initiative(
-    team_id: int,
-    onboarding_procedure_name: str,
-    onboarding_strategy_name: str,
-    onboarding_purpose_name: str,
-) -> bool:
-    """Deprecated for Phase 1 onboarding.
-
-    Keeping the implementation for later re-introduction, but Phase 1 explicitly
-    avoids creating System3 initiatives/tasks during onboarding.
-    """
-
-    ensure_default_systems_for_team(team_id)
-    session = next(get_db())
-    try:
-        procedure = (
-            session.query(Procedure)
-            .filter(
-                Procedure.team_id == team_id,
-                Procedure.name == onboarding_procedure_name,
-            )
-            .first()
-        )
-    finally:
-        session.close()
-    if procedure is None:
-        return True
-
-    purpose = purposes_service.get_or_create_default_purpose(team_id)
-    purpose.name = onboarding_purpose_name
-    purpose.content = procedure.description
-    try:
-        purpose.update()
-    except SQLAlchemyError as exc:
-        _print_db_write_error("purpose", exc)
-        return False
-
-    session = next(get_db())
-    try:
-        strategy = (
-            session.query(Strategy)
-            .filter(
-                Strategy.team_id == team_id,
-                Strategy.name == onboarding_strategy_name,
-            )
-            .first()
-        )
-    finally:
-        session.close()
-    if strategy is None:
-        try:
-            strategies_service.create_strategy(
-                team_id=team_id,
-                purpose_id=purpose.id,
-                name=onboarding_strategy_name,
-                description=procedure.description,
-            )
-        except SQLAlchemyError as exc:
-            _print_db_write_error("strategy", exc)
-            return False
-
-    return True
-
-
-def _print_db_write_error(context: str, exc: SQLAlchemyError) -> None:
-    db_path = get_database_path()
-    message = str(exc).lower()
-    hint = get_message("onboarding", "db_write_hint_default")
-    if "disk i/o" in message:
-        backup_path = recover_sqlite_database()
-        if backup_path is not None:
-            print(
-                get_message(
-                    "onboarding",
-                    "db_recovered_hint",
-                    backup_path=backup_path,
-                )
-            )
-        hint = get_message("onboarding", "db_write_hint_disk_io")
-    location = "in-memory database" if db_path == ":memory:" else db_path
-    print(
-        get_message(
-            "onboarding",
-            "db_write_failed",
-            context=context,
-            location=location,
-        )
-    )
-    print(get_message("onboarding", "db_write_hint", hint=hint))
-
-
-def _pid_is_running(pid: int) -> bool:
-    try:
-        os.kill(pid, 0)
-    except OSError:
-        return False
-    return True
-
-
-def _load_runtime_pid() -> int | None:
-    if not RUNTIME_PID_FILE.exists():
-        return None
-    try:
-        return int(RUNTIME_PID_FILE.read_text(encoding="utf-8").strip())
-    except (OSError, ValueError):
-        return None
 
 
 def run_technical_onboarding_checks() -> bool:
