@@ -59,6 +59,8 @@ def _seed_task_with_hierarchy() -> int:
             case_judgement=(
                 '[{"policy_id":2,"judgement":"Violated","reasoning":"Missing proof."}]'
             ),
+            follow_up_task_id=77,
+            replaces_task_id=44,
         )
         session.add(task)
         session.flush()
@@ -96,6 +98,9 @@ def test_task_command_prints_task_details(
     assert "Task result body." in output
     assert "Execution Log" in output
     assert "task_search" in output
+    assert "Lineage" in output
+    assert "Follow-up Task ID: `77`" in output
+    assert "Replaces Task ID: `44`" in output
     assert "Case Judgement" in output
     assert "Violated" in output
 

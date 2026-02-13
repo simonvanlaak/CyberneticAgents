@@ -29,6 +29,8 @@ class TaskCard:
     reasoning: Optional[str]
     execution_log: Optional[str]
     case_judgement: Optional[str]
+    follow_up_task_id: Optional[int] = None
+    replaces_task_id: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -91,6 +93,8 @@ def load_task_cards(
     reasoning_expr = _task_column_expr(conn, "reasoning")
     execution_log_expr = _task_column_expr(conn, "execution_log")
     case_judgement_expr = _task_column_expr(conn, "case_judgement")
+    follow_up_task_id_expr = _task_column_expr(conn, "follow_up_task_id")
+    replaces_task_id_expr = _task_column_expr(conn, "replaces_task_id")
     query = f"""
         SELECT
             t.id AS task_id,
@@ -109,7 +113,9 @@ def load_task_cards(
             {result_expr} AS task_result,
             {reasoning_expr} AS task_reasoning,
             {execution_log_expr} AS task_execution_log,
-            {case_judgement_expr} AS case_judgement
+            {case_judgement_expr} AS case_judgement,
+            {follow_up_task_id_expr} AS follow_up_task_id,
+            {replaces_task_id_expr} AS replaces_task_id
         FROM tasks t
         JOIN teams tm ON tm.id = t.team_id
         LEFT JOIN initiatives i ON i.id = t.initiative_id
@@ -188,6 +194,16 @@ def load_task_cards(
                 case_judgement=(
                     str(row["case_judgement"])
                     if row["case_judgement"] is not None
+                    else None
+                ),
+                follow_up_task_id=(
+                    int(row["follow_up_task_id"])
+                    if row["follow_up_task_id"] is not None
+                    else None
+                ),
+                replaces_task_id=(
+                    int(row["replaces_task_id"])
+                    if row["replaces_task_id"] is not None
                     else None
                 ),
             )

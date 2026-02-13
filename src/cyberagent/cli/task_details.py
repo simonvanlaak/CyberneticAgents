@@ -37,6 +37,10 @@ def _format_task_detail(task: TaskCard) -> str:
         "Execution Log",
         task.execution_log or "-",
         "",
+        "Lineage",
+        f"- Follow-up Task ID: `{task.follow_up_task_id or '-'}`",
+        f"- Replaces Task ID: `{task.replaces_task_id or '-'}`",
+        "",
         "Case Judgement",
     ]
     lines.extend(_format_case_judgement(task.case_judgement))

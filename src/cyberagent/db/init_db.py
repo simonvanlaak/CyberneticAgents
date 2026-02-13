@@ -112,6 +112,8 @@ def init_db():
                 _ensure_task_execution_log_column()
                 _ensure_task_policy_judgement_column()
                 _ensure_task_policy_judgement_reasoning_column()
+                _ensure_task_follow_up_task_id_column()
+                _ensure_task_replaces_task_id_column()
                 return
         raise
     _ensure_team_last_active_column()
@@ -120,6 +122,8 @@ def init_db():
     _ensure_task_execution_log_column()
     _ensure_task_policy_judgement_column()
     _ensure_task_policy_judgement_reasoning_column()
+    _ensure_task_follow_up_task_id_column()
+    _ensure_task_replaces_task_id_column()
 
 
 def _ensure_team_last_active_column() -> None:
@@ -186,6 +190,44 @@ def _ensure_task_policy_judgement_reasoning_column() -> None:
     with engine.connect() as connection:
         connection.execute(
             text("ALTER TABLE tasks ADD COLUMN policy_judgement_reasoning TEXT")
+        )
+
+
+def _ensure_task_follow_up_task_id_column() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    column_names = _get_sqlite_column_names("tasks")
+    if column_names is None:
+        return
+    with engine.connect() as connection:
+        if "follow_up_task_id" not in column_names:
+            connection.execute(
+                text("ALTER TABLE tasks ADD COLUMN follow_up_task_id INTEGER")
+            )
+        connection.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_tasks_follow_up_task_id "
+                "ON tasks (follow_up_task_id)"
+            )
+        )
+
+
+def _ensure_task_replaces_task_id_column() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    column_names = _get_sqlite_column_names("tasks")
+    if column_names is None:
+        return
+    with engine.connect() as connection:
+        if "replaces_task_id" not in column_names:
+            connection.execute(
+                text("ALTER TABLE tasks ADD COLUMN replaces_task_id INTEGER")
+            )
+        connection.execute(
+            text(
+                "CREATE INDEX IF NOT EXISTS idx_tasks_replaces_task_id "
+                "ON tasks (replaces_task_id)"
+            )
         )
 
 
@@ -299,6 +341,8 @@ def recover_sqlite_database() -> str | None:
     _ensure_task_execution_log_column()
     _ensure_task_policy_judgement_column()
     _ensure_task_policy_judgement_reasoning_column()
+    _ensure_task_follow_up_task_id_column()
+    _ensure_task_replaces_task_id_column()
     return backup_path
 
 

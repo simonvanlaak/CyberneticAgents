@@ -392,6 +392,7 @@ def test_render_inbox_page_answers_only_first_pending_question(monkeypatch) -> N
 
 def test_render_task_details_shows_status_reasoning(monkeypatch) -> None:
     writes: list[object] = []
+    markdown_blocks: list[str] = []
     dataframe_data: list[object] = []
 
     class _TitleCol:
@@ -420,8 +421,8 @@ def test_render_task_details_shows_status_reasoning(monkeypatch) -> None:
         def subheader(self, _text: str) -> None:
             return None
 
-        def markdown(self, _text: str) -> None:
-            return None
+        def markdown(self, text: str) -> None:
+            markdown_blocks.append(text)
 
         def write(self, text: object) -> None:
             writes.append(text)
@@ -450,6 +451,8 @@ def test_render_task_details_shows_status_reasoning(monkeypatch) -> None:
             "strategy_name": "strategy-a",
             "initiative_name": "initiative-a",
             "initiative_id": 5,
+            "follow_up_task_id": 202,
+            "replaces_task_id": 99,
             "content": "Do work",
             "result": None,
             "execution_log": '[{"type":"ToolCallExecutionEvent","name":"task_search"}]',
@@ -463,6 +466,8 @@ def test_render_task_details_shows_status_reasoning(monkeypatch) -> None:
     dashboard._render_task_details_page(st, _TitleCol())
 
     assert "Waiting for OAuth credentials from ops." in writes
+    assert any("Follow-up Task ID: `202`" in block for block in markdown_blocks)
+    assert any("Replaces Task ID: `99`" in block for block in markdown_blocks)
     assert len(dataframe_data) == 1
     rows = dataframe_data[0]
     assert isinstance(rows, list)

@@ -68,6 +68,8 @@ def _seed_task(
     reasoning: str | None = None,
     case_judgement: str | None = None,
     execution_log: str | None = None,
+    follow_up_task_id: int | None = None,
+    replaces_task_id: int | None = None,
 ) -> None:
     session = next(get_db())
     try:
@@ -82,6 +84,8 @@ def _seed_task(
             reasoning=reasoning,
             case_judgement=case_judgement,
             execution_log=execution_log,
+            follow_up_task_id=follow_up_task_id,
+            replaces_task_id=replaces_task_id,
         )
         session.add(task)
         session.commit()
@@ -250,6 +254,58 @@ def test_load_task_cards_includes_execution_log() -> None:
     assert card.execution_log == '[{"type":"ToolCallExecutionEvent","content":"ok"}]'
 
 
+def test_load_task_cards_includes_lineage_fields() -> None:
+    team_id, _, _, initiative_id = _seed_team_hierarchy("lineage")
+    _seed_task(
+        team_id=team_id,
+        initiative_id=initiative_id,
+        name="Original task",
+        status=Status.REJECTED,
+        assignee="System1/root",
+    )
+    original = next(
+        task
+        for task in load_task_cards(team_id=team_id)
+        if task.name == "Original task"
+    )
+
+    _seed_task(
+        team_id=team_id,
+        initiative_id=initiative_id,
+        name="Replacement task",
+        status=Status.PENDING,
+        assignee=None,
+        replaces_task_id=original.id,
+    )
+    replacement = next(
+        task
+        for task in load_task_cards(team_id=team_id)
+        if task.name == "Replacement task"
+    )
+
+    session = next(get_db())
+    try:
+        task_model = session.get(Task, original.id)
+        assert task_model is not None
+        task_model.follow_up_task_id = replacement.id
+        session.commit()
+    finally:
+        session.close()
+
+    refreshed_cards = load_task_cards(team_id=team_id)
+    refreshed_original = next(
+        task for task in refreshed_cards if task.id == original.id
+    )
+    refreshed_replacement = next(
+        task for task in refreshed_cards if task.id == replacement.id
+    )
+
+    assert refreshed_original.follow_up_task_id == replacement.id
+    assert refreshed_original.replaces_task_id is None
+    assert refreshed_replacement.follow_up_task_id is None
+    assert refreshed_replacement.replaces_task_id == original.id
+
+
 def test_load_task_detail_returns_full_payload() -> None:
     team_id, purpose_id, strategy_id, initiative_id = _seed_team_hierarchy("detail")
     _seed_task(
@@ -262,6 +318,8 @@ def test_load_task_detail_returns_full_payload() -> None:
         reasoning="Blocked waiting for external dependency.",
         case_judgement='[{"policy_id":2,"judgement":"Vague","reasoning":"needs clarification"}]',
         execution_log='[{"type":"TextMessage","content":"Attempted steps"}]',
+        follow_up_task_id=321,
+        replaces_task_id=123,
     )
 
     task_id = next(
@@ -283,3 +341,5 @@ def test_load_task_detail_returns_full_payload() -> None:
     assert (
         detail.execution_log == '[{"type":"TextMessage","content":"Attempted steps"}]'
     )
+    assert detail.follow_up_task_id == 321
+    assert detail.replaces_task_id == 123

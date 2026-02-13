@@ -320,6 +320,8 @@ def _render_task_details_page(st: Any, title_col: Any) -> None:
                 f"- Purpose: `{task.purpose_name or '-'}`",
                 f"- Strategy: `{task.strategy_name or '-'}`",
                 f"- Initiative: `{task.initiative_name or '-'}` (`{task.initiative_id or '-'}`)",
+                f"- Follow-up Task ID: `{task.follow_up_task_id or '-'}`",
+                f"- Replaces Task ID: `{task.replaces_task_id or '-'}`",
             ]
         )
     )

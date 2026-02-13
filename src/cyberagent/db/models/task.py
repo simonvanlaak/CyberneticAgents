@@ -37,6 +37,18 @@ class Task(Base):
     policy_judgement: Mapped[Optional[str]] = mapped_column(String(50))
     policy_judgement_reasoning: Mapped[Optional[str]] = mapped_column(Text)
     case_judgement: Mapped[Optional[str]] = mapped_column(Text)
+    follow_up_task_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("tasks.id"),
+        nullable=True,
+        index=True,
+    )
+    replaces_task_id: Mapped[Optional[int]] = mapped_column(
+        Integer,
+        ForeignKey("tasks.id"),
+        nullable=True,
+        index=True,
+    )
 
     # Relationships
     team = relationship("Team", back_populates="tasks")
