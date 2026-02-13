@@ -4,8 +4,11 @@ import sqlite3
 from dataclasses import dataclass, field
 from typing import Optional
 
+from src.cyberagent.authz import (
+    list_system_granted_skills,
+    list_team_allowed_skills,
+)
 from src.cyberagent.db.init_db import get_database_path
-from src.rbac.skill_permissions_enforcer import get_enforcer
 
 
 @dataclass(frozen=True)
@@ -155,42 +158,16 @@ def _attach_permissions(
 ) -> None:
     if not grouped:
         return
-    enforcer = get_enforcer()
-    policies = enforcer.get_policy()
-    members_by_system_id = _members_by_system_id(grouped)
-    for policy in policies:
-        if len(policy) < 4 or policy[3] != "allow":
-            continue
-        resource = policy[2]
-        permission = _strip_skill_prefix(resource)
-        subject = policy[0]
-        if subject.startswith("team:"):
-            try:
-                subject_team_id = int(subject.split(":", 1)[1])
-            except ValueError:
-                continue
-            if team_id is not None and subject_team_id != team_id:
-                continue
-            team = grouped.get(subject_team_id)
-            if team is not None:
-                team.permissions.append(permission)
-            continue
-        if subject.startswith("system:"):
-            try:
-                subject_system_id = int(subject.split(":", 1)[1])
-            except ValueError:
-                continue
-            member = members_by_system_id.get(subject_system_id)
-            if member is not None:
-                member.permissions.append(permission)
+
     for team in grouped.values():
-        team_permission_values = sorted(set(team.permissions))
+        if team_id is not None and team.team_id != team_id:
+            continue
         team.permissions.clear()
-        team.permissions.extend(team_permission_values)
+        team.permissions.extend(list_team_allowed_skills(team.team_id))
+
         for member in team.members:
-            member_permission_values = sorted(set(member.permissions))
             member.permissions.clear()
-            member.permissions.extend(member_permission_values)
+            member.permissions.extend(list_system_granted_skills(member.id))
 
 
 def _members_by_system_id(
@@ -202,11 +179,6 @@ def _members_by_system_id(
             members[member.id] = member
     return members
 
-
-def _strip_skill_prefix(resource: str) -> str:
-    if resource.startswith("skill:"):
-        return resource[len("skill:") :]
-    return resource
 
 
 def _format_policy_detail(name: str, content_value: object) -> str:

@@ -13,13 +13,13 @@ from src.cyberagent.db.models.system import (
 )
 from src.cyberagent.db.session_context import managed_session
 from src.cyberagent.db.models.team import Team
+from src.cyberagent.authz import grant_tool_permission
 from src.cyberagent.services import procedures as procedures_service
 from src.cyberagent.services import purposes as purposes_service
 from src.cyberagent.services import strategies as strategies_service
 from src.cyberagent.services import systems as systems_service
 from src.cyberagent.services import teams as teams_service
 from src.enums import SystemType
-from src.rbac.enforcer import give_user_tool_permission
 
 NETWORK_SKILL_NAMES = {"web-fetch", "web-search", "git-readonly-sync"}
 
@@ -145,7 +145,7 @@ def ensure_team_systems(team_id: int, team_defaults: dict[str, object]) -> None:
                         system.id, skill_name, actor_id="onboarding"
                     )
                     if skill_name in NETWORK_SKILL_NAMES:
-                        give_user_tool_permission(system.agent_id_str, skill_name, "*")
+                        grant_tool_permission(system.agent_id_str, skill_name, "*")
 
 
 def trigger_onboarding_initiative(

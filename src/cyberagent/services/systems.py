@@ -4,19 +4,26 @@ from __future__ import annotations
 
 import logging
 
+from src.cyberagent.authz import (
+    grant_skill_to_system,
+    is_system_skill_granted,
+    is_team_skill_allowed,
+    list_system_granted_skills,
+    reload_skill_policy_store,
+    revoke_skill_from_system,
+)
 from src.cyberagent.db.models.system import (
     System,
+    ensure_default_systems_for_team as _ensure_default_systems_for_team,
     get_system as _get_system,
     get_system_by_type as _get_system_by_type,
-    get_systems_by_type as _get_systems_by_type,
     get_system_from_agent_id as _get_system_from_agent_id,
-    ensure_default_systems_for_team as _ensure_default_systems_for_team,
+    get_systems_by_type as _get_systems_by_type,
 )
-from src.enums import SystemType
-from src.rbac.skill_permissions_enforcer import get_enforcer
 from src.cyberagent.services import recursions as recursions_service
 from src.cyberagent.services import teams as teams_service
 from src.cyberagent.services.audit import log_event
+from src.enums import SystemType
 
 logger = logging.getLogger(__name__)
 
@@ -47,64 +54,29 @@ def ensure_default_systems_for_team(team_id: int) -> list[System]:
 
 
 def list_granted_skills(system_id: int) -> list[str]:
-    """
-    List all skill grants for a system.
-
-    Args:
-        system_id: System identifier.
-
-    Returns:
-        Sorted list of granted skill names.
-    """
-    enforcer = get_enforcer()
-    policies = enforcer.get_filtered_policy(0, _system_subject(system_id))
-    skills = [
-        _strip_skill_prefix(policy[2])
-        for policy in policies
-        if len(policy) >= 4 and policy[3] == "allow"
-    ]
-    return sorted(set(skills))
+    """List all skill grants for a system."""
+    return list_system_granted_skills(system_id)
 
 
 def add_skill_grant(system_id: int, skill_name: str, actor_id: str) -> bool:
-    """
-    Grant a skill to a system.
-
-    Args:
-        system_id: System identifier.
-        skill_name: Skill name to grant.
-        actor_id: Actor performing the mutation (audit only).
-
-    Returns:
-        True if the policy was added, False if it already existed.
-
-    Raises:
-        PermissionError: If the team envelope blocks the skill or the system limit
-            is exceeded.
-    """
+    """Grant a skill to a system."""
     team_id = _get_team_id_or_raise(system_id)
     _require_envelope_allows(team_id, system_id, skill_name, actor_id)
 
     current = list_granted_skills(system_id)
     if skill_name in current:
         return False
-    # Default systems increasingly rely on multiple built-in skills (PKM access,
-    # web, messaging, memory). Keep the limit high enough to avoid onboarding
-    # failures while still preventing unbounded grants.
+
     if len(current) >= 10:
         _raise_permission_error(
-            team_id, system_id, skill_name, "system_skill_limit", actor_id
+            team_id,
+            system_id,
+            skill_name,
+            "system_skill_limit",
+            actor_id,
         )
 
-    enforcer = get_enforcer()
-    added = enforcer.add_policy(
-        _system_subject(system_id),
-        str(team_id),
-        _skill_resource(skill_name),
-        "allow",
-    )
-    if added:
-        enforcer.save_policy()
+    added = grant_skill_to_system(system_id, team_id, skill_name)
     log_event(
         "skill_grant_add",
         service="systems",
@@ -118,25 +90,9 @@ def add_skill_grant(system_id: int, skill_name: str, actor_id: str) -> bool:
 
 
 def remove_skill_grant(system_id: int, skill_name: str, actor_id: str) -> bool:
-    """
-    Revoke a skill grant from a system.
-
-    Args:
-        system_id: System identifier.
-        skill_name: Skill name to revoke.
-        actor_id: Actor performing the mutation (audit only).
-
-    Returns:
-        True if the policy existed and was removed.
-    """
+    """Revoke a skill grant from a system."""
     team_id = _get_team_id_or_raise(system_id)
-    enforcer = get_enforcer()
-    removed = enforcer.remove_policy(
-        _system_subject(system_id),
-        str(team_id),
-        _skill_resource(skill_name),
-        "allow",
-    )
+    removed = revoke_skill_from_system(system_id, team_id, skill_name)
     log_event(
         "skill_grant_remove",
         service="systems",
@@ -150,17 +106,7 @@ def remove_skill_grant(system_id: int, skill_name: str, actor_id: str) -> bool:
 
 
 def set_skill_grants(system_id: int, skill_names: list[str], actor_id: str) -> None:
-    """
-    Replace a system's grants with the provided skill list.
-
-    Args:
-        system_id: System identifier.
-        skill_names: Skills to grant.
-        actor_id: Actor performing the mutation (audit only).
-
-    Raises:
-        PermissionError: If the team envelope blocks any skill or the limit is exceeded.
-    """
+    """Replace a system's grants with the provided skill list."""
     if len(skill_names) > 5:
         _raise_permission_error(
             _get_team_id_or_raise(system_id),
@@ -182,6 +128,7 @@ def set_skill_grants(system_id: int, skill_names: list[str], actor_id: str) -> N
 
     for skill_name in desired - current:
         add_skill_grant(system_id, skill_name, actor_id)
+
     log_event(
         "skill_grant_set",
         service="systems",
@@ -193,45 +140,22 @@ def set_skill_grants(system_id: int, skill_names: list[str], actor_id: str) -> N
 
 
 def can_execute_skill(system_id: int, skill_name: str) -> tuple[bool, str | None]:
-    """
-    Evaluate whether a system can execute a skill.
-
-    Args:
-        system_id: System identifier.
-        skill_name: Skill name to evaluate.
-
-    Returns:
-        Tuple of (allowed, deny_category). Deny category is None on allow.
-    """
+    """Evaluate whether a system can execute a skill."""
     team_id = _get_team_id_or_raise(system_id)
-    enforcer = get_enforcer()
 
     def _evaluate_permission() -> str | None:
         deny: str | None = None
-        if not _is_root_team(team_id):
-            if not enforcer.enforce(
-                _team_subject(team_id),
-                str(team_id),
-                _skill_resource(skill_name),
-                "allow",
-            ):
-                deny = "team_envelope"
-        if deny is None:
-            if not enforcer.enforce(
-                _system_subject(system_id),
-                str(team_id),
-                _skill_resource(skill_name),
-                "allow",
-            ):
-                deny = "system_grant"
-        if deny is None:
-            if not _check_recursion_chain(team_id, skill_name, enforcer):
-                deny = "system_grant"
+        if not _is_root_team(team_id) and not is_team_skill_allowed(team_id, skill_name):
+            deny = "team_envelope"
+        if deny is None and not is_system_skill_granted(system_id, team_id, skill_name):
+            deny = "system_grant"
+        if deny is None and not _check_recursion_chain(team_id, skill_name):
+            deny = "system_grant"
         return deny
 
     deny_category = _evaluate_permission()
     if deny_category is not None:
-        enforcer.load_policy()
+        reload_skill_policy_store()
         deny_category = _evaluate_permission()
 
     allowed = deny_category is None
@@ -255,17 +179,14 @@ def _get_team_id_or_raise(system_id: int) -> int:
 
 
 def _require_envelope_allows(
-    team_id: int, system_id: int, skill_name: str, actor_id: str | None
+    team_id: int,
+    system_id: int,
+    skill_name: str,
+    actor_id: str | None,
 ) -> None:
     if _is_root_team(team_id):
         return
-    enforcer = get_enforcer()
-    if enforcer.enforce(
-        _team_subject(team_id),
-        str(team_id),
-        _skill_resource(skill_name),
-        "allow",
-    ):
+    if is_team_skill_allowed(team_id, skill_name):
         return
     _raise_permission_error(team_id, system_id, skill_name, "team_envelope", actor_id)
 
@@ -294,39 +215,20 @@ def _raise_permission_error(
     )
 
 
-def _team_subject(team_id: int) -> str:
-    return f"team:{team_id}"
-
-
-def _system_subject(system_id: int) -> str:
-    return f"system:{system_id}"
-
-
-def _skill_resource(skill_name: str) -> str:
-    return f"skill:{skill_name}"
-
-
-def _strip_skill_prefix(resource: str) -> str:
-    if resource.startswith("skill:"):
-        return resource[len("skill:") :]
-    return resource
-
-
 def _is_root_team(team_id: int) -> bool:
     team = teams_service.get_team(team_id)
     return team is not None and team.name == "default_team"
 
 
-def _check_recursion_chain(team_id: int, skill_name: str, enforcer) -> bool:
+def _check_recursion_chain(team_id: int, skill_name: str) -> bool:
     links = recursions_service.get_recursion_chain(team_id)
     if not links:
         return True
     for link in links:
-        if not enforcer.enforce(
-            _system_subject(link.origin_system_id),
-            str(link.parent_team_id),
-            _skill_resource(skill_name),
-            "allow",
+        if not is_system_skill_granted(
+            link.origin_system_id,
+            link.parent_team_id,
+            skill_name,
         ):
             return False
     return True

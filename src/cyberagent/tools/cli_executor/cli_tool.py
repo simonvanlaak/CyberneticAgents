@@ -4,11 +4,12 @@ import inspect
 import json
 import logging
 import shlex
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Dict, Optional
 
 from autogen_core import CancellationToken
 from autogen_core.code_executor import CodeBlock
 
+from src.cyberagent.authz import has_tool_permission
 from src.cyberagent.db.models.system import get_system_from_agent_id
 from src.cyberagent.services import systems as systems_service
 from src.cyberagent.tools.cli_executor import secrets
@@ -130,11 +131,7 @@ class CliTool:
 
     def _check_permission(self, agent_id: str, tool_name: str) -> bool:
         """Check if agent has permission to use the tool."""
-        check_tool_permission = _get_check_tool_permission()
-        if check_tool_permission is None:
-            logger.warning("RBAC enforcer not available; denying tool access.")
-            return False
-        return check_tool_permission(agent_id, tool_name)
+        return has_tool_permission(agent_id, tool_name)
 
     def _check_skill_permission(
         self, agent_id: str, skill_name: str
@@ -200,13 +197,6 @@ def _get_executor_timeout(executor: Any) -> Optional[int]:
     timeout = getattr(executor, "_timeout", None)
     return timeout if isinstance(timeout, int) else None
 
-
-def _get_check_tool_permission() -> Optional[Callable[[str, str], bool]]:
-    try:
-        from src.rbac.enforcer import check_tool_permission
-    except ImportError:
-        return None
-    return check_tool_permission
 
 
 async def _ensure_executor_started(executor: Any) -> None:

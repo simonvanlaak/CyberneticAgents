@@ -103,8 +103,8 @@ async def test_rbac_enforcement() -> None:
     """Test that RBAC prevents unauthorized tool usage."""
     from src.cyberagent.tools.cli_executor.cli_tool import CliTool
 
-    # Mock RBAC to deny access
-    with patch("src.rbac.enforcer.check_tool_permission", return_value=False):
+    # Mock authz facade to deny access
+    with patch("src.cyberagent.tools.cli_executor.cli_tool.has_tool_permission", return_value=False):
         result = await CliTool(None).execute("exec", agent_id="unauthorized_agent")
 
         assert result["success"] is False
