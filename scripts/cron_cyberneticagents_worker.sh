@@ -60,14 +60,17 @@ while [[ $process_count -lt $max_process ]]; do
   ISSUE_NUMBER="$(echo "$ITEMS_JSON" | jq -r --arg id "$PICK_ID" '.items[] | select(.id==$id) | .content.number // empty')"
   TITLE="$(echo "$ITEMS_JSON" | jq -r --arg id "$PICK_ID" '.items[] | select(.id==$id) | .title')"
 
-  # Status transitions
+  # Status transitions (enqueue + drain to reduce GraphQL churn)
   if [[ "$PICK_STATUS" == "Ready" ]]; then
-    gh project item-edit \
-      --id "$PICK_ID" \
+    python3 ./scripts/github_outbox.py enqueue-status \
       --project-id "$PROJECT_ID" \
+      --item-id "$PICK_ID" \
       --field-id "$STATUS_FIELD_ID" \
-      --single-select-option-id "$IN_PROGRESS_OPTION_ID" \
-      >/dev/null
+      --option-id "$IN_PROGRESS_OPTION_ID" \
+      --quiet
+
+    # Best-effort drain (may skip if rate limit is low)
+    python3 ./scripts/github_outbox.py drain --quiet || true
   fi
 
   # Baseline sync
@@ -80,12 +83,14 @@ while [[ $process_count -lt $max_process ]]; do
 
   if [[ -z "$ISSUE_NUMBER" ]]; then
     # Blocked: no attached issue
-    gh project item-edit \
-      --id "$PICK_ID" \
+    python3 ./scripts/github_outbox.py enqueue-status \
       --project-id "$PROJECT_ID" \
+      --item-id "$PICK_ID" \
       --field-id "$STATUS_FIELD_ID" \
-      --single-select-option-id "$BACKLOG_OPTION_ID" \
-      >/dev/null
+      --option-id "$BACKLOG_OPTION_ID" \
+      --quiet
+
+    python3 ./scripts/github_outbox.py drain --quiet || true
 
     echo "BLOCKED: Project item has no linked issue. Moved to Backlog: $TITLE" >&2
     exit 2
@@ -114,12 +119,14 @@ while [[ $process_count -lt $max_process ]]; do
   # Guardrail: do NOT move to In review when no code changes were produced.
   # This was causing churn (tickets land in In review with nothing to review).
   if [[ "$AHEAD_COUNT" -eq 0 ]]; then
-    gh project item-edit \
-      --id "$PICK_ID" \
+    python3 ./scripts/github_outbox.py enqueue-status \
       --project-id "$PROJECT_ID" \
+      --item-id "$PICK_ID" \
       --field-id "$STATUS_FIELD_ID" \
-      --single-select-option-id "$BLOCKED_OPTION_ID" \
-      >/dev/null
+      --option-id "$BLOCKED_OPTION_ID" \
+      --quiet
+
+    python3 ./scripts/github_outbox.py drain --quiet || true
 
     gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "Moved to Blocked via automation: no code changes were produced.
 
@@ -136,12 +143,14 @@ Please add:
     continue
   fi
 
-  gh project item-edit \
-    --id "$PICK_ID" \
+  python3 ./scripts/github_outbox.py enqueue-status \
     --project-id "$PROJECT_ID" \
+    --item-id "$PICK_ID" \
     --field-id "$STATUS_FIELD_ID" \
-    --single-select-option-id "$IN_REVIEW_OPTION_ID" \
-    >/dev/null
+    --option-id "$IN_REVIEW_OPTION_ID" \
+    --quiet
+
+  python3 ./scripts/github_outbox.py drain --quiet || true
 
   RECENT_SHAS="$(git log --format=%H -n 5)"
   gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "Moved to In review via nightly automation.
