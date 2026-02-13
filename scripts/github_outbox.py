@@ -10,6 +10,10 @@ import time
 from pathlib import Path
 from typing import Any
 
+# Allow this script to be executed from any working directory.
+REPO_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO_ROOT))
+
 from src.cyberagent.tools.github_outbox import GitHubOutbox, default_outbox_path
 
 

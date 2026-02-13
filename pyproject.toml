@@ -26,6 +26,7 @@ dependencies = [
   "tiktoken",
   "PyYAML>=6.0",
   "keyring>=24.0",
+  "pytest",
   "pytest-asyncio",
   "requests",
   "qrcode",
