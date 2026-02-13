@@ -36,7 +36,7 @@ STATUS_IN_REVIEW="status:in-review"
 STATUS_BLOCKED="status:blocked"
 
 process_count=0
-max_process=1
+max_process=3
 
 while [[ $process_count -lt $max_process ]]; do
   PICK_JSON="$("$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" pick-next 2>/dev/null || true)"
