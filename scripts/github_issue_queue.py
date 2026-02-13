@@ -20,6 +20,12 @@ from src.github_issue_queue import (
     STATUS_READY,
     plan_label_changes,
 )
+from src.github_clarification import (
+    CLARIFICATION_REQUEST_MARKER,
+    CLARIFIED_MARKER,
+    Comment,
+    compute_clarification_state,
+)
 
 
 def _sh(args: list[str], *, input_json: dict[str, Any] | None = None) -> str:
@@ -70,7 +76,29 @@ def cmd_ensure_labels(args: argparse.Namespace) -> int:
     return 0
 
 
-def _pick_next_issue(*, repo: str) -> dict[str, Any] | None:
+def _list_issue_comments(*, repo: str, issue_number: int) -> list[Comment]:
+    owner, repo_name = repo.split("/", 1)
+    raw = _gh_api(f"repos/{owner}/{repo_name}/issues/{issue_number}/comments", fields={"per_page": 100})
+    comments: list[Comment] = []
+    for row in raw:
+        user = row.get("user") or {}
+        comments.append(
+            Comment(
+                id=int(row["id"]),
+                author=str(user.get("login") or ""),
+                body=str(row.get("body") or ""),
+            )
+        )
+    return comments
+
+
+def _is_issue_clarified(*, repo: str, issue_number: int, owner_login: str) -> bool:
+    comments = _list_issue_comments(repo=repo, issue_number=issue_number)
+    state = compute_clarification_state(comments, owner_login=owner_login)
+    return bool(state.clarified)
+
+
+def _pick_next_issue(*, repo: str, owner_login: str) -> dict[str, Any] | None:
     # Prefer oldest in-progress, else oldest ready.
     for status in (STATUS_IN_PROGRESS, STATUS_READY):
         q = f'repo:{repo} is:issue is:open label:"{status}" sort:created-asc'
@@ -79,11 +107,21 @@ def _pick_next_issue(*, repo: str) -> dict[str, Any] | None:
         if items:
             issue = {"number": items[0]["number"], "title": items[0]["title"], "picked_from_status": status}
             return issue
+
+    # If there are no ready/in-progress issues, allow "blocked but clarified" to re-enter.
+    q = f'repo:{repo} is:issue is:open label:"{STATUS_BLOCKED}" sort:created-asc'
+    data = _gh_api("search/issues", fields={"q": q, "per_page": 10})
+    items = data.get("items") or []
+    for it in items:
+        n = int(it["number"])
+        if _is_issue_clarified(repo=repo, issue_number=n, owner_login=owner_login):
+            return {"number": n, "title": it["title"], "picked_from_status": STATUS_BLOCKED}
+
     return None
 
 
 def cmd_pick_next(args: argparse.Namespace) -> int:
-    issue = _pick_next_issue(repo=args.repo)
+    issue = _pick_next_issue(repo=args.repo, owner_login=args.owner_login)
     if not issue:
         return 1
     sys.stdout.write(json.dumps(issue) + "\n")
@@ -116,6 +154,7 @@ def cmd_set_status(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Issue-label-based queue utilities")
     p.add_argument("--repo", required=True)
+    p.add_argument("--owner-login", default="simonvanlaak", help="Repo owner login for clarification checks")
 
     sub = p.add_subparsers(dest="cmd", required=True)
 
