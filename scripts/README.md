@@ -23,7 +23,7 @@ This folder contains operational scripts for the CyberneticAgents repo.
 
 ### Quality gate
 
-- **`./scripts/nightly-cyberneticagents.sh`**
+- **`./scripts/quality_gate.sh`**
   - Runs the quality gate (tests/usability) used by automation before pushing.
 
 ## Utilities

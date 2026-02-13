@@ -10,7 +10,7 @@ Maximum **3** fix iterations.
 Hard max runtime: **2 hours**.
 
 ## Commands
-- Runner: `bash ./scripts/nightly-cyberneticagents.sh`
+- Runner: `bash ./scripts/quality_gate.sh`
 - Usability tests: `bash ./scripts/usability.sh`
 
 ## Loop
@@ -19,14 +19,14 @@ Repeat up to 3 times:
    - `git fetch origin --prune`
    - `git checkout main`
    - `git reset --hard origin/main`
-2. Run: `bash ./scripts/nightly-cyberneticagents.sh`
+2. Run: `bash ./scripts/quality_gate.sh`
 3. If PASS: stop and report success.
 4. If FAIL:
    - Read the latest log under `logs/nightly/`.
    - Identify the smallest fix that makes tests pass.
    - Implement the fix.
    - Add/adjust tests only if necessary.
-   - Re-run `bash ./scripts/nightly-cyberneticagents.sh`.
+   - Re-run `bash ./scripts/quality_gate.sh`.
 
 ## Git strategy
 After a fix that makes tests pass:

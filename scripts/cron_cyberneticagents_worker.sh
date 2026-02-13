@@ -8,8 +8,8 @@ export PATH="/home/node/.local/bin:$PATH"
 
 PYTHON="$REPO_ROOT/.venv/bin/python"
 if [[ ! -x "$PYTHON" ]]; then
-  # Ensure the repo virtualenv exists (nightly script uses uv to build it).
-  bash ./scripts/nightly-cyberneticagents.sh
+  # Ensure the repo virtualenv exists (quality gate uses uv to build it).
+  bash ./scripts/quality_gate.sh
 fi
 
 # Auth (non-interactive)
@@ -61,7 +61,7 @@ while [[ $process_count -lt $max_process ]]; do
   git pull --rebase origin main >/dev/null
 
   # Required quality gate before pushing code
-  bash ./scripts/nightly-cyberneticagents.sh
+  bash ./scripts/quality_gate.sh
 
   if [[ -z "$ISSUE_NUMBER" ]]; then
     echo "ERROR: picked issue missing number" >&2
@@ -74,7 +74,7 @@ while [[ $process_count -lt $max_process ]]; do
   fi
 
   # Re-run quality gate after any modifications
-  bash ./scripts/nightly-cyberneticagents.sh
+  bash ./scripts/quality_gate.sh
 
   # If we changed files, commit them.
   if ! git diff --quiet; then
@@ -103,7 +103,7 @@ while [[ $process_count -lt $max_process ]]; do
     # Post comment via REST API (avoid Projects/GraphQL throttling issues).
     gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments" -f body="Moved to Blocked via automation: no code changes were produced.
 
-I ran ./scripts/nightly-cyberneticagents.sh, but there were no commits to review.
+I ran ./scripts/quality_gate.sh, but there were no commits to review.
 
 This likely needs human input (clarify requirements) or a non-automatable implementation step.
 
@@ -122,14 +122,14 @@ Please add:
   BODY="Moved to In review via nightly automation.
 
 Summary:
-- Ran ./scripts/nightly-cyberneticagents.sh
+- Ran ./scripts/quality_gate.sh
 - Applied any safe auto-fixes (if available)
 
 Recent commits:
 $(echo "$RECENT_SHAS" | sed 's/^/- /')
 
 Validation:
-- Pull main and re-run: bash ./scripts/nightly-cyberneticagents.sh"
+- Pull main and re-run: bash ./scripts/quality_gate.sh"
 
   # Post comment via REST API.
   gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments" -f body="$BODY" >/dev/null
