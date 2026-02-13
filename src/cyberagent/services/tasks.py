@@ -31,12 +31,13 @@ from src.enums import SystemType
 logger = logging.getLogger(__name__)
 
 ALLOWED_TASK_TRANSITIONS: dict[Status, set[Status]] = {
-    Status.PENDING: {Status.IN_PROGRESS, Status.REJECTED},
-    Status.IN_PROGRESS: {Status.COMPLETED, Status.BLOCKED, Status.REJECTED},
-    Status.BLOCKED: {Status.IN_PROGRESS, Status.REJECTED},
+    Status.PENDING: {Status.IN_PROGRESS, Status.CANCELED},
+    Status.IN_PROGRESS: {Status.COMPLETED, Status.BLOCKED},
+    Status.BLOCKED: {Status.IN_PROGRESS, Status.CANCELED},
     Status.COMPLETED: {Status.APPROVED, Status.REJECTED},
+    Status.REJECTED: {Status.CANCELED},
     Status.APPROVED: set(),
-    Status.REJECTED: set(),
+    Status.CANCELED: set(),
 }
 
 REVIEW_ELIGIBLE_TASK_STATUSES: set[Status] = {Status.COMPLETED, Status.BLOCKED}

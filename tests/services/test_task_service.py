@@ -279,6 +279,78 @@ def test_complete_task_rejects_invalid_transition() -> None:
         task_service.complete_task(task, "done")
 
 
+def test_allowed_task_transitions_match_canonical_lifecycle() -> None:
+    from src.cyberagent.services import tasks as task_service
+    from src.enums import Status
+
+    assert task_service.ALLOWED_TASK_TRANSITIONS == {
+        Status.PENDING: {Status.IN_PROGRESS, Status.CANCELED},
+        Status.IN_PROGRESS: {Status.COMPLETED, Status.BLOCKED},
+        Status.BLOCKED: {Status.IN_PROGRESS, Status.CANCELED},
+        Status.COMPLETED: {Status.APPROVED, Status.REJECTED},
+        Status.REJECTED: {Status.CANCELED},
+        Status.APPROVED: set(),
+        Status.CANCELED: set(),
+    }
+
+
+@pytest.mark.parametrize(
+    ("current", "next_status"),
+    [
+        ("pending", "in_progress"),
+        ("pending", "canceled"),
+        ("in_progress", "completed"),
+        ("in_progress", "blocked"),
+        ("blocked", "in_progress"),
+        ("blocked", "canceled"),
+        ("completed", "approved"),
+        ("completed", "rejected"),
+        ("rejected", "canceled"),
+    ],
+)
+def test_transition_task_allows_canonical_transitions(
+    current: str,
+    next_status: str,
+) -> None:
+    from src.cyberagent.services import tasks as task_service
+    from src.cyberagent.db.models.task import Task
+    from src.enums import Status
+
+    task = cast(Task, _FakeTask())
+    task.status = Status(current)
+
+    task_service._transition_task(task, Status(next_status))
+
+    assert task.status == Status(next_status)
+
+
+@pytest.mark.parametrize(
+    ("current", "invalid_next"),
+    [
+        ("pending", "approved"),
+        ("in_progress", "approved"),
+        ("blocked", "completed"),
+        ("completed", "in_progress"),
+        ("rejected", "approved"),
+        ("approved", "canceled"),
+        ("canceled", "pending"),
+    ],
+)
+def test_transition_task_rejects_invalid_transition_for_each_state(
+    current: str,
+    invalid_next: str,
+) -> None:
+    from src.cyberagent.services import tasks as task_service
+    from src.cyberagent.db.models.task import Task
+    from src.enums import Status
+
+    task = cast(Task, _FakeTask())
+    task.status = Status(current)
+
+    with pytest.raises(ValueError, match="Invalid task status transition"):
+        task_service._transition_task(task, Status(invalid_next))
+
+
 def test_set_task_case_judgement_updates_policy_judgement_fields() -> None:
     from src.cyberagent.services import tasks as task_service
     from src.cyberagent.db.models.task import Task

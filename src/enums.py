@@ -13,6 +13,7 @@ class Status(PyEnum):
     BLOCKED = "blocked"
     APPROVED = "approved"
     REJECTED = "rejected"
+    CANCELED = "canceled"
 
 
 class PolicyJudgement(PyEnum):
