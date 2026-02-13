@@ -3,8 +3,8 @@
 import json
 import logging
 
-from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.models.task import Task, get_task as _get_task
+from src.cyberagent.db.session_context import managed_session
 from src.cyberagent.memory.config import (
     build_memory_registry,
     load_memory_backend_config,
@@ -131,7 +131,12 @@ def create_task(
         name=name,
         content=content,
     )
-    task.add()
+    with managed_session() as session:
+        session.add(task)
+        session.flush()
+        session.commit()
+        session.refresh(task)
+        session.expunge(task)
     return task
 
 
@@ -142,14 +147,11 @@ def has_tasks_for_initiative(initiative_id: int) -> bool:
     Args:
         initiative_id: Initiative identifier.
     """
-    session = next(get_db())
-    try:
+    with managed_session() as session:
         return (
             session.query(Task).filter(Task.initiative_id == initiative_id).first()
             is not None
         )
-    finally:
-        session.close()
 
 
 def assign_task(task: Task, assignee_agent_id_str: str) -> None:
@@ -255,6 +257,12 @@ def set_task_execution_log(task: Task, execution_log: str) -> None:
     _persist_task(task)
 
 
+def persist_task(task: Task) -> None:
+    """Persist task mutations through the service-level persistence boundary."""
+
+    _persist_task(task)
+
+
 def _persist_task(task: Task) -> None:
     """
     Persist a task mutation using service-level transaction control.
@@ -264,15 +272,13 @@ def _persist_task(task: Task) -> None:
     - Test doubles or legacy stand-ins fall back to ``update()`` when available.
     """
     if isinstance(task, Task):
-        session = next(get_db())
-        try:
+        with managed_session(commit=True) as session:
             session.merge(task)
-            session.commit()
-        finally:
-            session.close()
         return
-    if hasattr(task, "update"):
-        task.update()
+
+    update_callable = getattr(task, "update", None)
+    if callable(update_callable):
+        update_callable()
 
 
 def _transition_task(task: Task, next_status: Status) -> None:

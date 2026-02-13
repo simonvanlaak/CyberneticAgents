@@ -4,7 +4,6 @@ from sqlalchemy.exc import SQLAlchemyError
 
 from src.cyberagent.cli.onboarding_defaults import get_default_team_name
 from src.cyberagent.cli.onboarding_output import print_db_write_error
-from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.models.procedure import Procedure
 from src.cyberagent.db.models.strategy import Strategy
 from src.cyberagent.db.models.system import (
@@ -12,6 +11,7 @@ from src.cyberagent.db.models.system import (
     ensure_default_systems_for_team,
     get_system_by_type,
 )
+from src.cyberagent.db.session_context import managed_session
 from src.cyberagent.db.models.team import Team
 from src.cyberagent.services import procedures as procedures_service
 from src.cyberagent.services import purposes as purposes_service
@@ -29,16 +29,13 @@ def seed_default_procedures(team_id: int, procedures: list[dict[str, object]]) -
     system4 = get_system_by_type(team_id, SystemType.INTELLIGENCE)
     system5 = get_system_by_type(team_id, SystemType.POLICY)
 
-    session = next(get_db())
-    try:
+    with managed_session() as session:
         existing_names = {
             procedure.name
             for procedure in session.query(Procedure)
             .filter(Procedure.team_id == team_id)
             .all()
         }
-    finally:
-        session.close()
 
     for template in procedures:
         name = template.get("name")
@@ -80,11 +77,8 @@ def seed_root_team_envelope_from_defaults(team_defaults: dict[str, object]) -> N
     skill_names = [skill for skill in allowed if isinstance(skill, str)]
     if not skill_names:
         return
-    session = next(get_db())
-    try:
+    with managed_session() as session:
         root_team = session.query(Team).filter(Team.name == team_name).first()
-    finally:
-        session.close()
     if root_team is None:
         return
     teams_service.set_allowed_skills(root_team.id, skill_names, actor_id="onboarding")
@@ -95,8 +89,7 @@ def ensure_team_systems(team_id: int, team_defaults: dict[str, object]) -> None:
     if not isinstance(systems_block, list):
         ensure_default_systems_for_team(team_id)
         return
-    session = next(get_db())
-    try:
+    with managed_session() as session:
         existing = {
             system.type: system
             for system in session.query(System).filter(System.team_id == team_id).all()
@@ -126,8 +119,6 @@ def ensure_team_systems(team_id: int, team_defaults: dict[str, object]) -> None:
             session.add(system)
             existing[system_type] = system
         session.commit()
-    finally:
-        session.close()
 
     for entry in systems_block:
         if not isinstance(entry, dict):
@@ -166,8 +157,7 @@ def trigger_onboarding_initiative(
     """Deprecated for Phase 1 onboarding."""
 
     ensure_default_systems_for_team(team_id)
-    session = next(get_db())
-    try:
+    with managed_session() as session:
         procedure = (
             session.query(Procedure)
             .filter(
@@ -176,22 +166,21 @@ def trigger_onboarding_initiative(
             )
             .first()
         )
-    finally:
-        session.close()
     if procedure is None:
         return True
 
     purpose = purposes_service.get_or_create_default_purpose(team_id)
-    purpose.name = onboarding_purpose_name
-    purpose.content = procedure.description
     try:
-        purpose.update()
+        purposes_service.update_purpose_fields(
+            purpose,
+            name=onboarding_purpose_name,
+            content=procedure.description,
+        )
     except SQLAlchemyError as exc:
         print_db_write_error("purpose", exc)
         return False
 
-    session = next(get_db())
-    try:
+    with managed_session() as session:
         strategy = (
             session.query(Strategy)
             .filter(
@@ -200,8 +189,6 @@ def trigger_onboarding_initiative(
             )
             .first()
         )
-    finally:
-        session.close()
     if strategy is None:
         try:
             strategies_service.create_strategy(

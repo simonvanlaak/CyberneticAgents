@@ -8,9 +8,11 @@ from typing import List
 from sqlalchemy import Enum, ForeignKey, Integer, String, and_
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from src.cyberagent.db.db_utils import get_db
+import warnings
+
 from src.enums import Status
 from src.cyberagent.db.init_db import Base
+from src.cyberagent.db.session_context import managed_session
 from src.cyberagent.db.models.initiative import Initiative
 from src.cyberagent.domain.serialize import model_to_dict
 
@@ -35,11 +37,8 @@ class Strategy(Base):
     initiatives = relationship("Initiative", back_populates="strategy")
 
     def get_initiatives(self) -> List[Initiative]:
-        db = next(get_db())
-        try:
+        with managed_session() as db:
             return db.query(Initiative).filter(Initiative.strategy_id == self.id).all()
-        finally:
-            db.close()
 
     def set_status(self, status: Status | str):
         self.status = Status(status)
@@ -48,31 +47,36 @@ class Strategy(Base):
         return [json.dumps(model_to_dict(self), indent=4, default=str)]
 
     def update(self):
-        db = next(get_db())
-        db.merge(self)
-        db.commit()
+        warnings.warn(
+            "Strategy.update() is deprecated; persist via service-layer helpers.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        with managed_session(commit=True) as db:
+            db.merge(self)
 
     def add(self) -> int:
-        db = next(get_db())
-        db.add(self)
-        db.flush()
-        db.commit()
-        db.refresh(self)
-        db.expunge(self)
-        return self.id
+        warnings.warn(
+            "Strategy.add() is deprecated; persist via service-layer helpers.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        with managed_session() as db:
+            db.add(self)
+            db.flush()
+            db.commit()
+            db.refresh(self)
+            db.expunge(self)
+            return self.id
 
 
 def get_strategy(strategy_id: int) -> Strategy:
-    db = next(get_db())
-    try:
+    with managed_session() as db:
         return db.query(Strategy).filter(Strategy.id == strategy_id).first()
-    finally:
-        db.close()
 
 
 def get_teams_active_strategy(team_id: int) -> Strategy:
-    db = next(get_db())
-    try:
+    with managed_session() as db:
         return (
             db.query(Strategy)
             .filter(
@@ -83,5 +87,3 @@ def get_teams_active_strategy(team_id: int) -> Strategy:
             )
             .first()
         )
-    finally:
-        db.close()

@@ -5,8 +5,8 @@ from pathlib import Path
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.cyberagent.cli.message_catalog import get_message
-from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.init_db import get_database_path, recover_sqlite_database
+from src.cyberagent.db.session_context import managed_session
 from src.cyberagent.db.models.strategy import Strategy
 from src.cyberagent.services import purposes as purposes_service
 from src.cyberagent.services import strategies as strategies_service
@@ -57,55 +57,51 @@ def apply_onboarding_output(
                 summary_text,
             ]
         )
-    purpose.content = purpose_block
     try:
-        purpose.update()
+        purposes_service.update_purpose_fields(purpose, content=purpose_block)
     except SQLAlchemyError as exc:
         print_db_write_error("purpose", exc)
         return
 
     # Ensure an initial strategy exists and attach the onboarding output.
-    session = next(get_db())
     try:
-        strategy = (
-            session.query(Strategy)
-            .filter(
-                Strategy.team_id == team_id,
-                Strategy.name == onboarding_strategy_name,
-            )
-            .first()
-        )
-        if strategy is None:
-            strategy = strategies_service.create_strategy(
-                team_id=team_id,
-                purpose_id=purpose.id,
-                name=onboarding_strategy_name,
-                description=summary_text,
-            )
-        else:
-            existing_desc = (strategy.description or "").strip()
-            if summary_text not in existing_desc:
-                strategy.description = (
-                    summary_text
-                    if not existing_desc
-                    else "\n\n".join(
-                        [
-                            existing_desc,
-                            "---",
-                            "# Onboarding Output",
-                            f"(Source: {summary_path})",
-                            "",
-                            summary_text,
-                        ]
-                    )
+        with managed_session() as session:
+            strategy = (
+                session.query(Strategy)
+                .filter(
+                    Strategy.team_id == team_id,
+                    Strategy.name == onboarding_strategy_name,
                 )
-                session.add(strategy)
-                session.commit()
+                .first()
+            )
+            if strategy is None:
+                strategy = strategies_service.create_strategy(
+                    team_id=team_id,
+                    purpose_id=purpose.id,
+                    name=onboarding_strategy_name,
+                    description=summary_text,
+                )
+            else:
+                existing_desc = (strategy.description or "").strip()
+                if summary_text not in existing_desc:
+                    strategy.description = (
+                        summary_text
+                        if not existing_desc
+                        else "\n\n".join(
+                            [
+                                existing_desc,
+                                "---",
+                                "# Onboarding Output",
+                                f"(Source: {summary_path})",
+                                "",
+                                summary_text,
+                            ]
+                        )
+                    )
+                    session.add(strategy)
+                    session.commit()
     except SQLAlchemyError as exc:
-        session.rollback()
         print_db_write_error("strategy", exc)
-    finally:
-        session.close()
 
 
 def print_db_write_error(context: str, exc: SQLAlchemyError) -> None:

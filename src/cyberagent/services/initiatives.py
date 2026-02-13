@@ -1,9 +1,12 @@
 """Initiative orchestration helpers."""
 
+from __future__ import annotations
+
 from src.cyberagent.db.models.initiative import (
     Initiative,
     get_initiative as _get_initiative,
 )
+from src.cyberagent.db.session_context import managed_session
 from src.enums import Status
 
 
@@ -24,7 +27,7 @@ def start_initiative(initiative_id: int) -> Initiative:
     if initiative is None:
         raise ValueError(f"Initiative with id {initiative_id} not found")
     initiative.set_status(Status.IN_PROGRESS)
-    initiative.update()
+    _persist_initiative(initiative)
     return initiative
 
 
@@ -53,7 +56,12 @@ def create_initiative(
         name=name,
         description=description,
     )
-    initiative.add()
+    with managed_session() as session:
+        session.add(initiative)
+        session.flush()
+        session.commit()
+        session.refresh(initiative)
+        session.expunge(initiative)
     return initiative
 
 
@@ -69,4 +77,15 @@ def update_initiative_fields(
         initiative.name = name
     if description:
         initiative.description = description
-    initiative.update()
+    _persist_initiative(initiative)
+
+
+def _persist_initiative(initiative: Initiative) -> None:
+    if isinstance(initiative, Initiative):
+        with managed_session(commit=True) as session:
+            session.merge(initiative)
+        return
+
+    update_callable = getattr(initiative, "update", None)
+    if callable(update_callable):
+        update_callable()

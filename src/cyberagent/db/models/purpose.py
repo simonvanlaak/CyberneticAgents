@@ -8,8 +8,10 @@ from typing import List
 from sqlalchemy import ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from src.cyberagent.db.db_utils import get_db
+import warnings
+
 from src.cyberagent.db.init_db import Base
+from src.cyberagent.db.session_context import managed_session
 from src.cyberagent.domain.serialize import model_to_dict
 from src.cyberagent.db.models.strategy import Strategy
 
@@ -38,38 +40,40 @@ class Purpose(Base):
         return [json.dumps(model_to_dict(self), indent=4, default=str)]
 
     def get_strategies(self) -> List[Strategy]:
-        db = next(get_db())
-        try:
+        with managed_session() as db:
             return db.query(Strategy).filter(Strategy.purpose_id == self.id).first()
-        finally:
-            db.close()
 
     def update(self):
-        db = next(get_db())
-        db.merge(self)
-        db.commit()
+        warnings.warn(
+            "Purpose.update() is deprecated; persist via service-layer helpers.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        with managed_session(commit=True) as db:
+            db.merge(self)
 
     def add(self) -> int:
-        db = next(get_db())
-        db.add(self)
-        db.flush()
-        db.commit()
-        db.refresh(self)
-        db.expunge(self)
-        return self.id
+        warnings.warn(
+            "Purpose.add() is deprecated; persist via service-layer helpers.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        with managed_session() as db:
+            db.add(self)
+            db.flush()
+            db.commit()
+            db.refresh(self)
+            db.expunge(self)
+            return self.id
 
 
 def get_purpose(purpose_id: int) -> Purpose:
-    db = next(get_db())
-    try:
+    with managed_session() as db:
         return db.query(Purpose).filter(Purpose.id == purpose_id).first()
-    finally:
-        db.close()
 
 
 def get_or_create_default_purpose(team_id: int) -> Purpose:
-    db = next(get_db())
-    try:
+    with managed_session() as db:
         purposes = (
             db.query(Purpose)
             .filter(Purpose.team_id == team_id)
@@ -105,5 +109,3 @@ def get_or_create_default_purpose(team_id: int) -> Purpose:
         db.refresh(purpose)
         db.expunge(purpose)
         return purpose
-    finally:
-        db.close()

@@ -714,7 +714,7 @@ class System3(SystemBase):
             task.content = content
         if reasoning is not None:
             task.reasoning = reasoning
-        task.update()
+        task_service.persist_task(task)
 
         if restart_execution:
             assignee = getattr(task, "assignee", None)

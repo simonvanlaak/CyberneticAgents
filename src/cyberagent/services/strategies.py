@@ -1,10 +1,13 @@
 """Strategy orchestration helpers."""
 
+from __future__ import annotations
+
 from src.cyberagent.db.models.strategy import (
     Strategy,
     get_strategy as _get_strategy,
     get_teams_active_strategy as _get_teams_active_strategy,
 )
+from src.cyberagent.db.session_context import managed_session
 
 
 def get_strategy(strategy_id: int):
@@ -32,7 +35,12 @@ def create_strategy(
         description=description,
         result=result,
     )
-    strategy.add()
+    with managed_session() as session:
+        session.add(strategy)
+        session.flush()
+        session.commit()
+        session.refresh(strategy)
+        session.expunge(strategy)
     return strategy
 
 
@@ -44,4 +52,12 @@ def update_strategy_fields(
         strategy.name = name
     if description:
         strategy.description = description
-    strategy.update()
+
+    if isinstance(strategy, Strategy):
+        with managed_session(commit=True) as session:
+            session.merge(strategy)
+        return
+
+    update_callable = getattr(strategy, "update", None)
+    if callable(update_callable):
+        update_callable()

@@ -9,9 +9,11 @@ from sqlalchemy import Enum, ForeignKey, Integer, String
 from sqlalchemy.orm import mapped_column, relationship
 from sqlalchemy.orm.base import Mapped
 
-from src.cyberagent.db.db_utils import get_db
+import warnings
+
 from src.enums import Status
 from src.cyberagent.db.init_db import Base
+from src.cyberagent.db.session_context import managed_session
 from src.cyberagent.db.models.task import Task
 from src.cyberagent.domain.serialize import model_to_dict
 
@@ -46,34 +48,37 @@ class Initiative(Base):
         return [json.dumps(model_to_dict(self), indent=4, default=str)]
 
     def get_tasks(self) -> List[Task]:
-        db = next(get_db())
-        try:
+        with managed_session() as db:
             return db.query(Task).filter(Task.initiative_id == self.id).all()
-        finally:
-            db.close()
 
     def add(self) -> int:
-        db = next(get_db())
-        db.add(self)
-        db.flush()
-        db.commit()
-        db.refresh(self)
-        db.expunge(self)
-        return self.id
+        warnings.warn(
+            "Initiative.add() is deprecated; persist via service-layer helpers.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        with managed_session() as db:
+            db.add(self)
+            db.flush()
+            db.commit()
+            db.refresh(self)
+            db.expunge(self)
+            return self.id
 
     def set_status(self, status: Status | str) -> None:
         self.status = Status(status)
 
     def update(self):
-        db = next(get_db())
-        db.merge(self)
-        db.commit()
+        warnings.warn(
+            "Initiative.update() is deprecated; persist via service-layer helpers.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        with managed_session(commit=True) as db:
+            db.merge(self)
 
 
 def get_initiative(initiative_id: int) -> Initiative:
     """Get initiative by ID from database"""
-    db = next(get_db())
-    try:
+    with managed_session() as db:
         return db.query(Initiative).filter(Initiative.id == initiative_id).first()
-    finally:
-        db.close()
