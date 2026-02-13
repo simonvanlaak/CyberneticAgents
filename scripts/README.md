@@ -15,11 +15,13 @@ This folder contains operational scripts for the CyberneticAgents repo.
 
 - **`./scripts/cron_cyberneticagents_worker.sh`**
   - Source of truth: **GitHub Issue labels** (NOT GitHub Projects)
-  - Status labels (single-select):
-    - `status:ready`
-    - `status:in-progress`
-    - `status:in-review`
-    - `status:blocked`
+  - Stage labels (single-select):
+    - `stage:backlog`
+    - `stage:needs-clarification`
+    - `stage:ready-to-implement`
+    - `stage:in-progress`
+    - `stage:in-review`
+    - `stage:blocked`
 
 ### Quality gate
 

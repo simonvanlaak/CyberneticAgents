@@ -30,16 +30,18 @@ REPO="simonvanlaak/CyberneticAgents"
 # We fully ignore Projects going forward due to Projects v2 GraphQL rate limiting.
 "$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" ensure-labels >/dev/null
 
-STATUS_READY="status:ready"
-STATUS_IN_PROGRESS="status:in-progress"
-STATUS_IN_REVIEW="status:in-review"
-STATUS_BLOCKED="status:blocked"
+STAGE_BACKLOG="stage:backlog"
+STAGE_NEEDS_CLARIFICATION="stage:needs-clarification"
+STAGE_READY_TO_IMPLEMENT="stage:ready-to-implement"
+STAGE_IN_PROGRESS="stage:in-progress"
+STAGE_IN_REVIEW="stage:in-review"
+STAGE_BLOCKED="stage:blocked"
 
 process_count=0
 max_process=3
 
 while [[ $process_count -lt $max_process ]]; do
-  PICK_JSON="$("$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" --owner-login "simonvanlaak" pick-next 2>/dev/null || true)"
+  PICK_JSON="$("$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" pick-next 2>/dev/null || true)"
 
   if [[ -z "$PICK_JSON" ]]; then
     exit 0
@@ -49,46 +51,10 @@ while [[ $process_count -lt $max_process ]]; do
 
   TITLE="$(printf '%s' "$PICK_JSON" | "$PYTHON" -c 'import json,sys; print(json.loads(sys.stdin.read())["title"])')"
 
-  PICKED_FROM_STATUS="$(printf '%s' "$PICK_JSON" | "$PYTHON" -c 'import json,sys; print(json.loads(sys.stdin.read())["picked_from_status"])')"
+  PICKED_FROM_STAGE="$(printf '%s' "$PICK_JSON" | "$PYTHON" -c 'import json,sys; print(json.loads(sys.stdin.read())["picked_from_stage"])')"
 
-  if [[ "$PICKED_FROM_STATUS" == "$STATUS_READY" ]]; then
-    # Always start with a clarification round-trip before implementation.
-    # Move to Blocked and ask questions if the issue is not explicitly clarified.
-    OWNER_LOGIN="simonvanlaak"
-
-    ISSUE_BODY="$(gh api "repos/$REPO/issues/$ISSUE_NUMBER" --jq '.body // ""' 2>/dev/null || true)"
-    HAS_AC=0
-    if echo "$ISSUE_BODY" | grep -qiE 'acceptance criteria|expected outcome|how to test'; then
-      HAS_AC=1
-    fi
-
-    if [[ "$HAS_AC" -eq 0 ]]; then
-      "$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" set-status --issue "$ISSUE_NUMBER" --status "$STATUS_BLOCKED"
-
-      gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments" -f body="CLARIFICATION_REQUEST: Please reply with CLARIFIED: and answers.
-
-To proceed, I need:
-1) Expected outcome (what changes for the user?)
-2) Acceptance criteria (bullet list)
-3) Where to change (files/paths) if you know
-4) How to test (commands, scenario)
-
-Once you reply with a comment starting with:
-
-CLARIFIED:
-
-…I will automatically pick this ticket up and implement it on main, then move it to status:in-review." >/dev/null
-
-      # Stop this tick; we'll resume once clarified.
-      exit 0
-    fi
-
-    "$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" set-status --issue "$ISSUE_NUMBER" --status "$STATUS_IN_PROGRESS"
-  fi
-
-  if [[ "$PICKED_FROM_STATUS" == "$STATUS_BLOCKED" ]]; then
-    # A blocked+clarified ticket re-entering the queue: mark as in progress.
-    "$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" set-status --issue "$ISSUE_NUMBER" --status "$STATUS_IN_PROGRESS"
+  if [[ "$PICKED_FROM_STAGE" == "$STAGE_READY_TO_IMPLEMENT" ]]; then
+    "$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" set-status --issue "$ISSUE_NUMBER" --status "$STAGE_IN_PROGRESS"
   fi
 
   # Baseline sync
@@ -151,9 +117,8 @@ Validation run so far:
   fi
 
   # Guardrail: do NOT move to In review when no code changes were produced.
-  # This was causing churn (tickets land in In review with nothing to review).
   if [[ "$AHEAD_COUNT" -eq 0 ]]; then
-    "$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" set-status --issue "$ISSUE_NUMBER" --status "$STATUS_BLOCKED"
+    "$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" set-status --issue "$ISSUE_NUMBER" --status "$STAGE_BLOCKED"
 
     # Avoid duplicate comments if the issue keeps getting re-picked.
     LAST_BODY="$(gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments?per_page=1" --jq '.[0].body' 2>/dev/null || true)"
@@ -178,7 +143,7 @@ Please add:
     continue
   fi
 
-  "$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" set-status --issue "$ISSUE_NUMBER" --status "$STATUS_IN_REVIEW"
+  "$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" set-status --issue "$ISSUE_NUMBER" --status "$STAGE_IN_REVIEW"
 
   RECENT_SHAS="$(git log --format=%H -n 5)"
   BODY="Moved to In review via nightly automation.

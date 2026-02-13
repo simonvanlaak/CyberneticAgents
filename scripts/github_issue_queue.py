@@ -12,19 +12,15 @@ from typing import Any
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-from src.github_issue_queue import (
-    KNOWN_STATUS_LABELS,
-    STATUS_BLOCKED,
-    STATUS_IN_PROGRESS,
-    STATUS_IN_REVIEW,
-    STATUS_READY,
+from src.github_stage_queue import (
+    KNOWN_STAGE_LABELS,
+    STAGE_BACKLOG,
+    STAGE_BLOCKED,
+    STAGE_IN_PROGRESS,
+    STAGE_IN_REVIEW,
+    STAGE_NEEDS_CLARIFICATION,
+    STAGE_READY_TO_IMPLEMENT,
     plan_label_changes,
-)
-from src.github_clarification import (
-    CLARIFICATION_REQUEST_MARKER,
-    CLARIFIED_MARKER,
-    Comment,
-    compute_clarification_state,
 )
 
 
@@ -58,10 +54,12 @@ def cmd_ensure_labels(args: argparse.Namespace) -> int:
 
     # Use deterministic colors (arbitrary but stable).
     desired = {
-        STATUS_READY: "0e8a16",  # green
-        STATUS_IN_PROGRESS: "fbca04",  # yellow
-        STATUS_IN_REVIEW: "1d76db",  # blue
-        STATUS_BLOCKED: "d93f0b",  # red/orange
+        STAGE_BACKLOG: "ededed",
+        STAGE_NEEDS_CLARIFICATION: "d4c5f9",
+        STAGE_READY_TO_IMPLEMENT: "0e8a16",
+        STAGE_IN_PROGRESS: "fbca04",
+        STAGE_IN_REVIEW: "1d76db",
+        STAGE_BLOCKED: "d93f0b",
     }
 
     for name, color in desired.items():
@@ -76,52 +74,24 @@ def cmd_ensure_labels(args: argparse.Namespace) -> int:
     return 0
 
 
-def _list_issue_comments(*, repo: str, issue_number: int) -> list[Comment]:
-    owner, repo_name = repo.split("/", 1)
-    raw = _gh_api(f"repos/{owner}/{repo_name}/issues/{issue_number}/comments", fields={"per_page": 100})
-    comments: list[Comment] = []
-    for row in raw:
-        user = row.get("user") or {}
-        comments.append(
-            Comment(
-                id=int(row["id"]),
-                author=str(user.get("login") or ""),
-                body=str(row.get("body") or ""),
-            )
-        )
-    return comments
-
-
-def _is_issue_clarified(*, repo: str, issue_number: int, owner_login: str) -> bool:
-    comments = _list_issue_comments(repo=repo, issue_number=issue_number)
-    state = compute_clarification_state(comments, owner_login=owner_login)
-    return bool(state.clarified)
-
-
-def _pick_next_issue(*, repo: str, owner_login: str) -> dict[str, Any] | None:
-    # Prefer oldest in-progress, else oldest ready.
-    for status in (STATUS_IN_PROGRESS, STATUS_READY):
-        q = f'repo:{repo} is:issue is:open label:"{status}" sort:created-asc'
+def _pick_next_issue(*, repo: str) -> dict[str, Any] | None:
+    # Prefer oldest in-progress, else oldest ready-to-implement.
+    for stage in (STAGE_IN_PROGRESS, STAGE_READY_TO_IMPLEMENT):
+        q = f'repo:{repo} is:issue is:open label:"{stage}" sort:created-asc'
         data = _gh_api("search/issues", fields={"q": q, "per_page": 1})
         items = data.get("items") or []
         if items:
-            issue = {"number": items[0]["number"], "title": items[0]["title"], "picked_from_status": status}
-            return issue
-
-    # If there are no ready/in-progress issues, allow "blocked but clarified" to re-enter.
-    q = f'repo:{repo} is:issue is:open label:"{STATUS_BLOCKED}" sort:created-asc'
-    data = _gh_api("search/issues", fields={"q": q, "per_page": 10})
-    items = data.get("items") or []
-    for it in items:
-        n = int(it["number"])
-        if _is_issue_clarified(repo=repo, issue_number=n, owner_login=owner_login):
-            return {"number": n, "title": it["title"], "picked_from_status": STATUS_BLOCKED}
+            return {
+                "number": items[0]["number"],
+                "title": items[0]["title"],
+                "picked_from_stage": stage,
+            }
 
     return None
 
 
 def cmd_pick_next(args: argparse.Namespace) -> int:
-    issue = _pick_next_issue(repo=args.repo, owner_login=args.owner_login)
+    issue = _pick_next_issue(repo=args.repo)
     if not issue:
         return 1
     sys.stdout.write(json.dumps(issue) + "\n")
@@ -134,13 +104,13 @@ def cmd_set_status(args: argparse.Namespace) -> int:
     issue = _gh_api(f"repos/{owner}/{repo_name}/issues/{args.issue}")
     existing_labels = [l["name"] for l in (issue.get("labels") or [])]
 
-    if args.status not in KNOWN_STATUS_LABELS:
+    if args.status not in KNOWN_STAGE_LABELS:
         raise SystemExit(f"Unknown --status: {args.status}")
 
-    # Compute full target label list (single-select status label).
-    from src.github_issue_queue import apply_status_label
+    # Compute full target label list (single-select stage label).
+    from src.github_stage_queue import apply_stage_label
 
-    target_labels = sorted(apply_status_label(existing_labels, args.status))
+    target_labels = sorted(apply_stage_label(existing_labels, args.status))
 
     # PATCH issue labels (full list) via REST.
     _gh_api_json(
@@ -154,7 +124,6 @@ def cmd_set_status(args: argparse.Namespace) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(description="Issue-label-based queue utilities")
     p.add_argument("--repo", required=True)
-    p.add_argument("--owner-login", default="simonvanlaak", help="Repo owner login for clarification checks")
 
     sub = p.add_subparsers(dest="cmd", required=True)
 
