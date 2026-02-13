@@ -100,7 +100,8 @@ while [[ $process_count -lt $max_process ]]; do
       continue
     fi
 
-    gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "Moved to Blocked via automation: no code changes were produced.
+    # Post comment via REST API (avoid Projects/GraphQL throttling issues).
+    gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments" -f body="Moved to Blocked via automation: no code changes were produced.
 
 I ran ./scripts/nightly-cyberneticagents.sh, but there were no commits to review.
 
@@ -109,7 +110,7 @@ This likely needs human input (clarify requirements) or a non-automatable implem
 Please add:
 - Expected outcome + acceptance criteria
 - Any pointers (files/paths) or constraints
-- If this is a docs-only / no-code task, explicitly say so and describe what 'done' looks like."
+- If this is a docs-only / no-code task, explicitly say so and describe what 'done' looks like." >/dev/null
 
     process_count=$((process_count + 1))
     continue
@@ -118,7 +119,7 @@ Please add:
   "$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" set-status --issue "$ISSUE_NUMBER" --status "$STATUS_IN_REVIEW"
 
   RECENT_SHAS="$(git log --format=%H -n 5)"
-  gh issue comment "$ISSUE_NUMBER" --repo "$REPO" --body "Moved to In review via nightly automation.
+  BODY="Moved to In review via nightly automation.
 
 Summary:
 - Ran ./scripts/nightly-cyberneticagents.sh
@@ -129,6 +130,9 @@ $(echo "$RECENT_SHAS" | sed 's/^/- /')
 
 Validation:
 - Pull main and re-run: bash ./scripts/nightly-cyberneticagents.sh"
+
+  # Post comment via REST API.
+  gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments" -f body="$BODY" >/dev/null
 
   process_count=$((process_count + 1))
 done
