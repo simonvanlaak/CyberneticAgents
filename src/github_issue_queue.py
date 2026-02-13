@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Iterable, Sequence, Tuple
 
 
@@ -20,25 +19,8 @@ KNOWN_STATUS_LABELS = {
 }
 
 
-@dataclass(frozen=True)
-class IssueRef:
-    number: int
-    title: str
-
-
 def apply_status_label(existing_labels: Iterable[str], new_status_label: str) -> set[str]:
-    """Return a new label set with exactly one status:* label.
-
-    Args:
-        existing_labels: Existing issue labels.
-        new_status_label: The desired status label, e.g. "status:in-progress".
-
-    Returns:
-        Updated label set.
-
-    Raises:
-        ValueError: If new_status_label is not one of the known status labels.
-    """
+    """Return a new label set with exactly one status:* label."""
 
     if new_status_label not in KNOWN_STATUS_LABELS:
         raise ValueError(f"Unknown status label: {new_status_label}")
@@ -49,11 +31,7 @@ def apply_status_label(existing_labels: Iterable[str], new_status_label: str) ->
 
 
 def plan_label_changes(existing_labels: Sequence[str], new_status_label: str) -> Tuple[list[str], list[str]]:
-    """Plan add/remove lists to reach the desired label set.
-
-    Returns:
-        (labels_to_add, labels_to_remove)
-    """
+    """Plan add/remove lists to reach the desired label set."""
 
     target = apply_status_label(existing_labels, new_status_label)
     existing = set(existing_labels)

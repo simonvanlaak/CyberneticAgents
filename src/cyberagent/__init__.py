@@ -1,5 +1,7 @@
-"""New namespace package for the architecture refactor."""
+"""New namespace package for the architecture refactor.
 
-from src.cyberagent import core
+Keep this module import-light: importing `src.cyberagent` should not pull in runtime/
+LLM dependencies.
+"""
 
-__all__ = ["core"]
+__all__: list[str] = []

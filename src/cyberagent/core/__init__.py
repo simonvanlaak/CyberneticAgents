@@ -1,5 +1,7 @@
-"""Core namespace shims for the refactor."""
+"""Core namespace shims for the refactor.
 
-from src.cyberagent.core import logging, runtime, state
+Keep this module import-light: importing `src.cyberagent.core` should not import
+runtime/LLM dependencies.
+"""
 
-__all__ = ["logging", "runtime", "state"]
+__all__: list[str] = []

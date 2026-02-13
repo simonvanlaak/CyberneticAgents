@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
 
-"""CyberneticAgents - VSM-based multi-agent system with AutoGen and Casbin RBAC."""
+"""CyberneticAgents - VSM-based multi-agent system with AutoGen and Casbin RBAC.
+
+Keep this module import-light: importing `src` should not initialize databases or
+pull in runtime/LLM dependencies.
+"""
 
 __version__ = "0.1.0"
 
-# Compatibility re-export for legacy imports used by tests and older modules.
-from src.cyberagent.db import init_db
-
-__all__ = ["init_db"]
+__all__: list[str] = ["__version__"]

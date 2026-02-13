@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from src.cyberagent.tools.github_issue_queue import apply_status_label
+from src.github_issue_queue import apply_status_label
 
 
 def test_apply_status_label_replaces_existing_status_labels() -> None:
@@ -28,7 +28,7 @@ def test_apply_status_label_accepts_known_statuses(status: str) -> None:
 
 
 def test_plan_label_changes_returns_minimal_add_remove() -> None:
-    from src.cyberagent.tools.github_issue_queue import plan_label_changes
+    from src.github_issue_queue import plan_label_changes
 
     add, remove = plan_label_changes(
         ["bug", "status:ready", "status:blocked", "prio:p1"],
