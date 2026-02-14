@@ -41,6 +41,7 @@ ALLOWED_TASK_TRANSITIONS: dict[Status, set[Status]] = {
 }
 
 REVIEW_ELIGIBLE_TASK_STATUSES: set[Status] = {Status.COMPLETED, Status.BLOCKED}
+INVALID_REVIEW_AUTO_RETRY_LIMIT = 3
 
 
 def start_task(task_id: int) -> Task:
@@ -186,6 +187,50 @@ def is_review_eligible_for_task(task: Task) -> bool:
     """
     current = _resolve_task_status(getattr(task, "status", None))
     return current in REVIEW_ELIGIBLE_TASK_STATUSES
+
+
+def record_invalid_review_event(
+    task: Task,
+    error_summary: str,
+    *,
+    retry_limit: int = INVALID_REVIEW_AUTO_RETRY_LIMIT,
+) -> tuple[int, bool]:
+    """Record an invalid review-status event and optionally prepare auto-retry.
+
+    Invalid review messages are escalated to System5. For the first ``retry_limit``
+    events, System3 also resets the task to ``pending`` and clears assignee so the
+    task can be reassigned. Once the cap is exceeded, only escalation behavior
+    remains and no automatic reassignment is performed.
+
+    Args:
+        task: Task row to mutate.
+        error_summary: Human-readable reason for the invalid review event.
+        retry_limit: Maximum number of automatic retries.
+
+    Returns:
+        Tuple of ``(retry_count, should_auto_retry)``.
+    """
+
+    current_count_raw = getattr(task, "invalid_review_retry_count", 0)
+    if isinstance(current_count_raw, int):
+        current_count = current_count_raw
+    else:
+        try:
+            current_count = int(current_count_raw)
+        except (TypeError, ValueError):
+            current_count = 0
+
+    retry_count = current_count + 1
+    task.invalid_review_retry_count = retry_count
+    task.reasoning = error_summary
+
+    should_auto_retry = retry_count <= retry_limit
+    if should_auto_retry:
+        task.set_status(Status.PENDING)
+        task.assignee = None
+
+    _persist_task(task)
+    return retry_count, should_auto_retry
 
 
 def finalize_task_review(task: Task, cases: list[dict[str, object]]) -> None:

@@ -37,6 +37,11 @@ class Task(Base):
     policy_judgement: Mapped[Optional[str]] = mapped_column(String(50))
     policy_judgement_reasoning: Mapped[Optional[str]] = mapped_column(Text)
     case_judgement: Mapped[Optional[str]] = mapped_column(Text)
+    invalid_review_retry_count: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+    )
     follow_up_task_id: Mapped[Optional[int]] = mapped_column(
         Integer,
         ForeignKey("tasks.id"),

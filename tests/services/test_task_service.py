@@ -382,6 +382,56 @@ def test_set_task_execution_log_updates_field() -> None:
     assert task.updated is True
 
 
+def test_record_invalid_review_event_resets_task_within_retry_limit() -> None:
+    from src.cyberagent.services import tasks as task_service
+    from src.cyberagent.db.models.task import Task
+    from src.enums import Status
+
+    task = cast(Task, _FakeTask())
+    task.status = Status.IN_PROGRESS
+    task.assignee = "System1/root"
+    task.invalid_review_retry_count = 0
+
+    retry_count, should_auto_retry = task_service.record_invalid_review_event(
+        task,
+        "TaskReviewMessage received for non-review-eligible status 'in_progress'.",
+    )
+
+    assert retry_count == 1
+    assert should_auto_retry is True
+    assert task.invalid_review_retry_count == 1
+    assert task.status == Status.PENDING
+    assert task.assignee is None
+    assert task.reasoning is not None
+    assert "non-review-eligible" in task.reasoning
+    assert task.updated is True
+
+
+def test_record_invalid_review_event_stops_auto_retry_after_cap() -> None:
+    from src.cyberagent.services import tasks as task_service
+    from src.cyberagent.db.models.task import Task
+    from src.enums import Status
+
+    task = cast(Task, _FakeTask())
+    task.status = Status.IN_PROGRESS
+    task.assignee = "System1/root"
+    task.invalid_review_retry_count = 3
+
+    retry_count, should_auto_retry = task_service.record_invalid_review_event(
+        task,
+        "TaskReviewMessage received for non-review-eligible status 'in_progress'.",
+    )
+
+    assert retry_count == 4
+    assert should_auto_retry is False
+    assert task.invalid_review_retry_count == 4
+    assert task.status == Status.IN_PROGRESS
+    assert task.assignee == "System1/root"
+    assert task.reasoning is not None
+    assert "non-review-eligible" in task.reasoning
+    assert task.updated is True
+
+
 def test_is_review_eligible_for_task_when_completed_or_blocked() -> None:
     from src.cyberagent.services import tasks as task_service
     from src.cyberagent.db.models.task import Task

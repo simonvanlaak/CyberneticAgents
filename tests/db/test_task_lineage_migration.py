@@ -34,6 +34,7 @@ def test_ensure_task_lineage_columns_and_indexes(tmp_path: Path) -> None:
 
         init_db._ensure_task_follow_up_task_id_column()
         init_db._ensure_task_replaces_task_id_column()
+        init_db._ensure_task_invalid_review_retry_count_column()
 
         with init_db.engine.connect() as connection:
             columns = connection.execute(text("PRAGMA table_info(tasks);")).fetchall()
@@ -44,6 +45,7 @@ def test_ensure_task_lineage_columns_and_indexes(tmp_path: Path) -> None:
 
         assert "follow_up_task_id" in names
         assert "replaces_task_id" in names
+        assert "invalid_review_retry_count" in names
         assert "idx_tasks_follow_up_task_id" in index_names
         assert "idx_tasks_replaces_task_id" in index_names
     finally:

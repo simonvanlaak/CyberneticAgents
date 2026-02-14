@@ -114,6 +114,7 @@ def init_db():
                 _ensure_task_policy_judgement_reasoning_column()
                 _ensure_task_follow_up_task_id_column()
                 _ensure_task_replaces_task_id_column()
+                _ensure_task_invalid_review_retry_count_column()
                 return
         raise
     _ensure_team_last_active_column()
@@ -124,6 +125,7 @@ def init_db():
     _ensure_task_policy_judgement_reasoning_column()
     _ensure_task_follow_up_task_id_column()
     _ensure_task_replaces_task_id_column()
+    _ensure_task_invalid_review_retry_count_column()
 
 
 def _ensure_team_last_active_column() -> None:
@@ -227,6 +229,21 @@ def _ensure_task_replaces_task_id_column() -> None:
             text(
                 "CREATE INDEX IF NOT EXISTS idx_tasks_replaces_task_id "
                 "ON tasks (replaces_task_id)"
+            )
+        )
+
+
+def _ensure_task_invalid_review_retry_count_column() -> None:
+    if engine.dialect.name != "sqlite":
+        return
+    column_names = _get_sqlite_column_names("tasks")
+    if column_names is None or "invalid_review_retry_count" in column_names:
+        return
+    with engine.connect() as connection:
+        connection.execute(
+            text(
+                "ALTER TABLE tasks ADD COLUMN invalid_review_retry_count INTEGER "
+                "NOT NULL DEFAULT 0"
             )
         )
 
@@ -343,6 +360,7 @@ def recover_sqlite_database() -> str | None:
     _ensure_task_policy_judgement_reasoning_column()
     _ensure_task_follow_up_task_id_column()
     _ensure_task_replaces_task_id_column()
+    _ensure_task_invalid_review_retry_count_column()
     return backup_path
 
 
