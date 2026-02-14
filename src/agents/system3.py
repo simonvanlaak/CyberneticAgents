@@ -183,6 +183,54 @@ class System3(SystemBase):
         status_text = str(status_value).strip().lower()
         return "blocked" in status_text
 
+    def _select_retry_operation_system_id(self) -> int:
+        operation_systems = self._get_systems_by_type(SystemType.OPERATION)
+        if not operation_systems:
+            raise ValueError("No operation system found for invalid-review retry.")
+        ordered_systems = sorted(
+            operation_systems,
+            key=lambda system: int(getattr(system, "id")),
+        )
+        return int(getattr(ordered_systems[0], "id"))
+
+    async def _handle_invalid_review_status(
+        self,
+        message: TaskReviewMessage,
+        task: object,
+    ) -> None:
+        raw_status = getattr(task, "status", None)
+        status_text = getattr(raw_status, "value", raw_status)
+        error_summary = (
+            "TaskReviewMessage received for non-review-eligible status "
+            f"'{status_text}'."
+        )
+        await self._route_internal_error_to_policy_system(
+            failed_message_type=message.__class__.__name__,
+            error_summary=error_summary,
+            task_id=getattr(task, "id", None),
+        )
+
+        retry_count, should_auto_retry = task_service.record_invalid_review_event(
+            cast(Any, task),
+            error_summary,
+        )
+        if not should_auto_retry:
+            logger.info(
+                "Invalid-review retry cap reached for task_id=%s (retry_count=%s). Waiting for System5 remediation.",
+                getattr(task, "id", None),
+                retry_count,
+            )
+            return
+
+        selected_system_id = self._select_retry_operation_system_id()
+        logger.info(
+            "Retrying invalid-review task_id=%s via system_id=%s (retry_count=%s).",
+            getattr(task, "id", None),
+            selected_system_id,
+            retry_count,
+        )
+        await self.assign_task(selected_system_id, int(getattr(task, "id")))
+
     async def _resolve_blocked_task(
         self,
         message: TaskReviewMessage,
@@ -487,6 +535,7 @@ class System3(SystemBase):
         if not task.assignee:
             raise ValueError("Task has no assignee")
         if not task_service.is_review_eligible_for_task(task):
+            await self._handle_invalid_review_status(message, task)
             return
 
         if self._is_blocked_task(task):

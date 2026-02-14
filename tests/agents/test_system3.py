@@ -18,12 +18,13 @@ from src.agents.system3 import (
 from src.agents.messages import (
     CapabilityGapMessage,
     InitiativeAssignMessage,
+    InternalErrorMessage,
     PolicySuggestionMessage,
     PolicyVagueMessage,
     TaskAssignMessage,
     TaskReviewMessage,
 )
-from src.enums import PolicyJudgement, Status
+from src.enums import PolicyJudgement, Status, SystemType
 
 
 class TestSystem3Basic:
@@ -340,10 +341,12 @@ async def test_system3_task_review_processes_blocked_tasks_with_prefixed_status(
 
 
 @pytest.mark.asyncio
-async def test_system3_task_review_skips_non_review_eligible_tasks() -> None:
+async def test_system3_task_review_non_review_eligible_routes_error_and_retries() -> (
+    None
+):
     system3 = System3("System3/controller1")
     system3._publish_message_to_agent = AsyncMock()
-    mocked_run = AsyncMock()
+    system3.assign_task = AsyncMock()
 
     message = TaskReviewMessage(
         task_id=42,
@@ -356,22 +359,130 @@ async def test_system3_task_review_skips_non_review_eligible_tasks() -> None:
         topic_id=None,
         is_rpc=False,
         cancellation_token=CancellationToken(),
-        message_id="task_review_pending",
+        message_id="task_review_pending_retry",
     )
 
     class DummyTask:
-        id = 42
-        assignee = "System1/root"
-        status = Status.PENDING
+        def __init__(self) -> None:
+            self.id = 42
+            self.assignee = "System1/root"
+            self.status = Status.PENDING
+            self.reasoning = None
+            self.invalid_review_retry_count = 0
+            self.updated = False
+
+        def set_status(self, status) -> None:  # type: ignore[no-untyped-def]
+            self.status = status
+
+        def update(self) -> None:
+            self.updated = True
+
+    class DummySystem:
+        def __init__(self, system_id: int, agent_id_str: str) -> None:
+            self.id = system_id
+            self.agent_id_str = agent_id_str
+
+        def get_agent_id(self) -> AgentId:
+            return AgentId.from_str(self.agent_id_str)
+
+    task = DummyTask()
+
+    def _systems_by_type(system_type):  # type: ignore[no-untyped-def]
+        if system_type == SystemType.POLICY:
+            return [DummySystem(5, "System5/root")]
+        if system_type == SystemType.OPERATION:
+            return [
+                DummySystem(9, "System1/worker9"),
+                DummySystem(3, "System1/worker3"),
+            ]
+        return []
 
     with (
-        patch("src.cyberagent.services.tasks._get_task", return_value=DummyTask()),
-        patch.object(system3, "run", mocked_run),
+        patch("src.cyberagent.services.tasks._get_task", return_value=task),
+        patch.object(system3, "_get_systems_by_type", side_effect=_systems_by_type),
     ):
         await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
 
-    assert mocked_run.await_count == 0
-    assert system3._publish_message_to_agent.await_count == 0
+    system3._publish_message_to_agent.assert_awaited_once()
+    publish_call = system3._publish_message_to_agent.await_args
+    assert publish_call is not None
+    published_message = publish_call.args[0]
+    assert isinstance(published_message, InternalErrorMessage)
+    assert "non-review-eligible" in published_message.error_summary
+
+    system3.assign_task.assert_awaited_once_with(3, 42)
+    assert task.invalid_review_retry_count == 1
+    assert task.assignee is None
+    assert task.status == Status.PENDING
+    assert isinstance(task.reasoning, str)
+    assert "TaskReviewMessage received for non-review-eligible status" in task.reasoning
+
+
+@pytest.mark.asyncio
+async def test_system3_task_review_non_review_eligible_stops_auto_retry_after_cap() -> (
+    None
+):
+    system3 = System3("System3/controller1")
+    system3._publish_message_to_agent = AsyncMock()
+    system3.assign_task = AsyncMock()
+
+    message = TaskReviewMessage(
+        task_id=42,
+        assignee_agent_id_str="System1/root",
+        source="System1/root",
+        content="Task result",
+    )
+    context = MessageContext(
+        sender=AgentId.from_str("System1/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="task_review_pending_retry_cap",
+    )
+
+    class DummyTask:
+        def __init__(self) -> None:
+            self.id = 42
+            self.assignee = "System1/root"
+            self.status = Status.IN_PROGRESS
+            self.reasoning = None
+            self.invalid_review_retry_count = 3
+            self.updated = False
+
+        def set_status(self, status) -> None:  # type: ignore[no-untyped-def]
+            self.status = status
+
+        def update(self) -> None:
+            self.updated = True
+
+    class DummySystem:
+        def __init__(self, system_id: int, agent_id_str: str) -> None:
+            self.id = system_id
+            self.agent_id_str = agent_id_str
+
+        def get_agent_id(self) -> AgentId:
+            return AgentId.from_str(self.agent_id_str)
+
+    task = DummyTask()
+
+    def _systems_by_type(system_type):  # type: ignore[no-untyped-def]
+        if system_type == SystemType.POLICY:
+            return [DummySystem(5, "System5/root")]
+        if system_type == SystemType.OPERATION:
+            return [DummySystem(3, "System1/worker3")]
+        return []
+
+    with (
+        patch("src.cyberagent.services.tasks._get_task", return_value=task),
+        patch.object(system3, "_get_systems_by_type", side_effect=_systems_by_type),
+    ):
+        await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
+
+    system3._publish_message_to_agent.assert_awaited_once()
+    system3.assign_task.assert_not_awaited()
+    assert task.invalid_review_retry_count == 4
+    assert task.assignee == "System1/root"
+    assert task.status == Status.IN_PROGRESS
 
 
 @pytest.mark.asyncio
