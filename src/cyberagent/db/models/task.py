@@ -5,7 +5,7 @@ Task model and database operations
 import json
 from typing import List, Optional
 
-from sqlalchemy import Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import Enum, ForeignKey, Integer, String, Text, text
 from sqlalchemy.orm import mapped_column, relationship
 from sqlalchemy.orm.base import Mapped
 
@@ -41,6 +41,7 @@ class Task(Base):
         Integer,
         nullable=False,
         default=0,
+        server_default=text("0"),
     )
     follow_up_task_id: Mapped[Optional[int]] = mapped_column(
         Integer,
