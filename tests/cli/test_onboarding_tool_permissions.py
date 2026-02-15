@@ -10,7 +10,7 @@ from src.cyberagent.cli import onboarding as onboarding_cli
 from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.models.system import System
 from src.cyberagent.db.models.team import Team
-from src.rbac import enforcer as tools_rbac_enforcer
+from src.cyberagent.authz import enforcer as tools_rbac_enforcer
 
 
 def _clear_teams() -> None:
