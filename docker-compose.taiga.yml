@@ -90,7 +90,7 @@ services:
     depends_on:
       - taiga-back
     ports:
-      - "${TAIGA_PUBLIC_PORT:-9000}:80"
+      - "127.0.0.1:${TAIGA_PUBLIC_PORT:-9000}:80"
     restart: unless-stopped
 
 volumes:
