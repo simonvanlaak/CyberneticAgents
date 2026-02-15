@@ -107,14 +107,12 @@ Use exactly one stage label per issue:
 - `stage:in-review`
 - `stage:blocked`
 
-### Canonical automation entrypoints
+### Canonical automation tooling
 
-- `./scripts/run_project_automation.sh`
-  - singleton lock + repo-root guard
-- `./scripts/cron_cyberneticagents_worker.sh`
-  - issue stage worker
+- `https://github.com/simonvanlaak/GhIssueWorkflow`
+  - standalone stage-label queue engine (multi-repo)
 - `./scripts/quality_gate.sh`
-  - required quality gate before review/push
+  - required quality gate before review/push in this repo
 
 **No GitHub Projects v2 queue is used for active automation flow.**
 
