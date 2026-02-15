@@ -103,8 +103,8 @@ class TestSystem3RefactoredImplementation:
             # Provide task creation response first, then assignment response.
             mock_assign_response = TasksAssignResponse(
                 assignments=[
-                    TaskAssignmentResponse(system_id=1, task_id=101),
-                    TaskAssignmentResponse(system_id=2, task_id=102),
+                    TaskAssignmentResponse(system_id=1, task_id=1),
+                    TaskAssignmentResponse(system_id=2, task_id=2),
                 ]
             )
             system3._get_structured_message.side_effect = [

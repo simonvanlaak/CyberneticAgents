@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
 from sqlalchemy import text
 
-from src import init_db
+from src.cyberagent.db import init_db
 
 
 def test_configure_database_updates_path(tmp_path) -> None:
@@ -50,6 +51,11 @@ def test_init_db_raises_when_db_dir_not_writable(tmp_path) -> None:
     previous_from_env = init_db._DATABASE_URL_FROM_ENV
     try:
         db_dir.chmod(0o500)
+        if os.access(db_dir, os.W_OK):
+            pytest.skip(
+                "Current user can still write to chmod(0o500) directory; "
+                "cannot assert PermissionError reliably."
+            )
         init_db.configure_database(f"sqlite:///{db_path.resolve()}")
         with pytest.raises(PermissionError, match="not writable"):
             init_db.init_db()
