@@ -20,8 +20,8 @@ from src.cyberagent.db.db_utils import get_db
 from src.cyberagent.db.models.system import System
 from src.cyberagent.db.models.team import Team
 from src.enums import SystemType
-from src.rbac import enforcer as tools_rbac_enforcer
-from src.rbac import skill_permissions_enforcer
+from src.cyberagent.authz import enforcer as tools_rbac_enforcer
+from src.cyberagent.authz import skill_permissions_enforcer
 
 
 @pytest.fixture(autouse=True)

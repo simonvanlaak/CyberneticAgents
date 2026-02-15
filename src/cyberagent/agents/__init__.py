@@ -1,7 +1,4 @@
-"""Canonical agent namespace.
-
-Legacy ``src.agents`` modules remain for compatibility during migration.
-"""
+"""Canonical agent namespace."""
 
 from src.cyberagent.agents.messages import *  # noqa: F401,F403
 from src.cyberagent.agents.registry import register_systems

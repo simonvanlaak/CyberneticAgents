@@ -19,7 +19,7 @@ from src.cyberagent.db.models.team import Team
 from src.cyberagent.services import systems as systems_service
 from src.cyberagent.services import teams as teams_service
 from src.enums import SystemType
-from src.rbac import skill_permissions_enforcer
+from src.cyberagent.authz import skill_permissions_enforcer
 
 
 @pytest.fixture(autouse=True)

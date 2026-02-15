@@ -14,7 +14,7 @@ from src.cyberagent.db.models.system import ensure_default_systems_for_team
 from src.cyberagent.db.models.team import Team
 from src.cyberagent.testing.pytest_worker import get_pytest_worker_id
 from src.cyberagent.testing.thread_exceptions import ThreadExceptionTracker
-from src.rbac import skill_permissions_enforcer
+from src.cyberagent.authz import skill_permissions_enforcer
 
 _WORKER_ID = get_pytest_worker_id(os.environ, os.getpid())
 _TEST_DB_ROOT = (Path(".pytest_db") / _WORKER_ID).resolve()

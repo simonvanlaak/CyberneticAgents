@@ -9,8 +9,8 @@ from collections.abc import Iterable
 
 import casbin
 
-from src.rbac import enforcer as tools_rbac_enforcer
-from src.rbac import skill_permissions_enforcer
+from src.cyberagent.authz import enforcer as tools_rbac_enforcer
+from src.cyberagent.authz import skill_permissions_enforcer
 
 
 def ensure_policy_bootstrap_state() -> None:
