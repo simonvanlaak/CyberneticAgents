@@ -157,15 +157,13 @@ Please add:
 
   "$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" set-status --issue "$ISSUE_NUMBER" --status "$STAGE_IN_REVIEW"
 
-  RECENT_SHAS="$(git log --format=%H -n 5)"
   BODY="Moved to In review via nightly automation.
 
 Summary:
 - Ran ./scripts/quality_gate.sh
 - Applied any safe auto-fixes (if available)
 
-Recent commits:
-$(echo "$RECENT_SHAS" | sed 's/^/- /')
+GitHub will automatically link commits that reference this issue (e.g. include \"(#$ISSUE_NUMBER)\" in the commit message).
 
 Validation:
 - Pull main and re-run: bash ./scripts/quality_gate.sh"
