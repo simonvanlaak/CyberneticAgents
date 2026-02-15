@@ -65,6 +65,12 @@ def create_initiative(
     return initiative
 
 
+def set_initiative_status(initiative: Initiative, status: Status) -> None:
+    """Set and persist initiative status."""
+    initiative.set_status(status)
+    _persist_initiative(initiative)
+
+
 def update_initiative_fields(
     initiative: Initiative,
     name: str | None = None,

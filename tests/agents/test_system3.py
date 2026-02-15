@@ -18,6 +18,7 @@ from src.agents.system3 import (
 from src.agents.messages import (
     CapabilityGapMessage,
     InitiativeAssignMessage,
+    InitiativeReviewMessage,
     InternalErrorMessage,
     PolicySuggestionMessage,
     PolicyVagueMessage,
@@ -1041,6 +1042,143 @@ async def test_system3_cancel_task_tool_cancels_blocked_task_without_replacement
     assert result["task_id"] == 42
     assert result["status"] == str(Status.CANCELED)
     assert result["replacement_created"] is False
+
+
+@pytest.mark.asyncio
+async def test_system3_evaluate_initiative_progression_assigns_pending_task() -> None:
+    system3 = System3("System3/controller1")
+    system3.assign_task = AsyncMock()  # type: ignore[method-assign]
+    system3._publish_message_to_agent = AsyncMock()
+
+    message = TaskReviewMessage(
+        task_id=42,
+        assignee_agent_id_str="System1/root",
+        source="System1/root",
+        content="Task result",
+    )
+    context = MessageContext(
+        sender=AgentId.from_str("System1/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="initiative_progression_pending",
+    )
+
+    class DummyTask:
+        def __init__(self, task_id: int, status: Status, assignee: str | None) -> None:
+            self.id = task_id
+            self.initiative_id = 12
+            self.status = status
+            self.assignee = assignee
+            self.name = f"Task {task_id}"
+
+    class DummyInitiative:
+        def __init__(self, tasks: list[DummyTask]) -> None:
+            self.id = 12
+            self.status = Status.IN_PROGRESS
+            self._tasks = tasks
+
+        def get_tasks(self) -> list[DummyTask]:
+            return self._tasks
+
+    completed_task = DummyTask(task_id=42, status=Status.COMPLETED, assignee="System1/root")
+    pending_task = DummyTask(task_id=43, status=Status.PENDING, assignee=None)
+    initiative = DummyInitiative([completed_task, pending_task])
+
+    with (
+        patch(
+            "src.agents.system3.initiative_service.get_initiative_by_id",
+            return_value=initiative,
+        ),
+        patch.object(
+            system3,
+            "_select_pending_task_for_progression",
+            AsyncMock(return_value=pending_task),
+        ),
+        patch.object(system3, "_select_retry_operation_system_id", return_value=7),
+    ):
+        await system3._evaluate_initiative_progression(
+            triggering_task=completed_task,
+            message=message,
+            ctx=context,
+        )
+
+    system3.assign_task.assert_awaited_once_with(7, 43)
+
+
+@pytest.mark.asyncio
+async def test_system3_evaluate_initiative_progression_zero_tasks_sends_review_once() -> (
+    None
+):
+    system3 = System3("System3/controller1")
+    system3._publish_message_to_agent = AsyncMock()
+
+    message = TaskReviewMessage(
+        task_id=99,
+        assignee_agent_id_str="System1/root",
+        source="System1/root",
+        content="Task result",
+    )
+    context = MessageContext(
+        sender=AgentId.from_str("System1/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="initiative_progression_zero_tasks",
+    )
+
+    class DummyTask:
+        id = 99
+        initiative_id = 21
+        status = Status.COMPLETED
+        assignee = "System1/root"
+
+    class DummyInitiative:
+        def __init__(self) -> None:
+            self.id = 21
+            self.status = Status.IN_PROGRESS
+
+        def get_tasks(self) -> list[DummyTask]:
+            return []
+
+        def set_status(self, status) -> None:  # type: ignore[no-untyped-def]
+            self.status = status
+
+    class DummySystem4:
+        def get_agent_id(self):
+            return AgentId.from_str("System4/root")
+
+    initiative = DummyInitiative()
+
+    with (
+        patch(
+            "src.agents.system3.initiative_service.get_initiative_by_id",
+            return_value=initiative,
+        ),
+        patch(
+            "src.agents.system3.initiative_service.set_initiative_status",
+            side_effect=lambda initiative_obj, status: initiative_obj.set_status(status),
+        ),
+        patch.object(system3, "_get_systems_by_type", return_value=[DummySystem4()]),
+    ):
+        await system3._evaluate_initiative_progression(
+            triggering_task=DummyTask(),
+            message=message,
+            ctx=context,
+        )
+        await system3._evaluate_initiative_progression(
+            triggering_task=DummyTask(),
+            message=message,
+            ctx=context,
+        )
+
+    system3._publish_message_to_agent.assert_awaited_once()
+    await_args = system3._publish_message_to_agent.await_args
+    assert await_args is not None
+    published_message = await_args.args[0]
+    assert isinstance(published_message, InitiativeReviewMessage)
+    assert published_message.initiative_id == 21
+    assert initiative.status == Status.COMPLETED
 
 
 @pytest.mark.asyncio

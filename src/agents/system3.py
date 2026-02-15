@@ -10,6 +10,7 @@ from pydantic import BaseModel, ConfigDict
 from src.agents.messages import (
     CapabilityGapMessage,
     InitiativeAssignMessage,
+    InitiativeReviewMessage,
     PolicySuggestionMessage,
     PolicyVagueMessage,
     PolicyViolationMessage,
@@ -58,6 +59,10 @@ class TaskAssignmentResponse(BaseModel):
 
 class TasksAssignResponse(BaseModel):
     assignments: List[TaskAssignmentResponse]
+
+
+class PendingTaskSelectionResponse(BaseModel):
+    task_id: int
 
 
 class System3(SystemBase):
@@ -278,6 +283,163 @@ class System3(SystemBase):
         ):
             raise ValueError("No blocked-task resolution tool was called.")
 
+    def _task_status_text(self, task: object) -> str:
+        raw_status = getattr(task, "status", None)
+        status_value = getattr(raw_status, "value", raw_status)
+        return str(status_value).strip().lower()
+
+    def _initiative_status_text(self, initiative: object) -> str:
+        raw_status = getattr(initiative, "status", None)
+        status_value = getattr(raw_status, "value", raw_status)
+        return str(status_value).strip().lower()
+
+    def _is_terminal_task_status(self, task: object) -> bool:
+        return self._task_status_text(task) in {
+            "approved",
+            "status.approved",
+            "canceled",
+            "status.canceled",
+        }
+
+    async def _select_pending_task_for_progression(
+        self,
+        *,
+        pending_tasks: list[object],
+        message: object,
+        ctx: MessageContext,
+    ) -> object:
+        if len(pending_tasks) == 1:
+            return pending_tasks[0]
+
+        pending_payload = [
+            {
+                "task_id": getattr(task, "id", None),
+                "name": getattr(task, "name", ""),
+                "content": getattr(task, "content", ""),
+                "reasoning": getattr(task, "reasoning", ""),
+                "assignee": getattr(task, "assignee", None),
+            }
+            for task in pending_tasks
+        ]
+        prompts = [
+            "Select the single most important pending task to execute next.",
+            "Return strict JSON only with schema: {\"task_id\": <int>}.",
+            "Use business impact and urgency to prioritize.",
+            "## Pending Tasks",
+            json.dumps(pending_payload, indent=4),
+        ]
+
+        try:
+            response = await self.run(
+                [cast(Any, message)],
+                ctx,
+                prompts,
+                PendingTaskSelectionResponse,
+                include_memory_context=False,
+            )
+            selection = self._get_structured_message(
+                response, PendingTaskSelectionResponse
+            )
+            selected_task_id = int(selection.task_id)
+            for task in pending_tasks:
+                task_id = getattr(task, "id", None)
+                if isinstance(task_id, int) and task_id == selected_task_id:
+                    return task
+        except Exception as exc:
+            logger.warning(
+                "Pending-task selection failed for initiative progression: %s",
+                exc,
+            )
+
+        valid_tasks = [task for task in pending_tasks if isinstance(getattr(task, "id", None), int)]
+        if not valid_tasks:
+            return pending_tasks[0]
+        return min(valid_tasks, key=lambda task: int(getattr(task, "id")))
+
+    async def _publish_initiative_review_once(
+        self,
+        *,
+        initiative: object,
+    ) -> None:
+        if self._initiative_status_text(initiative) in {
+            "completed",
+            "status.completed",
+        }:
+            return
+
+        intelligence_systems = self._get_systems_by_type(SystemType.INTELLIGENCE)
+        if not intelligence_systems:
+            raise ValueError("No intelligence system found for initiative review.")
+
+        initiative_service.set_initiative_status(
+            cast(Any, initiative),
+            Status.COMPLETED,
+        )
+        await self._publish_message_to_agent(
+            InitiativeReviewMessage(
+                initiative_id=int(getattr(initiative, "id")),
+                source=self.name,
+                content="All initiative tasks are terminal or no tasks were created.",
+            ),
+            intelligence_systems[0].get_agent_id(),
+        )
+
+    async def _evaluate_initiative_progression(
+        self,
+        *,
+        triggering_task: object,
+        message: object,
+        ctx: MessageContext,
+    ) -> None:
+        initiative_id = getattr(triggering_task, "initiative_id", None)
+        if not isinstance(initiative_id, int):
+            return
+
+        initiative = initiative_service.get_initiative_by_id(initiative_id)
+        initiative_tasks = list(initiative.get_tasks())
+
+        if not initiative_tasks:
+            await self._publish_initiative_review_once(initiative=initiative)
+            return
+
+        pending_tasks = [
+            task
+            for task in initiative_tasks
+            if self._task_status_text(task) in {"pending", "status.pending"}
+        ]
+        if pending_tasks:
+            next_task = await self._select_pending_task_for_progression(
+                pending_tasks=pending_tasks,
+                message=message,
+                ctx=ctx,
+            )
+            assignee = getattr(next_task, "assignee", None)
+            if isinstance(assignee, str) and assignee:
+                await self._publish_message_to_agent(
+                    TaskAssignMessage(
+                        task_id=int(getattr(next_task, "id")),
+                        assignee_agent_id_str=assignee,
+                        source=self.name,
+                        content=str(getattr(next_task, "name", "")),
+                    ),
+                    AgentId.from_str(assignee),
+                )
+                return
+
+            await self.assign_task(
+                self._select_retry_operation_system_id(),
+                int(getattr(next_task, "id")),
+            )
+            return
+
+        non_terminal_tasks = [
+            task for task in initiative_tasks if not self._is_terminal_task_status(task)
+        ]
+        if non_terminal_tasks:
+            return
+
+        await self._publish_initiative_review_once(initiative=initiative)
+
     @message_handler
     async def handle_initiative_assign_message(
         self, message: InitiativeAssignMessage, ctx: MessageContext
@@ -424,6 +586,10 @@ class System3(SystemBase):
                 )
                 tasks.append(task)
 
+        if not tasks:
+            await self._publish_initiative_review_once(initiative=initiative)
+            return
+
         assign_tasks_assignment = message_specific_prompts
         task_prompt_lines = [line for task in tasks for line in task.to_prompt()]
         example_task_id = 1
@@ -549,6 +715,11 @@ class System3(SystemBase):
         if self._is_blocked_task(task):
             try:
                 await self._resolve_blocked_task(message, ctx, task)
+                await self._evaluate_initiative_progression(
+                    triggering_task=task,
+                    message=message,
+                    ctx=ctx,
+                )
             except Exception as exc:
                 if isinstance(exc, InternalErrorRoutedError):
                     return
@@ -579,6 +750,11 @@ class System3(SystemBase):
                     source=self.name,
                 ),
                 system_5_id,
+            )
+            await self._evaluate_initiative_progression(
+                triggering_task=task,
+                message=message,
+                ctx=ctx,
             )
             return
         policy_chunks = [
@@ -693,6 +869,11 @@ class System3(SystemBase):
                     else:
                         raise ValueError("Invalid policy judgement")
             task_service.finalize_task_review(task, all_cases)
+            await self._evaluate_initiative_progression(
+                triggering_task=task,
+                message=message,
+                ctx=ctx,
+            )
         except Exception as exc:
             if isinstance(exc, InternalErrorRoutedError):
                 return
