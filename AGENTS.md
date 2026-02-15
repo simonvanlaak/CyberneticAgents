@@ -138,9 +138,9 @@ Never commit or publish real phone numbers, videos, or live configuration values
 - `main.py` - Entry point
 - `src/cyberagent/core/runtime.py` - Runtime lifecycle
 - `src/cyberagent/services/` - Purpose/strategy/initiative/task/team orchestration
-- `src/agents/` - Agent implementations (legacy path, still active during refactor)
-- `src/rbac/` - RBAC configuration (legacy path, still active during refactor)
-- `src/registry.py` - Agent registration bridge
+- `src/cyberagent/agents/` - Canonical agent implementations
+- `src/cyberagent/authz/` - Canonical RBAC/authz implementation
+- `src/agents/`, `src/rbac/`, `src/tools/`, `src/registry.py` - compatibility namespaces
 
 ### VSM Hierarchy
 ```
@@ -251,12 +251,12 @@ from casbin import Enforcer
 
 # 3. Local imports
 from src.cyberagent.core.runtime import get_runtime
-from src.agents.messages import UserMessage
+from src.cyberagent.agents.messages import UserMessage
 ```
 
 ## Refactor Conventions (Current)
-- Prefer new code under `src/cyberagent/` unless a legacy path is explicitly required.
-- Keep `src/agents/`, `src/tools/`, `src/rbac/`, and `src/registry.py` stable until migration completion.
+- `src/cyberagent/` is canonical for runtime, agents, services, and authz.
+- Legacy namespaces (`src/agents/`, `src/tools/`, `src/rbac/`, `src/registry.py`) may exist as compatibility entrypoints only.
 - Do not remove compatibility paths without updating tests and docs in the same change.
 
 ### Type Hints - MANDATORY

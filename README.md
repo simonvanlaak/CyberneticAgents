@@ -137,14 +137,12 @@ CyberneticAgents/
 │   │   ├── domain/
 │   │   ├── services/
 │   │   └── tools/
-│   ├── agents/        # legacy path (still active during migration)
-│   ├── rbac/          # legacy path (still active during migration)
-│   ├── tools/         # legacy path (still active during migration)
-│   └── registry.py    # legacy bridge
+│   ├── agents/        # legacy compatibility namespace
+│   ├── rbac/          # legacy compatibility namespace
+│   ├── tools/         # legacy compatibility namespace
+│   └── registry.py    # legacy compatibility entrypoint
 └── tests/
 ```
-
-Legacy paths above remain active until migration completes.
 
 ---
 
