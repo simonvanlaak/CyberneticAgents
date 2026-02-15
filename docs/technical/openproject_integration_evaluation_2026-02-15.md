@@ -5,223 +5,226 @@ Issue: #91
 
 ## 1) Executive recommendation
 
-**Recommendation: Adopt OpenProject later (phased), not immediately.**
+**Updated recommendation:** keep **OpenProject as a phased option** (not immediate cutover), and run one short comparison spike with **Taiga** before committing.
 
-Why (weighted by operational overhead):
-1. OpenProject can cover our required MVP workflow (board + assignment + comments + status transitions), but self-hosting adds a second production system to run and secure.
-2. The agent-per-user model is feasible through API/user/membership endpoints, but provisioning lifecycle and permission hardening are non-trivial.
-3. We can de-risk by running OpenProject in parallel with the current Streamlit + SQLite board first, then switching once reliability and migration quality are proven.
+Reasoning (weighted by **operational overhead** first):
+1. Current in-repo board is lightweight but incomplete for the desired workflow: the Streamlit dashboard is read-only and there is no implemented user-facing ticket assignment/move flow yet.
+2. OpenProject has strong API/workflow coverage for our target model (assignment, statuses, comments, memberships, agent users), but adds meaningful hosting/ops load.
+3. Among self-hosted OSS alternatives reviewed, Taiga is the closest functional challenger; Plane is promising but similarly multi-service, and Wekan’s REST API documentation explicitly notes incomplete coverage.
 
 Decision summary:
-- **Now:** prepare and run a small parallel MVP.
-- **Later (after validation):** move primary task operations to OpenProject.
-- **Not recommended:** immediate hard cutover from the current Streamlit + SQLite board without coexistence window.
+- **Now:** do not hard-cutover; keep current Streamlit+SQLite baseline as source of truth.
+- **Next:** run a small OpenProject vs Taiga spike focused on worker API fit + ops friction.
+- **Later:** choose one external system and migrate in phases.
 
 ---
 
-## 2) Product/technical fit vs our needs
+## 2) Current baseline in this repo (correction)
 
-## Core concepts that map well
-- **Work packages** = task records we can assign, track, and comment on.
-- **Boards** = kanban-style visual planning over work packages.
-- **Users/roles/memberships** = foundation for “real user per agent”.
-- **REST API v3 (HAL+JSON)** = full server-side integration surface.
+The prior draft incorrectly referenced Notion as the current task board for this project.
 
-## Important feature caveat
-- OpenProject docs state **Basic board** is available in Community edition.
-- **Action boards** (status/assignee/version boards with automatic attribute updates when dragging cards) are Enterprise add-ons.
+For **CyberneticAgents**, the baseline is:
+- Streamlit dashboard UI over SQLite task data.
+- Dashboard is explicitly read-only for Kanban/team views.
+- No existing implementation for end users to directly assign or move tickets through that UI.
 
-Implication:
-- If we require drag-and-drop to directly update status/assignee, confirm Enterprise availability/budget.
-- If Community-only, we should rely on work package detail actions/API updates for status/assignee, and use basic boards for visibility.
-
----
-
-## 3) API feasibility for required operations
-
-## Required operations and endpoint mapping
-
-1. **List/query work items**
-   - `GET /api/v3/workspaces/{id}/work_packages`
-   - Supports paging, filters, sorting, grouping.
-
-2. **Claim/assign work item**
-   - Discover candidates: `GET /api/v3/workspaces/{id}/available_assignees`
-   - Update assignee: `PATCH /api/v3/work_packages/{id}` (`_links.assignee`, with `lockVersion`).
-
-3. **Update status**
-   - `PATCH /api/v3/work_packages/{id}` (`_links.status`, with `lockVersion`).
-
-4. **Append structured results/comments**
-   - `POST /api/v3/work_packages/{id}/activities` (comment/journal entry).
-
-5. **Create/manage users for agents**
-   - `POST /api/v3/users` (create user; admin/manage_user permissions needed).
-   - `POST /api/v3/memberships` (assign user to project/workspace roles).
-
-6. **Read complete task timeline/history**
-   - `GET /api/v3/work_packages/{id}/activities`.
-
-## Practical integration notes
-- OpenProject API is hypermedia/HAL; action links can be permission-sensitive.
-- Work package updates require optimistic locking (`lockVersion`).
-- Deprecated project-scoped endpoints exist in docs; prefer workspace-scoped endpoints where documented.
-
-Verdict: **API coverage is sufficient for MVP.**
+Implication: any external PM integration (OpenProject/Taiga/Plane/...) must include:
+1. data mapping from SQLite task records,
+2. assignment/status synchronization,
+3. identity mapping for agent users,
+4. migration/coexistence safety.
 
 ---
 
-## 4) Auth model options (server-side)
+## 3) OpenProject fit against required capabilities
+
+OpenProject maps well to target requirements:
+- **Work packages** for task records.
+- **Boards** for Kanban visualization.
+- **Users/roles/memberships** for agent-per-user model.
+- **REST API v3** for automation.
+- **Webhooks** + polling fallback for reliable event ingestion.
+
+Key caveat:
+- Community edition provides basic boards; advanced board automation features may require enterprise options.
+
+Bottom line: OpenProject is functionally strong, but not low-overhead.
+
+---
+
+## 4) Self-hosted OSS alternatives (requested scope)
+
+Compared alternatives:
+- **Plane**
+- **Taiga**
+- **Wekan**
+
+### 4.1 Snapshot matrix
+
+| Option | Operational overhead (primary) | API/worker fit (assign/status/comment/user) | Eventing | Migration complexity from current baseline | Notes |
+|---|---|---|---|---|---|
+| OpenProject | High | High | Webhooks + poll fallback | Medium/High | Most complete governance model; heaviest ops footprint |
+| Taiga | Medium/High | High | Webhooks (HMAC-signed) | Medium | Strong challenger for our use case |
+| Plane | Medium/High | Medium/High | Webhooks + signatures | Medium | Modern API/webhooks; still similar infra class |
+| Wekan | Low/Medium | Low/Medium | Limited in reviewed docs | Medium | REST docs explicitly say API is not complete |
+
+### 4.2 Practical takeaways
+
+- **Taiga** is the closest “could match criteria with somewhat less overhead” candidate to validate in a short spike.
+- **Plane** is promising, but not clearly lower effort operationally for our environment.
+- **Wekan** is attractive for simple Kanban, but current REST API maturity signal is weaker for our automation-heavy workflow.
+
+---
+
+## 5) OpenProject API feasibility (required operations)
+
+Required operations and endpoint families:
+1. **List/query work items**: work package listing/filtering.
+2. **Claim/assign**: assignee updates via work package patch operations.
+3. **Update status**: status links/patch operations.
+4. **Append structured comments/results**: activity/journal endpoints.
+5. **Create/link users for agents**: user + membership endpoints.
+6. **Read timeline/history**: work package activity history.
+
+Integration notes:
+- API is HAL-based; available links/actions can be permission-sensitive.
+- Update flows use optimistic locking (`lockVersion`).
+
+Verdict: coverage is sufficient for MVP worker automation.
+
+---
+
+## 6) Authentication model
 
 OpenProject supports:
-1. API token (Bearer or Basic with `apikey`).
-2. OAuth2 (authorization code, PKCE, client credentials).
+- API tokens (Bearer or Basic `apikey` pattern)
+- OAuth2 application flows
 
-## Recommended for MVP
-- **Primary:** API token per automation identity (simpler ops, faster bring-up).
-- **Optional later:** OAuth2 client credentials when centralizing token lifecycle and policy.
-
-Why:
-- Minimizes moving parts in early phase.
-- Works well for background workers and deterministic API calls.
+MVP recommendation:
+- Start with API tokens per automation identity.
+- Move to OAuth2 app model only if/when central token lifecycle and policy demands it.
 
 Security baseline:
-- Keep tokens in secret manager (1Password/secure env injection).
-- Use least privilege roles for agent users.
-- Rotate/revoke tokens as part of offboarding or compromise response.
+- Secret-manager backed storage,
+- least-privilege roles,
+- documented rotation/revocation.
 
 ---
 
-## 5) Eventing: webhook vs polling
+## 7) Eventing approach
 
-OpenProject provides webhooks configurable for events including work packages and comments.
-
-## Recommended ingestion pattern
-1. **Primary trigger:** webhooks for near-real-time updates.
-2. **Safety net:** periodic poll/reconciliation (e.g., every 1–5 min) for missed events/network failures.
-3. Validate webhook signature secret.
-4. Ensure idempotent event handling by storing last processed event identity/timestamp per workspace.
-
-Verdict: **Webhook + reconciliation polling** is the most robust option.
+Recommended pattern (OpenProject and similarly for Taiga/Plane where applicable):
+1. webhook ingestion for low latency,
+2. periodic reconciliation poll for missed events,
+3. idempotent processing keyed by event identifiers,
+4. signature verification on inbound callbacks.
 
 ---
 
-## 6) Self-hosting effort (Docker baseline)
+## 8) Hosting effort (OpenProject docker baseline)
 
-## What docs indicate
-- Docker deployment is the recommended path.
-- Baseline server guidance (up to ~200 users): roughly **4 CPU, 4 GB RAM, 20 GB disk**.
-- PostgreSQL 16+ officially supported.
-- Backups/upgrades are documented in Docker Compose flow.
+OpenProject docs indicate a non-trivial but manageable ops profile:
+- Docker-oriented deployment,
+- PostgreSQL dependency,
+- explicit backup/upgrade expectations,
+- baseline sizing around small-team server resources.
 
-## Operational overhead to account for
-1. Service lifecycle: deployment, upgrades, rollback windows.
-2. Data safety: DB + attachment backups and restore drills.
-3. Security: TLS/reverse proxy, network exposure, token management.
-4. Monitoring: availability, queue depth, DB health, API latency/errors.
-
-For thesis/hackathon scale, this is feasible but not “zero-maintenance”.
+For thesis/hackathon scale: feasible, but not “set-and-forget”.
 
 ---
 
-## 7) Migration + coexistence plan (current Streamlit+SQLite board -> OpenProject)
+## 9) Migration + coexistence plan (current Streamlit+SQLite -> external PM)
 
-## Coexistence is viable and recommended
-Run OpenProject in parallel first.
+### Suggested mapping
+- SQLite `tasks` row -> external task/work package/card
+- internal `tasks.assignee` -> external user identity (agent user)
+- internal status -> external workflow status
+- internal result/reasoning/execution log -> external comments/activities
+- internal task id -> external reference field
 
-## Suggested mapping
-- SQLite `tasks` row -> OpenProject work package
-- Internal `tasks.assignee` (agent id string today) -> OpenProject user (agent account)
-- Internal status enum -> OpenProject status
-- Internal result/reasoning/execution log -> work package activities/comments
-- Internal task id -> custom field or external reference link in OpenProject
-
-## Rollout strategy
-1. **Read-only mirror phase**: ingest OpenProject changes, no ownership switch.
-2. **Dual-write phase**: write from worker to both systems for selected flows.
-3. **Primary switch**: OpenProject becomes source of truth for selected projects.
-4. **Decommission phase**: retire overlapping local board synchronization paths.
+### Rollout
+1. **Mirror-read phase**: ingest external updates, no ownership switch.
+2. **Dual-write phase**: selected flows write both systems.
+3. **Primary switch**: external system becomes source of truth.
+4. **Decommission**: retire temporary sync paths.
 
 ---
 
-## 8) Agent-user model
+## 10) Agent-user model
 
-Target: one real OpenProject user per agent role.
+Target remains: **one real external account per agent role**.
 
-## Proposed model
-1. Provision agent user (API/admin flow).
-2. Assign role(s) via membership per workspace.
-3. Store mapping: `agent_id -> openproject_user_id` in CyberneticAgents config/store.
-4. Worker selects acting identity and executes assignment/comment/status updates with explicit audit metadata.
-
-Notes:
-- Keep role templates minimal and principle-of-least-privilege.
-- Define naming convention early (e.g., `agent-sys3-control`, `agent-sys1-ops-<name>`).
+Implementation shape:
+1. provision user account,
+2. grant scoped membership/role,
+3. persist `agent_id -> external_user_id` mapping,
+4. stamp audit metadata on all worker actions.
 
 ---
 
-## 9) Concrete MVP plan (Telegram-first acceptable)
+## 11) MVP implementation scope (if OpenProject chosen)
 
-## MVP scope
-- Single OpenProject workspace for CyberneticAgents tasks.
-- API integration for:
-  - query candidate tasks
-  - claim/assign
-  - status update
-  - comment results back
-- Optional Telegram notifications for assignment/result summaries.
-- Agent-user provisioning for a small fixed set of agents (not dynamic autoscaling yet).
+- Single workspace/project for CyberneticAgents tasks.
+- Worker features:
+  - pull candidate tasks,
+  - claim/assign,
+  - update status,
+  - append structured result comments.
+- Initial fixed roster of agent users.
+- Optional Telegram summary notifications.
 
-## Required infra steps
-1. Deploy OpenProject via Docker Compose on a dedicated host (or isolated VM).
-2. Configure TLS/reverse proxy and restricted ingress.
-3. Create admin + role templates.
-4. Provision initial agent users and memberships.
-5. Configure secrets and webhook endpoint.
-
-## API endpoints needed in implementation
-- `GET /api/v3/workspaces/{id}/work_packages`
-- `GET /api/v3/workspaces/{id}/available_assignees`
-- `PATCH /api/v3/work_packages/{id}`
-- `POST /api/v3/work_packages/{id}/activities`
-- `GET /api/v3/work_packages/{id}/activities`
-- `POST /api/v3/users`
-- `POST /api/v3/memberships`
-
-## Effort estimate
-- **MVP integration only:** **M (5–8 days)**
-  - API client + mapping + error handling + retries + lockVersion handling
-  - webhook receiver + reconciliation poller
-  - agent-user provisioning scripts
-- **Production hardening:** **M/L (+4–8 days)**
-  - monitoring, backup/restore drill, runbooks, security hardening, migration cutover checks
+Estimated effort:
+- Integration MVP: **M (~5–8 days)**
+- Hardening + migration controls: **M/L (+4–8 days)**
 
 ---
 
-## 10) Go/No-Go criteria for starting implementation
+## 12) Go/No-Go criteria
 
-Proceed with implementation when these are confirmed:
-1. Community vs Enterprise decision (Action boards requirement).
-2. Hosting target and owner for OpenProject operations.
-3. Accepted coexistence window and migration checkpoints.
-4. Initial agent roster and role matrix.
+Proceed when all are explicit:
+1. OpenProject vs Taiga final selection after spike.
+2. Hosting owner + backup/upgrade responsibility.
+3. Accepted coexistence window + migration checkpoints.
+4. Initial agent roster + role matrix.
 
-If confirmed, create follow-up implementation issues:
-1. OpenProject infrastructure bootstrap.
-2. API client + domain mapping layer.
-3. Webhook + reconciliation worker.
-4. Agent-user provisioning + membership management.
-5. Dual-write migration adapter + validation report.
+If approved, create follow-up tickets for:
+1. infra bootstrap,
+2. API client + domain mapping,
+3. webhook + reconciliation worker,
+4. agent-user provisioning,
+5. migration adapter + validation report.
 
 ---
 
 ## Reference sources
+
+### OpenProject
 - API intro/auth: https://www.openproject.org/docs/api/introduction/
 - Work package API: https://www.openproject.org/docs/api/endpoints/work-packages/
 - API/webhooks admin: https://www.openproject.org/docs/system-admin-guide/api-and-webhooks/
 - OAuth apps: https://www.openproject.org/docs/system-admin-guide/authentication/oauth-applications/
-- Docker Compose install: https://www.openproject.org/docs/installation-and-operations/installation/docker-compose/
+- Docker install: https://www.openproject.org/docs/installation-and-operations/installation/docker-compose/
 - System requirements: https://www.openproject.org/docs/installation-and-operations/system-requirements/
-- Agile boards: https://www.openproject.org/docs/user-guide/agile-boards/
+- Boards: https://www.openproject.org/docs/user-guide/agile-boards/
 - Roles/permissions: https://www.openproject.org/docs/system-admin-guide/users-permissions/roles-permissions/
-- API spec paths (raw): https://raw.githubusercontent.com/opf/openproject/dev/docs/api/apiv3/openapi-spec.yml
+
+### Plane
+- Self-hosting overview: https://developers.plane.so/self-hosting/overview
+- API intro/auth (X-API-Key): https://developers.plane.so/api-reference/introduction
+- Webhooks: https://developers.plane.so/dev-tools/intro-webhooks
+
+### Taiga
+- API docs: https://docs.taiga.io/api.html
+- API auth/general notes (Bearer/Application tokens, OCC): https://raw.githubusercontent.com/taigaio/taiga-doc/main/api/general-notes.adoc
+- Webhooks config: https://docs.taiga.io/webhooks-configuration.html
+- Webhooks technical details: https://raw.githubusercontent.com/taigaio/taiga-doc/main/webhooks.adoc
+- Docker deployment repo: https://github.com/taigaio/taiga-docker
+
+### Wekan
+- REST API wiki (includes “REST API is not complete yet” note): https://raw.githubusercontent.com/wiki/wekan/wekan/REST-API.md
+- Project/deployment docs entry points: https://github.com/wekan/wekan
+
+### Current CyberneticAgents baseline
+- Dashboard feature docs (read-only): `docs/features/dashboard.md`
+- Streamlit dashboard: `src/cyberagent/ui/dashboard.py`
+- SQLite Kanban data loader: `src/cyberagent/ui/kanban_data.py`
