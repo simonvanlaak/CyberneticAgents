@@ -22,8 +22,8 @@ Operational automation scripts for CyberneticAgents.
 - **`./scripts/cron_cyberneticagents_worker.sh`**
   - Source of truth: GitHub Issue stage labels (`stage:*`), not GitHub Projects.
   - Stage labels:
-    - `stage:planned` (ignored by automation; manually promote → backlog when ready)
-    - `stage:backlog`
+    - `stage:backlog` (parked; not in automation queue)
+    - `stage:queued` (automation triage queue)
     - `stage:needs-clarification`
     - `stage:ready-to-implement`
     - `stage:in-progress`

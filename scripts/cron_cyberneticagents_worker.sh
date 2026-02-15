@@ -30,7 +30,7 @@ REPO="simonvanlaak/CyberneticAgents"
 # We fully ignore Projects going forward due to Projects v2 GraphQL rate limiting.
 "$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" ensure-labels >/dev/null
 
-STAGE_BACKLOG="stage:backlog"
+STAGE_QUEUED="stage:queued"
 STAGE_NEEDS_CLARIFICATION="stage:needs-clarification"
 STAGE_READY_TO_IMPLEMENT="stage:ready-to-implement"
 STAGE_IN_PROGRESS="stage:in-progress"
@@ -54,7 +54,7 @@ while [[ $process_count -lt $max_process ]]; do
 
   PICKED_FROM_STAGE="$(printf '%s' "$PICK_JSON" | "$PYTHON" -c 'import json,sys; print(json.loads(sys.stdin.read())["picked_from_stage"])')"
 
-  if [[ "$PICKED_FROM_STAGE" == "$STAGE_BACKLOG" ]]; then
+  if [[ "$PICKED_FROM_STAGE" == "$STAGE_QUEUED" ]]; then
     # Clarification questions are crafted by the Codex cron agent (it pulls repo context).
     # This script only advances the stage.
     "$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" set-status --issue "$ISSUE_NUMBER" --status "$STAGE_NEEDS_CLARIFICATION"

@@ -5,8 +5,8 @@ from typing import Iterable, Sequence, Tuple
 
 STAGE_LABEL_PREFIX = "stage:"
 
-STAGE_PLANNED = "stage:planned"
-STAGE_BACKLOG = "stage:backlog"
+STAGE_BACKLOG = "stage:backlog"  # parked/not in automation queue
+STAGE_QUEUED = "stage:queued"  # automation triage queue
 STAGE_NEEDS_CLARIFICATION = "stage:needs-clarification"
 STAGE_READY_TO_IMPLEMENT = "stage:ready-to-implement"
 STAGE_IN_PROGRESS = "stage:in-progress"
@@ -14,8 +14,8 @@ STAGE_IN_REVIEW = "stage:in-review"
 STAGE_BLOCKED = "stage:blocked"
 
 KNOWN_STAGE_LABELS = {
-    STAGE_PLANNED,
     STAGE_BACKLOG,
+    STAGE_QUEUED,
     STAGE_NEEDS_CLARIFICATION,
     STAGE_READY_TO_IMPLEMENT,
     STAGE_IN_PROGRESS,

@@ -19,7 +19,7 @@ from src.github_stage_queue import (
     STAGE_IN_PROGRESS,
     STAGE_IN_REVIEW,
     STAGE_NEEDS_CLARIFICATION,
-    STAGE_PLANNED,
+    STAGE_QUEUED,
     STAGE_READY_TO_IMPLEMENT,
     plan_label_changes,
 )
@@ -55,8 +55,8 @@ def cmd_ensure_labels(args: argparse.Namespace) -> int:
 
     # Use deterministic colors (arbitrary but stable).
     desired = {
-        STAGE_PLANNED: "cfd3d7",
-        STAGE_BACKLOG: "ededed",
+        STAGE_BACKLOG: "cfd3d7",
+        STAGE_QUEUED: "ededed",
         STAGE_NEEDS_CLARIFICATION: "d4c5f9",
         STAGE_READY_TO_IMPLEMENT: "0e8a16",
         STAGE_IN_PROGRESS: "fbca04",
@@ -100,7 +100,7 @@ def _pick_next_issue(*, repo: str, owner_login: str) -> dict[str, Any] | None:
 
     Priority policy (burst):
     1) stage:in-progress
-    2) stage:backlog  -> move to stage:needs-clarification and ask questions
+    2) stage:queued  -> move to stage:needs-clarification and ask questions
     3) stage:ready-to-implement (owner-authorized) -> implementation
 
     Rationale:
@@ -120,15 +120,15 @@ def _pick_next_issue(*, repo: str, owner_login: str) -> dict[str, Any] | None:
             "picked_from_stage": STAGE_IN_PROGRESS,
         }
 
-    # 2) Backlog -> needs clarification
-    q = f'repo:{repo} is:issue is:open label:"{STAGE_BACKLOG}" sort:created-asc'
+    # 2) Queued -> needs clarification
+    q = f'repo:{repo} is:issue is:open label:"{STAGE_QUEUED}" sort:created-asc'
     data = _gh_api("search/issues", fields={"q": q, "per_page": 1})
     items = data.get("items") or []
     if items:
         return {
             "number": int(items[0]["number"]),
             "title": items[0]["title"],
-            "picked_from_stage": STAGE_BACKLOG,
+            "picked_from_stage": STAGE_QUEUED,
         }
 
     # 3) Ready to implement (authorized)
