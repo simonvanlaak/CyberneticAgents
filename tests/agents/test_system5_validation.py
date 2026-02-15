@@ -11,14 +11,15 @@ from autogen_agentchat.messages import TextMessage
 from src.agents.system5 import System5
 from src.agents.messages import (
     CapabilityGapMessage,
-    PolicyViolationMessage,
-    PolicyVagueMessage,
-    PolicySuggestionMessage,
-    TaskReviewMessage,
-    InternalErrorMessage,
-    StrategyReviewMessage,
-    ResearchReviewMessage,
     ConfirmationMessage,
+    InternalErrorMessage,
+    InvalidReviewRecoveryContract,
+    PolicySuggestionMessage,
+    PolicyVagueMessage,
+    PolicyViolationMessage,
+    ResearchReviewMessage,
+    StrategyReviewMessage,
+    TaskReviewMessage,
 )
 
 
@@ -404,6 +405,60 @@ async def test_system5_root_notifies_user_on_internal_error():
     assert await_args is not None
     recipient = await_args.args[1]
     assert str(recipient) == "UserAgent/root"
+
+
+@pytest.mark.asyncio
+async def test_system5_internal_error_wait_for_remediation_does_not_auto_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    system5 = System5("System5/policy1")
+    system5._publish_message_to_agent = AsyncMock()
+
+    class _Task:
+        id = 42
+        assignee = "System1/root"
+        result = "done"
+        name = "Task 42"
+
+    monkeypatch.setattr("src.agents.system5.task_service.get_task_by_id", lambda _tid: _Task())
+
+    ensure_calls: list[str] = []
+
+    def _fake_ensure(_assignee: str) -> int:
+        ensure_calls.append("called")
+        return 1
+
+    monkeypatch.setattr(
+        "src.agents.system5.policy_service.ensure_baseline_policies_for_assignee",
+        _fake_ensure,
+    )
+
+    result = await system5.handle_internal_error_message(
+        InternalErrorMessage(
+            team_id=1,
+            origin_system_id_str="System3/root",
+            failed_message_type="TaskReviewMessage",
+            error_summary="TaskReviewMessage received for non-review-eligible status 'in_progress'.",
+            task_id=42,
+            content="Review failure",
+            contract=InvalidReviewRecoveryContract(
+                task_id=42,
+                initiative_id=7,
+                observed_status="in_progress",
+                retry_count=4,
+                retry_limit=3,
+                error_summary="TaskReviewMessage received for non-review-eligible status 'in_progress'.",
+                next_action="wait_for_policy_remediation",
+            ),
+            source="System3/root",
+        ),
+        SimpleNamespace(),
+    )  # type: ignore[arg-type]
+
+    assert result.is_error is False
+    assert "retry cap" in result.content.lower()
+    assert ensure_calls == []
+    system5._publish_message_to_agent.assert_not_awaited()
 
 
 @pytest.mark.asyncio

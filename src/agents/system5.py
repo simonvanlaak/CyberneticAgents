@@ -364,6 +364,16 @@ class System5(SystemBase):
             message.failed_message_type == TaskReviewMessage.__name__
             and message.task_id is not None
         ):
+            next_action = getattr(getattr(message, "contract", None), "next_action", None)
+            if isinstance(next_action, str) and next_action == "wait_for_policy_remediation":
+                return ConfirmationMessage(
+                    content=(
+                        "Invalid-review retry cap reached; awaiting policy remediation. "
+                        "No automatic task-review retry was triggered."
+                    ),
+                    is_error=False,
+                    source=self.name,
+                )
             try:
                 task = task_service.get_task_by_id(message.task_id)
                 if task.assignee:
