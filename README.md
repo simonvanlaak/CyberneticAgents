@@ -1,154 +1,181 @@
 # CyberneticAgents
 
-A VSM-inspired multi-agent system built on AutoGen Core + AgentChat with Casbin RBAC. The project models Systems 1/3/4/5 as agent roles and routes messages through tools guarded by RBAC policies, with optional Langfuse tracing.
+CyberneticAgents is a VSM-inspired multi-agent system built with AutoGen Core, Casbin RBAC, and a CLI-first runtime.
 
-## What This Is (Current State)
+It models Systems 1/3/4/5 as cooperating agents and enforces role boundaries for cross-agent actions.
 
-- **Multi-agent runtime** using AutoGen Core + AgentChat
-- **VSM agent roles**: System 1, 3, 4, 5 (System 2 is defined in RBAC types but not implemented yet)
-- **RBAC enforcement** via Casbin for cross-agent actions
-- **Task/initiative/policy data model** backed by SQLite (SQLAlchemy)
-- **CLI-first interaction** for working with the system
-- **Optional tracing** with Langfuse via OpenTelemetry
+## Current status
 
-## Quick Start (Onboarding First)
+- Multi-agent runtime (AutoGen Core + AgentChat)
+- VSM roles implemented: System 1, 3, 4, 5
+- Casbin RBAC enforcement for delegation/tool actions
+- SQLite-backed domain data and policy data
+- CLI-first workflows, optional Telegram interaction
+- Label-driven GitHub issue automation for implementation flow
 
-### 1) Install
+---
+
+## Quick start
+
+## Prerequisites
+
+- Python 3.11+
+- Docker (required for tool/skill execution)
+- 1Password CLI (`op`) with access to required secrets
+
+## Install
 
 ```bash
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e .
 ```
 
-### 2) Configure Secrets
+(Optional) install CLI entrypoint with uv:
 
-CyberneticAgents expects secrets to live in 1Password and be injected at runtime.
-Create a vault named `CyberneticAgents` and add items named after the env vars
-with a `credential` field:
+```bash
+uv tool install -e .
+```
+
+## Configure secrets
+
+CyberneticAgents expects secrets from 1Password at runtime.
+Create a vault named `CyberneticAgents` and add items (with a `credential` field):
 
 - `GROQ_API_KEY` (required)
-- `BRAVE_API_KEY` (required for web search tools)
+- `BRAVE_API_KEY` (required for web search)
 - `MISTRAL_API_KEY` (only if `LLM_PROVIDER=mistral`)
-- Optional: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGSMITH_API_KEY`
-- Optional: `TELEGRAM_BOT_TOKEN` (enables Telegram messaging)
+- optional: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGSMITH_API_KEY`
+- optional: `TELEGRAM_BOT_TOKEN`
 
-Sign in to 1Password in the same shell:
+Sign in to 1Password in your shell:
 
 ```bash
 eval "$(op signin --account <shorthand>)"
 ```
 
-Copy `.env.example` to `.env` to provide your 1Password service account token:
+Copy and adjust local env config:
 
 ```bash
-OP_SERVICE_ACCOUNT_TOKEN=your_op_service_account_token_here
+cp .env.example .env
 ```
 
-Optional (for tracing):
+---
 
-```bash
-LANGFUSE_PUBLIC_KEY=
-LANGFUSE_SECRET_KEY=
-LANGFUSE_BASE_URL=https://cloud.langfuse.com
-```
+## Run the system
 
-### 3) Run Onboarding
-- Install the CLI entrypoint (uv):
-```bash
-uv tool install -e .
-```
+## Onboarding
+
 ```bash
 cyberagent onboarding
 ```
 
-What onboarding does:
-- Verifies Docker, 1Password access, and required keys.
-- Activates available features (AI model access, web search, Telegram messaging).
-- Creates the default team and starts PKM sync + profile discovery.
-- Starts the runtime in the background.
-- Prompts you to check your inbox next.
+Onboarding validates environment/dependencies and prepares runtime capabilities.
 
-If `TELEGRAM_BOT_TOKEN` is set, the onboarding interview runs on Telegram instead of the CLI.
+## Start runtime
 
-## CLI (primary)
-
-- Run the CLI:
 ```bash
-cyberagent onboarding
 cyberagent start
 ```
 
-- `cyberagent onboarding` runs technical checks and activates features; it may prompt to store missing keys in 1Password (requires write access).
-- Use `cyberagent start` to boot the VSM runtime in the background for CLI workflows.
-- Use `cyberagent restart` to stop/start the runtime when config changes.
-- `cyberagent status` shows the active strategy/task hierarchy, while `cyberagent suggest` lets you pipe JSON/YAML payloads into System 4.
-- Observability helpers (`cyberagent logs`, `cyberagent inbox`, `cyberagent watch`) and the `cyberagent login` command (which stores a keyring-backed token) round out the current CLI surface.
-- Each CLI command summarizes any new runtime `WARNING`/`ERROR` logs since the last command; run `cyberagent logs` for details.
-- All tool and skill executions run inside Docker containers. The VSM does not execute tool commands locally; if Docker is unavailable, tool execution fails.
+Useful commands:
 
-## Project Structure (Current Transitional Layout)
-
+```bash
+cyberagent status
+cyberagent restart
+cyberagent logs
+cyberagent inbox
+cyberagent watch
+cyberagent suggest
 ```
+
+If `TELEGRAM_BOT_TOKEN` is configured, onboarding/user interaction can run through Telegram.
+
+---
+
+## Automation workflow (source of truth)
+
+This repo uses **GitHub Issue stage labels** as the implementation workflow source of truth.
+
+Use exactly one stage label per issue:
+
+- `stage:backlog`
+- `stage:needs-clarification`
+- `stage:ready-to-implement`
+- `stage:in-progress`
+- `stage:in-review`
+- `stage:blocked`
+
+### Canonical automation entrypoints
+
+- `./scripts/run_project_automation.sh`
+  - singleton lock + repo-root guard
+- `./scripts/cron_cyberneticagents_worker.sh`
+  - issue stage worker
+- `./scripts/quality_gate.sh`
+  - required quality gate before review/push
+
+**No GitHub Projects v2 queue is used for active automation flow.**
+
+---
+
+## Architecture and directory layout
+
+```text
 CyberneticAgents/
-├── main.py                     # Entry point (CLI)
-├── .env.example                # Example env config
-├── data/                       # Runtime databases (created locally)
-│   ├── CyberneticAgents.db     # SQLAlchemy app data
-│   └── rbac.db                 # Casbin RBAC policies
+├── main.py
+├── pyproject.toml
+├── data/
+├── docs/
+├── scripts/
 ├── src/
-│   ├── cyberagent/             # New package namespace (refactor target)
-│   │   ├── cli/                # CLI entry points (`cyberagent`, headless, status)
-│   │   ├── core/               # Runtime, logging, shared state
-│   │   ├── db/                 # DB init and DB utility layer
-│   │   ├── domain/             # Domain-level specs and serialization
-│   │   ├── services/           # Purpose/strategy/initiative/task/team services
-│   │   └── tools/              # Refactored tool namespace package
-│   ├── agents/                 # Active agent implementations (legacy path, in transition)
-│   ├── prompts/                # System prompts (1-5)
-│   ├── rbac/                   # Casbin enforcer + model (legacy path, in transition)
-│   ├── tools/                  # Tool adapters still under migration
-│   ├── registry.py             # Agent factory registration (legacy entry point)
-│   ├── cli_session.py          # CLI question/answer queue state
-│   ├── llm_config.py           # LLM client setup
-│   └── ...
-├── tests/                      # pytest suite
-├── docs/                       # Project notes/roadmap
-└── pyproject.toml
+│   ├── cyberagent/
+│   │   ├── cli/
+│   │   ├── core/
+│   │   ├── db/
+│   │   ├── domain/
+│   │   ├── services/
+│   │   └── tools/
+│   ├── agents/        # legacy path (still active during migration)
+│   ├── rbac/          # legacy path (still active during migration)
+│   ├── tools/         # legacy path (still active during migration)
+│   └── registry.py    # legacy bridge
+└── tests/
 ```
 
-## How It Works (High Level)
+Legacy paths above remain active until migration completes.
 
-- `main.py` routes into the headless CLI runtime (`src/cyberagent/cli/headless.py`).
-- The headless runtime initializes DB state and registers agent factories.
-- `UserAgent` receives user input and forwards it to System 4.
-- System agents coordinate tasks and policies via internal workflows and CLI tooling.
-- CLI tools are executed through a Docker CLI executor when configured.
-- Messages and tool usage are logged to stdout and runtime logs, with optional tracing.
+---
 
-## Known Transitional Modules
+## Testing and quality gates
 
-Until the refactor is fully complete, these legacy paths are still intentionally active:
-- `src/agents/`
-- `src/tools/`
-- `src/rbac/`
-- `src/registry.py`
-
-## Development
-
-### Tests
+Run tests:
 
 ```bash
 python3 -m pytest tests/ -v
 ```
 
-### Pre-commit
+Coverage run:
 
 ```bash
-pre-commit install
-pre-commit run --all-files
+python3 -m pytest tests/ --cov=src --cov-report=term-missing
 ```
+
+Required automation gate:
+
+```bash
+bash ./scripts/quality_gate.sh
+```
+
+Git hooks are provided in `git-hooks/` and should be installed locally.
+
+---
+
+## Notes
+
+- All tool/skill executions are containerized; if Docker is unavailable, tool execution fails.
+- Keep production-sensitive values (tokens, phone numbers, live infra details) out of commits.
 
 ## License
 
-MIT. See `LICENSE`.
+MIT — see `LICENSE`.
