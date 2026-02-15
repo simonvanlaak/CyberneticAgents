@@ -10,12 +10,12 @@ Issue: #91
 Why (weighted by operational overhead):
 1. OpenProject can cover our required MVP workflow (board + assignment + comments + status transitions), but self-hosting adds a second production system to run and secure.
 2. The agent-per-user model is feasible through API/user/membership endpoints, but provisioning lifecycle and permission hardening are non-trivial.
-3. We can de-risk by running OpenProject in parallel with Notion first, then switching once reliability and migration quality are proven.
+3. We can de-risk by running OpenProject in parallel with the current Streamlit + SQLite board first, then switching once reliability and migration quality are proven.
 
 Decision summary:
 - **Now:** prepare and run a small parallel MVP.
 - **Later (after validation):** move primary task operations to OpenProject.
-- **Not recommended:** immediate hard cutover from Notion without coexistence window.
+- **Not recommended:** immediate hard cutover from the current Streamlit + SQLite board without coexistence window.
 
 ---
 
@@ -124,23 +124,23 @@ For thesis/hackathon scale, this is feasible but not “zero-maintenance”.
 
 ---
 
-## 7) Migration + coexistence plan (Notion -> OpenProject)
+## 7) Migration + coexistence plan (current Streamlit+SQLite board -> OpenProject)
 
 ## Coexistence is viable and recommended
 Run OpenProject in parallel first.
 
 ## Suggested mapping
-- Notion task -> OpenProject work package
-- Notion assignee/agent -> OpenProject user (agent account)
-- Notion status -> OpenProject status
-- Notion comments/log -> work package activities/comments
-- Notion IDs -> custom field or external reference link in OpenProject
+- SQLite `tasks` row -> OpenProject work package
+- Internal `tasks.assignee` (agent id string today) -> OpenProject user (agent account)
+- Internal status enum -> OpenProject status
+- Internal result/reasoning/execution log -> work package activities/comments
+- Internal task id -> custom field or external reference link in OpenProject
 
 ## Rollout strategy
 1. **Read-only mirror phase**: ingest OpenProject changes, no ownership switch.
 2. **Dual-write phase**: write from worker to both systems for selected flows.
 3. **Primary switch**: OpenProject becomes source of truth for selected projects.
-4. **Decommission phase**: retire overlapping Notion automation paths.
+4. **Decommission phase**: retire overlapping local board synchronization paths.
 
 ---
 
