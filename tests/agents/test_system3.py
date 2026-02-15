@@ -968,6 +968,82 @@ async def test_system3_blocked_task_without_keyword_still_uses_block_resolution(
 
 
 @pytest.mark.asyncio
+async def test_system3_escalate_blocked_task_tool_uses_capability_gap_message() -> None:
+    system3 = System3("System3/controller1")
+    system3._publish_message_to_agent = AsyncMock()
+
+    class DummyTask:
+        id = 42
+        assignee = "System1/root"
+
+    class DummySystem5:
+        def get_agent_id(self):
+            return AgentId.from_str("System5/root")
+
+    with (
+        patch("src.cyberagent.services.tasks.get_task_by_id", return_value=DummyTask()),
+        patch.object(system3, "_get_systems_by_type", return_value=[DummySystem5()]),
+    ):
+        result = await system3.escalate_blocked_task_tool(
+            task_id=42,
+            content="System1 could not proceed with current capabilities.",
+        )
+
+    assert result is True
+    system3._publish_message_to_agent.assert_awaited_once()
+    await_args = system3._publish_message_to_agent.await_args
+    assert await_args is not None
+    published_message = await_args.args[0]
+    assert isinstance(published_message, CapabilityGapMessage)
+    assert published_message.task_id == 42
+    assert published_message.assignee_agent_id_str == "System1/root"
+
+
+@pytest.mark.asyncio
+async def test_system3_cancel_task_tool_cancels_blocked_task_without_replacement() -> (
+    None
+):
+    system3 = System3("System3/controller1")
+
+    class DummyTask:
+        def __init__(self) -> None:
+            self.id = 42
+            self.name = "Blocked task"
+            self.status = Status.BLOCKED
+            self.assignee = "System1/root"
+            self.reasoning = "Need more access"
+            self.follow_up_task_id = None
+            self.replaces_task_id = None
+
+        def set_status(self, status) -> None:  # type: ignore[no-untyped-def]
+            self.status = status
+
+        def update(self) -> None:
+            return None
+
+    task = DummyTask()
+
+    with (
+        patch("src.cyberagent.services.tasks.get_task_by_id", return_value=task),
+        patch("src.cyberagent.services.tasks.persist_task") as persist_task,
+        patch("src.cyberagent.services.tasks.create_task") as create_task,
+    ):
+        result = await system3.cancel_task_tool(
+            task_id=42,
+            reasoning="No viable remediation path available.",
+        )
+
+    persist_task.assert_called_once_with(task)
+    create_task.assert_not_called()
+    assert task.status == Status.CANCELED
+    assert task.assignee == "System1/root"
+    assert task.reasoning == "No viable remediation path available."
+    assert result["task_id"] == 42
+    assert result["status"] == str(Status.CANCELED)
+    assert result["replacement_created"] is False
+
+
+@pytest.mark.asyncio
 async def test_system3_modify_task_tool_restart_execution_redispatches_task() -> None:
     system3 = System3("System3/controller1")
     system3._publish_message_to_agent = AsyncMock()

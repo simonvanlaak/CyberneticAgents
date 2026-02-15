@@ -24,7 +24,7 @@ from src.cyberagent.services import policies as policy_service
 from src.cyberagent.services import systems as system_service
 from src.cyberagent.services import tasks as task_service
 from src.cyberagent.db.models.system import get_system_from_agent_id
-from src.enums import PolicyJudgement, SystemType
+from src.enums import PolicyJudgement, Status, SystemType
 from src.cyberagent.db.init_db import init_db
 
 logger = logging.getLogger(__name__)
@@ -110,6 +110,12 @@ class System3(SystemBase):
             FunctionTool(
                 self.modify_task_tool,
                 "Update task content/reasoning and optionally restart blocked execution.",
+            )
+        )
+        self.tools.append(
+            FunctionTool(
+                self.cancel_task_tool,
+                "Cancel a blocked task when no viable remediation path exists.",
             )
         )
 
@@ -255,6 +261,7 @@ class System3(SystemBase):
             f"- {self.request_research_tool.__name__}: when more external/user information is needed.",
             f"- {self.escalate_blocked_task_tool.__name__}: when policy/capability guidance from System5 is needed.",
             f"- {self.modify_task_tool.__name__}: when task wording/reasoning should be adjusted and execution should restart.",
+            f"- {self.cancel_task_tool.__name__}: when remediation is not viable and this task attempt must end as canceled.",
             "Do not perform policy judgement in this step.",
         ]
         response = await self.run(
@@ -267,6 +274,7 @@ class System3(SystemBase):
             self._was_tool_called(response, self.request_research_tool.__name__)
             or self._was_tool_called(response, self.escalate_blocked_task_tool.__name__)
             or self._was_tool_called(response, self.modify_task_tool.__name__)
+            or self._was_tool_called(response, self.cancel_task_tool.__name__)
         ):
             raise ValueError("No blocked-task resolution tool was called.")
 
@@ -733,19 +741,42 @@ class System3(SystemBase):
         return True
 
     async def escalate_blocked_task_tool(self, task_id: int, content: str) -> bool:
+        task = task_service.get_task_by_id(task_id)
+        assignee = getattr(task, "assignee", None)
+        if not isinstance(assignee, str) or not assignee:
+            raise ValueError(
+                "Blocked-task escalation requires a valid task assignee for remediation."
+            )
+
         policy_systems = self._get_systems_by_type(SystemType.POLICY)
         if not policy_systems:
             raise ValueError("No policy system found for blocked-task escalation.")
         await self._publish_message_to_agent(
-            PolicySuggestionMessage(
-                policy_id=None,
+            CapabilityGapMessage(
                 task_id=task_id,
                 content=content,
+                assignee_agent_id_str=assignee,
                 source=self.name,
             ),
             policy_systems[0].get_agent_id(),
         )
         return True
+
+    async def cancel_task_tool(self, task_id: int, reasoning: str) -> dict[str, object]:
+        task = task_service.get_task_by_id(task_id)
+        if not self._is_blocked_task(task):
+            raise ValueError("Only blocked tasks can be canceled via cancel_task_tool.")
+
+        task.reasoning = reasoning
+        task.set_status(Status.CANCELED)
+        task_service.persist_task(task)
+
+        return {
+            "task_id": task_id,
+            "status": str(getattr(task, "status", "")),
+            "reasoning": reasoning,
+            "replacement_created": False,
+        }
 
     async def modify_task_tool(
         self,
