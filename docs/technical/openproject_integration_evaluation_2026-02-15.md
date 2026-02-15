@@ -228,3 +228,58 @@ If approved, create follow-up tickets for:
 - Dashboard feature docs (read-only): `docs/features/dashboard.md`
 - Streamlit dashboard: `src/cyberagent/ui/dashboard.py`
 - SQLite Kanban data loader: `src/cyberagent/ui/kanban_data.py`
+
+---
+
+## 13) Spike addendum (Issue #113, desk analysis refresh)
+
+This addendum captures the time-boxed OpenProject vs Taiga review requested in #113, using desk analysis only (docs/API/ops), and keeping the current Streamlit+SQLite board as the baseline comparator.
+
+### 13.1 API surface comparison for our automation flows
+
+| Required automation capability | OpenProject | Taiga | Current Streamlit+SQLite board |
+|---|---|---|---|
+| List/query tasks | Mature Work Package query/filter API (REST v3) | Mature issues/user stories/tasks API | Internal SQLite reads already available |
+| Assignment/claim | Assignee updates supported; permissioned and lock-version aware | Assignment fields supported through API; concurrency-aware updates | No end-user claim flow in current UI |
+| Status transitions | Workflow/status updates via API actions | Workflow/status updates via API | Status storage exists, but no full Kanban interaction UX |
+| Append comments/results | Journal/activity comments supported | Comment endpoints supported | Internal logs/comments possible but not integrated in a full PM workflow |
+| Users + role mapping for agent identities | Strong users/roles/memberships model | Users/projects/roles supported; leaner model | No external identity model; custom mapping required |
+
+**Readout:** both OpenProject and Taiga cover required worker operations. OpenProject is more explicit/enterprise-shaped around permissions and governance; Taiga is typically simpler to approach.
+
+### 13.2 Authentication + server-side automation ease
+
+- **OpenProject:** API token and OAuth2 options are clearly documented; good fit for long-lived backend automation identities with explicit role control.
+- **Taiga:** bearer token model is straightforward and automation-friendly; lower conceptual overhead to get started.
+- **Current board:** no external auth boundary, but adding robust multi-user/agent auth remains our burden.
+
+**Readout:** Taiga is slightly easier for quick automation startup; OpenProject is stronger if we anticipate stricter governance/audit controls.
+
+### 13.3 Hosting / operations overhead comparison
+
+- **OpenProject:** heaviest stack in this comparison (PostgreSQL + app services + upgrade/backup discipline).
+- **Taiga:** still multi-service and non-trivial, but generally lighter to operate than OpenProject.
+- **Current board:** lowest immediate infra overhead, but feature development and maintenance cost shifts to us.
+
+### 13.4 Recommendation (OpenProject vs Taiga vs stay current)
+
+For the immediate next decision window, the best recommendation is:
+
+1. **Stay on the current board temporarily** while Simon performs UI review of OpenProject and Taiga.
+2. Keep **Taiga** as the likely lower-friction migration candidate if we optimize for speed/ops simplicity.
+3. Keep **OpenProject** as the likely better fit if governance depth (roles/permissions/auditability) is prioritized over runtime simplicity.
+
+This is still a recommendation (not a tie): **defer cutover now, choose after UI review, with Taiga favored for lighter operations unless governance requirements dominate.**
+
+### 13.5 Minimal MVP plan (for whichever external tool is selected)
+
+1. Stand up one project/workspace and one service account per agent role (or a bootstrap subset).
+2. Implement the four core worker actions only:
+   - pull/list candidate work
+   - claim/assign
+   - move status
+   - append structured result comment
+3. Run dual-write/verification against SQLite task records for a limited pilot window.
+4. Produce a short validation report (API reliability, operator friction, migration risk) before any full cutover.
+
+Per issue instruction, **no follow-up implementation tickets are created yet**; selection happens after owner review.
