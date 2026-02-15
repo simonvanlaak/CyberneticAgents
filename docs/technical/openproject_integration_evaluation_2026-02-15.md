@@ -194,6 +194,8 @@ If approved, create follow-up tickets for:
 4. agent-user provisioning,
 5. migration adapter + validation report.
 
+Issue #113 process note: defer creating these follow-up implementation tickets until owner review of this spike is complete.
+
 ---
 
 ## Reference sources
