@@ -11,6 +11,9 @@ on:
       - "tests/**"
       - "pyproject.toml"
 
+permissions:
+  contents: read
+
 jobs:
   pytest-parallel:
     runs-on: ubuntu-latest
