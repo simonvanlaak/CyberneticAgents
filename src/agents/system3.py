@@ -1161,7 +1161,11 @@ class System3(SystemBase):
         task = task_service.get_task_by_id(task_id)
 
         if restart_execution:
-            task = task_service.start_task(task_id)
+            if not self._is_blocked_task(task):
+                raise ValueError(
+                    "restart_execution is only valid for blocked tasks."
+                )
+            task = task_service.restart_blocked_task_as_pending(task_id)
 
         if content is not None:
             task.content = content
@@ -1169,21 +1173,6 @@ class System3(SystemBase):
             task.reasoning = reasoning
         task_service.persist_task(task)
 
-        if restart_execution:
-            assignee = getattr(task, "assignee", None)
-            if not isinstance(assignee, str) or not assignee:
-                raise ValueError(
-                    "Cannot restart task execution without a valid assignee."
-                )
-            await self._publish_message_to_agent(
-                TaskAssignMessage(
-                    task_id=task_id,
-                    assignee_agent_id_str=assignee,
-                    source=self.name,
-                    content=task.name,
-                ),
-                AgentId.from_str(assignee),
-            )
         return {
             "task_id": task_id,
             "status": str(getattr(task, "status", "")),

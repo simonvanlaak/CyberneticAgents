@@ -1381,7 +1381,7 @@ async def test_system3_evaluate_initiative_progression_zero_tasks_sends_review_o
 
 
 @pytest.mark.asyncio
-async def test_system3_modify_task_tool_restart_execution_redispatches_task() -> None:
+async def test_system3_modify_task_tool_restart_execution_resets_to_pending() -> None:
     system3 = System3("System3/controller1")
     system3._publish_message_to_agent = AsyncMock()
 
@@ -1400,9 +1400,18 @@ async def test_system3_modify_task_tool_restart_execution_redispatches_task() ->
 
     task = DummyTask()
 
+    def _restart_with_pending(task_id: int):
+        assert task_id == 42
+        task.status = Status.PENDING
+        task.assignee = None
+        return task
+
     with (
         patch("src.cyberagent.services.tasks.get_task_by_id", return_value=task),
-        patch("src.cyberagent.services.tasks.start_task", return_value=task) as restart,
+        patch(
+            "src.cyberagent.services.tasks.restart_blocked_task_as_pending",
+            side_effect=_restart_with_pending,
+        ) as restart,
     ):
         result = await system3.modify_task_tool(
             task_id=42,
@@ -1413,21 +1422,17 @@ async def test_system3_modify_task_tool_restart_execution_redispatches_task() ->
     restart.assert_called_once_with(42)
     assert task.reasoning == "Retry with revised prompt"
     assert task.updated is True
+    assert task.status is Status.PENDING
+    assert task.assignee is None
     assert result["restart_execution"] is True
-    assert result["status"] == str(task.status)
-    system3._publish_message_to_agent.assert_awaited_once()
-    publish_call = system3._publish_message_to_agent.await_args
-    assert publish_call is not None
-    published_message = publish_call.args[0]
-    recipient = publish_call.args[1]
-    assert isinstance(published_message, TaskAssignMessage)
-    assert published_message.task_id == 42
-    assert published_message.assignee_agent_id_str == "System1/root"
-    assert str(recipient) == "System1/root"
+    assert result["status"] == str(Status.PENDING)
+    system3._publish_message_to_agent.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_system3_modify_task_tool_restart_execution_requires_assignee() -> None:
+async def test_system3_modify_task_tool_restart_execution_requires_blocked_status() -> (
+    None
+):
     system3 = System3("System3/controller1")
     system3._publish_message_to_agent = AsyncMock()
 
@@ -1435,8 +1440,8 @@ async def test_system3_modify_task_tool_restart_execution_requires_assignee() ->
         def __init__(self) -> None:
             self.id = 42
             self.name = "Retry task"
-            self.assignee = None
-            self.status = Status.BLOCKED
+            self.assignee = "System1/root"
+            self.status = Status.IN_PROGRESS
             self.content = "Original content"
             self.reasoning = "Original reasoning"
 
@@ -1445,12 +1450,10 @@ async def test_system3_modify_task_tool_restart_execution_requires_assignee() ->
 
     task = DummyTask()
 
-    with (
-        patch("src.cyberagent.services.tasks.get_task_by_id", return_value=task),
-        patch("src.cyberagent.services.tasks.start_task", return_value=task),
-    ):
+    with patch("src.cyberagent.services.tasks.get_task_by_id", return_value=task):
         with pytest.raises(
-            ValueError, match="Cannot restart task execution without a valid assignee"
+            ValueError,
+            match="restart_execution is only valid for blocked tasks",
         ):
             await system3.modify_task_tool(task_id=42, restart_execution=True)
 

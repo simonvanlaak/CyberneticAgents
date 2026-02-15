@@ -286,7 +286,7 @@ def test_allowed_task_transitions_match_canonical_lifecycle() -> None:
     assert task_service.ALLOWED_TASK_TRANSITIONS == {
         Status.PENDING: {Status.IN_PROGRESS, Status.CANCELED},
         Status.IN_PROGRESS: {Status.COMPLETED, Status.BLOCKED},
-        Status.BLOCKED: {Status.IN_PROGRESS, Status.CANCELED},
+        Status.BLOCKED: {Status.PENDING, Status.CANCELED},
         Status.COMPLETED: {Status.APPROVED, Status.REJECTED},
         Status.REJECTED: {Status.CANCELED},
         Status.APPROVED: set(),
@@ -301,7 +301,7 @@ def test_allowed_task_transitions_match_canonical_lifecycle() -> None:
         ("pending", "canceled"),
         ("in_progress", "completed"),
         ("in_progress", "blocked"),
-        ("blocked", "in_progress"),
+        ("blocked", "pending"),
         ("blocked", "canceled"),
         ("completed", "approved"),
         ("completed", "rejected"),
@@ -329,6 +329,7 @@ def test_transition_task_allows_canonical_transitions(
     [
         ("pending", "approved"),
         ("in_progress", "approved"),
+        ("blocked", "in_progress"),
         ("blocked", "completed"),
         ("completed", "in_progress"),
         ("rejected", "approved"),

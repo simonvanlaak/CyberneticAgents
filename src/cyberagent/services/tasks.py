@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 ALLOWED_TASK_TRANSITIONS: dict[Status, set[Status]] = {
     Status.PENDING: {Status.IN_PROGRESS, Status.CANCELED},
     Status.IN_PROGRESS: {Status.COMPLETED, Status.BLOCKED},
-    Status.BLOCKED: {Status.IN_PROGRESS, Status.CANCELED},
+    Status.BLOCKED: {Status.PENDING, Status.CANCELED},
     Status.COMPLETED: {Status.APPROVED, Status.REJECTED},
     Status.REJECTED: {Status.CANCELED},
     Status.APPROVED: set(),
@@ -61,6 +61,32 @@ def start_task(task_id: int) -> Task:
     if task is None:
         raise ValueError(f"Task with id {task_id} not found")
     _transition_task(task, Status.IN_PROGRESS)
+    _persist_task(task)
+    return task
+
+
+def restart_blocked_task_as_pending(task_id: int) -> Task:
+    """Reset a blocked task to pending so System3 can reassign it.
+
+    This implements blocked-resolution resume semantics as:
+    ``blocked -> pending -> in_progress`` (via normal assignment flow),
+    rather than immediately restarting execution on the previous assignee.
+
+    Args:
+        task_id: Task identifier.
+
+    Returns:
+        The updated task record.
+
+    Raises:
+        ValueError: If task is missing or is not currently blocked.
+    """
+    task = _get_task(task_id)
+    if task is None:
+        raise ValueError(f"Task with id {task_id} not found")
+
+    _transition_task(task, Status.PENDING)
+    task.assignee = None
     _persist_task(task)
     return task
 
