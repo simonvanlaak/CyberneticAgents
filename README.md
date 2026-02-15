@@ -99,7 +99,8 @@ This repo uses **GitHub Issue stage labels** as the implementation workflow sour
 
 Use exactly one stage label per issue:
 
-- `stage:backlog`
+- `stage:backlog` (parked; not in automation queue)
+- `stage:queued` (automation triage queue)
 - `stage:needs-clarification`
 - `stage:ready-to-implement`
 - `stage:in-progress`
