@@ -38,10 +38,7 @@ def test_handle_onboarding_seeds_system1_with_pkm_access_skills(tmp_path: Path) 
     summary_path = tmp_path / "summary.md"
     summary_path.write_text("summary", encoding="utf-8")
     monkeypatch.setattr(
-        onboarding_cli, "_run_discovery_onboarding", lambda *_: summary_path
-    )
-    monkeypatch.setattr(
-        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: True
+        onboarding_cli, "run_discovery_onboarding", lambda *_: summary_path
     )
 
     onboarding_cli.handle_onboarding(

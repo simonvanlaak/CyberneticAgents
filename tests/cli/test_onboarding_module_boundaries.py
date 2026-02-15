@@ -34,3 +34,16 @@ def test_discovery_uses_shared_onboarding_output_service() -> None:
         "from src.cyberagent.cli.onboarding_output import apply_onboarding_output"
         in discovery_source
     )
+
+
+def test_onboarding_module_does_not_reexport_patch_aliases() -> None:
+    onboarding_source = (REPO_ROOT / "src/cyberagent/cli/onboarding.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert "_run_discovery_onboarding =" not in onboarding_source
+    assert "_start_discovery_background =" not in onboarding_source
+    assert "_build_onboarding_prompt =" not in onboarding_source
+    assert "_trigger_onboarding_initiative =" not in onboarding_source
+    assert "_load_runtime_pid = lambda" not in onboarding_source
+    assert "_resolve_runtime_db_url = lambda" not in onboarding_source

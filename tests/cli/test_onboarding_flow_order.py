@@ -48,12 +48,12 @@ def test_onboarding_starts_background_discovery_when_non_interactive(
     monkeypatch.setattr(
         onboarding_cli, "start_onboarding_interview", lambda **_kw: None
     )
-    monkeypatch.setattr(onboarding_cli, "_start_discovery_background", _fake_background)
+    monkeypatch.setattr(onboarding_cli, "start_discovery_background", _fake_background)
     monkeypatch.setattr(
         onboarding_cli, "_start_runtime_after_onboarding", lambda *_: None
     )
     monkeypatch.setattr(
-        onboarding_cli, "_start_dashboard_after_onboarding", lambda *_: None
+        onboarding_cli, "start_dashboard_after_onboarding", lambda *_: None
     )
 
     exit_code = onboarding_cli.handle_onboarding(
@@ -93,13 +93,13 @@ def test_onboarding_validates_inputs_before_contextual_technical_checks(
         onboarding_cli, "start_onboarding_interview", lambda **_kw: None
     )
     monkeypatch.setattr(
-        onboarding_cli, "_start_discovery_background", lambda *_a, **_k: None
+        onboarding_cli, "start_discovery_background", lambda *_a, **_k: None
     )
     monkeypatch.setattr(
         onboarding_cli, "_start_runtime_after_onboarding", lambda *_: None
     )
     monkeypatch.setattr(
-        onboarding_cli, "_start_dashboard_after_onboarding", lambda *_: None
+        onboarding_cli, "start_dashboard_after_onboarding", lambda *_: None
     )
 
     exit_code = onboarding_cli.handle_onboarding(

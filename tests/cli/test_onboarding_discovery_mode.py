@@ -44,7 +44,7 @@ def test_handle_onboarding_stops_when_foreground_discovery_fails(
     monkeypatch.setattr(onboarding_cli, "run_technical_onboarding_checks", lambda: True)
     monkeypatch.setattr(
         onboarding_cli,
-        "_run_discovery_onboarding",
+        "run_discovery_onboarding",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setenv("CYBERAGENT_ONBOARDING_DISCOVERY_FOREGROUND", "1")

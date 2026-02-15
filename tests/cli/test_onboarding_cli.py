@@ -56,18 +56,14 @@ def _mock_onboarding_flow(
     summary_path: Path | None,
     *,
     technical_checks_ok: bool = True,
-    trigger_ok: bool = True,
 ) -> None:
     monkeypatch.setattr(
         onboarding_cli, "run_technical_onboarding_checks", lambda: technical_checks_ok
     )
     monkeypatch.setattr(
         onboarding_cli,
-        "_run_discovery_onboarding",
+        "run_discovery_onboarding",
         lambda *_args, **_kwargs: summary_path,
-    )
-    monkeypatch.setattr(
-        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: trigger_ok
     )
 
 
@@ -93,7 +89,7 @@ def test_handle_onboarding_creates_default_team(
         return 5678
 
     monkeypatch.setattr(
-        onboarding_cli, "_start_dashboard_after_onboarding", _fake_dashboard_start
+        onboarding_cli, "start_dashboard_after_onboarding", _fake_dashboard_start
     )
 
     exit_code = onboarding_cli.handle_onboarding(
@@ -249,13 +245,13 @@ def test_handle_onboarding_stops_when_discovery_fails(
     assert len(start_calls) == 1
 
 
-def test_handle_onboarding_continues_when_trigger_is_disabled(
+def test_handle_onboarding_continues_without_legacy_trigger_hooks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     _clear_teams()
     # Phase 1 onboarding no longer triggers an initiative; ensure the flow still
-    # proceeds to starting the runtime even if legacy trigger hooks are mocked.
-    _mock_onboarding_flow(monkeypatch, Path("summary.md"), trigger_ok=False)
+    # proceeds to starting the runtime without legacy trigger monkeypatches.
+    _mock_onboarding_flow(monkeypatch, Path("summary.md"))
     monkeypatch.setattr(
         onboarding_cli, "start_onboarding_interview", lambda **_kwargs: None
     )
@@ -362,10 +358,7 @@ def test_handle_onboarding_seeds_default_sops(
     summary_path = tmp_path / "summary.md"
     summary_path.write_text("summary", encoding="utf-8")
     monkeypatch.setattr(
-        onboarding_cli, "_run_discovery_onboarding", lambda *_: summary_path
-    )
-    monkeypatch.setattr(
-        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: True
+        onboarding_cli, "run_discovery_onboarding", lambda *_: summary_path
     )
 
     exit_code = onboarding_cli.handle_onboarding(
@@ -408,10 +401,7 @@ def test_handle_onboarding_sets_root_team_envelope(tmp_path: Path) -> None:
     summary_path = tmp_path / "summary.md"
     summary_path.write_text("summary", encoding="utf-8")
     monkeypatch.setattr(
-        onboarding_cli, "_run_discovery_onboarding", lambda *_: summary_path
-    )
-    monkeypatch.setattr(
-        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: True
+        onboarding_cli, "run_discovery_onboarding", lambda *_: summary_path
     )
 
     onboarding_cli.handle_onboarding(
@@ -440,10 +430,7 @@ def test_handle_onboarding_seeds_default_sops_once(tmp_path: Path) -> None:
     summary_path = tmp_path / "summary.md"
     summary_path.write_text("summary", encoding="utf-8")
     monkeypatch.setattr(
-        onboarding_cli, "_run_discovery_onboarding", lambda *_: summary_path
-    )
-    monkeypatch.setattr(
-        onboarding_cli, "_trigger_onboarding_initiative", lambda *_, **__: True
+        onboarding_cli, "run_discovery_onboarding", lambda *_: summary_path
     )
 
     onboarding_cli.handle_onboarding(
@@ -480,7 +467,7 @@ def test_handle_onboarding_applies_discovery_output_to_root_context(
     summary_path = tmp_path / "summary.md"
     summary_path.write_text("summary", encoding="utf-8")
     monkeypatch.setattr(
-        onboarding_cli, "_run_discovery_onboarding", lambda *_: summary_path
+        onboarding_cli, "run_discovery_onboarding", lambda *_: summary_path
     )
     monkeypatch.setattr(
         agent_message_queue, "AGENT_MESSAGE_QUEUE_DIR", tmp_path / "agent_queue"
@@ -533,7 +520,7 @@ def test_handle_onboarding_does_not_enqueue_system3_work_on_restart(
     )
     monkeypatch.setattr(
         onboarding_cli,
-        "_run_discovery_onboarding",
+        "run_discovery_onboarding",
         lambda *_args, **_kwargs: tmp_path / "summary.md",
     )
     monkeypatch.setattr(
@@ -584,6 +571,11 @@ def test_technical_onboarding_requires_groq_key(
         onboarding_cli, "_save_technical_onboarding_state", lambda *_: None
     )
     monkeypatch.setattr(onboarding_vault, "prompt_yes_no", lambda *_: False)
+    monkeypatch.setattr(
+        onboarding_cli,
+        "prompt_store_secret_in_1password",
+        lambda **_: False,
+    )
 
     assert onboarding_cli.run_technical_onboarding_checks() is False
     captured = capsys.readouterr().out

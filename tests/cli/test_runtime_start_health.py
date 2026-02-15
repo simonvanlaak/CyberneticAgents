@@ -34,9 +34,11 @@ def test_onboarding_start_runtime_fails_when_process_exits_early(
     monkeypatch.setattr(onboarding_cli, "RUNTIME_PID_FILE", pid_file)
     monkeypatch.setattr(onboarding_cli, "RUNTIME_STARTUP_GRACE_SECONDS", 1.0)
     _patch_fast_time(monkeypatch)
-    monkeypatch.setattr(onboarding_cli, "_load_runtime_pid", lambda: None)
+    monkeypatch.setattr(onboarding_cli, "load_runtime_pid", lambda *_: None)
     monkeypatch.setattr(
-        onboarding_cli, "_resolve_runtime_db_url", lambda: "sqlite:///x"
+        onboarding_cli,
+        "resolve_runtime_db_url",
+        lambda *_args, **_kwargs: "sqlite:///x",
     )
     monkeypatch.setattr(onboarding_cli, "get_secret", lambda *_: None)
     monkeypatch.setattr(

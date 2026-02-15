@@ -67,7 +67,7 @@ def test_handle_onboarding_creates_default_team(
     called: dict[str, bool] = {}
     monkeypatch.setattr(
         ONBOARDING,
-        "_start_discovery_background",
+        "start_discovery_background",
         lambda *_args, **_kwargs: called.setdefault("background", True),
     )
     monkeypatch.setattr(
@@ -76,11 +76,8 @@ def test_handle_onboarding_creates_default_team(
         lambda *_args, **_kwargs: called.setdefault("interview", True),
     )
     monkeypatch.setattr(
-        ONBOARDING, "_trigger_onboarding_initiative", lambda *_, **__: True
-    )
-    monkeypatch.setattr(
         ONBOARDING,
-        "_run_discovery_onboarding",
+        "run_discovery_onboarding",
         lambda *_args, **_kwargs: "data/onboarding/summary.md",
     )
 
@@ -120,7 +117,7 @@ def test_handle_onboarding_skips_when_team_exists(
     called: dict[str, bool] = {}
     monkeypatch.setattr(
         ONBOARDING,
-        "_start_discovery_background",
+        "start_discovery_background",
         lambda *_args, **_kwargs: called.setdefault("background", True),
     )
     monkeypatch.setattr(
@@ -129,11 +126,8 @@ def test_handle_onboarding_skips_when_team_exists(
         lambda *_args, **_kwargs: called.setdefault("interview", True),
     )
     monkeypatch.setattr(
-        ONBOARDING, "_trigger_onboarding_initiative", lambda *_, **__: True
-    )
-    monkeypatch.setattr(
         ONBOARDING,
-        "_run_discovery_onboarding",
+        "run_discovery_onboarding",
         lambda *_args, **_kwargs: "data/onboarding/summary.md",
     )
 

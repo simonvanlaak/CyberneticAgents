@@ -1,11 +1,11 @@
 from pathlib import Path
 
-from src.cyberagent.cli import onboarding as onboarding_cli
 from src.cyberagent.cli import onboarding_discovery
+from src.cyberagent.cli import onboarding_output
 
 
 def test_build_onboarding_prompt_includes_summary_path() -> None:
-    prompt = onboarding_cli._build_onboarding_prompt(
+    prompt = onboarding_output.build_onboarding_prompt(
         summary_path=Path("data/onboarding/20260204_120000/summary.md"),
         summary_text="Summary content here.",
     )
@@ -18,7 +18,7 @@ def test_build_onboarding_prompt_truncates_large_summary() -> None:
         onboarding_discovery.ONBOARDING_PROMPT_SUMMARY_CHAR_LIMIT + 50
     )
 
-    prompt = onboarding_cli._build_onboarding_prompt(
+    prompt = onboarding_output.build_onboarding_prompt(
         summary_path=Path("data/onboarding/20260204_120000/summary.md"),
         summary_text=large_summary,
     )
