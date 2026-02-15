@@ -16,7 +16,6 @@ from src.cyberagent.cli.onboarding_bootstrap import (
     seed_default_procedures as _seed_default_procedures,
     seed_default_team_envelope as _seed_default_team_envelope,
     seed_root_team_envelope_from_defaults as _seed_root_team_envelope_from_defaults,
-    trigger_onboarding_initiative,
 )
 from src.cyberagent.cli.onboarding_constants import DEFAULT_GIT_TOKEN_ENV
 from src.cyberagent.cli.onboarding_defaults import (
@@ -40,20 +39,17 @@ from src.cyberagent.cli.onboarding_optional import (
     _offer_optional_telegram_setup,
     _warn_optional_api_keys,
 )
-from src.cyberagent.cli.onboarding_output import (
-    apply_onboarding_output as _apply_onboarding_output,
-    build_onboarding_prompt,
-)
+from src.cyberagent.cli.onboarding_output import apply_onboarding_output
 from src.cyberagent.cli import onboarding_contextual_secrets as technical_context
 from src.cyberagent.cli.onboarding_routing import (
     seed_default_routing_rules,
     seed_procedure_routing_rules,
 )
 from src.cyberagent.cli.onboarding_runtime import (
-    load_runtime_pid as _load_runtime_pid_impl,
-    pid_is_running as _pid_is_running,
-    resolve_runtime_db_url as _resolve_runtime_db_url_impl,
-    start_dashboard_after_onboarding as _start_dashboard_after_onboarding,
+    load_runtime_pid,
+    pid_is_running,
+    resolve_runtime_db_url,
+    start_dashboard_after_onboarding,
 )
 from src.cyberagent.cli.onboarding_secrets import (
     VAULT_NAME,
@@ -100,15 +96,6 @@ FEATURE_READY_MESSAGE_KEYS = {
 }
 ENV_ROOT_KEY = "CYBERAGENT_ROOT"
 
-_run_discovery_onboarding = run_discovery_onboarding
-_start_discovery_background = start_discovery_background
-
-
-_resolve_runtime_db_url = lambda: _resolve_runtime_db_url_impl(DATABASE_URL, get_database_path())
-_load_runtime_pid = lambda: _load_runtime_pid_impl(RUNTIME_PID_FILE)
-
-_build_onboarding_prompt = build_onboarding_prompt
-
 
 def _print_db_write_error(context: str, exc: Exception) -> None:
     db_path = get_database_path()
@@ -127,8 +114,6 @@ def _print_db_write_error(context: str, exc: Exception) -> None:
     )
     print(get_message("onboarding", "db_write_hint", hint=hint))
 
-
-_trigger_onboarding_initiative = trigger_onboarding_initiative
 
 
 def _repo_root() -> Path | None:
@@ -258,16 +243,16 @@ def handle_onboarding(
 
     summary_path: Path | None = None
     if background_discovery:
-        _start_discovery_background(args, team.id)
+        start_discovery_background(args, team.id)
     else:
-        summary_path = _run_discovery_onboarding(args, team.id)
+        summary_path = run_discovery_onboarding(args, team.id)
         if summary_path is None:
             print(get_message("onboarding", "discovery_failed"))
             print(get_message("onboarding", "discovery_failed_hint"))
             return 1
 
     if summary_path is not None:
-        _apply_onboarding_output(
+        apply_onboarding_output(
             team_id=team.id,
             summary_path=summary_path,
             onboarding_strategy_name=strategy_name,
@@ -279,21 +264,23 @@ def handle_onboarding(
     if runtime_pid == -1:
         return 1
     print(get_message("onboarding", "next_suggest", suggest_command=suggest_command))
-    _start_dashboard_after_onboarding(team.id)
+    start_dashboard_after_onboarding(team.id)
     return 0
 
 
 def _start_runtime_after_onboarding(team_id: int) -> int | None:
     if os.environ.get("CYBERAGENT_TEST_NO_RUNTIME") == "1":
         return None
-    pid = _load_runtime_pid()
-    if pid is not None and _pid_is_running(pid):
+    pid = load_runtime_pid(RUNTIME_PID_FILE)
+    if pid is not None and pid_is_running(pid):
         print(get_message("onboarding", "runtime_already_running", pid=pid))
         return pid
     cmd = [sys.executable, "-m", "src.cyberagent.cli.cyberagent", "serve"]
     env = os.environ.copy()
     env["CYBERAGENT_ACTIVE_TEAM_ID"] = str(team_id)
-    env["CYBERAGENT_DB_URL"] = _resolve_runtime_db_url()
+    env["CYBERAGENT_DB_URL"] = resolve_runtime_db_url(
+        DATABASE_URL, get_database_path()
+    )
     telegram_token = get_secret("TELEGRAM_BOT_TOKEN")
     if telegram_token:
         env["TELEGRAM_BOT_TOKEN"] = telegram_token
