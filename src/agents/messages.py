@@ -2,6 +2,47 @@ from autogen_agentchat.messages import BaseTextChatMessage
 from pydantic import BaseModel, ConfigDict
 
 
+class InvalidReviewRecoveryContract(BaseModel):
+    """Contract payload for invalid TaskReview recovery escalation to System5."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: int
+    initiative_id: int | None
+    observed_status: str
+    retry_count: int
+    retry_limit: int
+    error_summary: str
+    next_action: str
+
+
+class BlockedRemediationContract(BaseModel):
+    """Contract payload for blocked-task remediation requests to System5."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: int
+    initiative_id: int | None
+    assignee_agent_id_str: str
+    blocked_reasoning: str
+    remediation_request: str
+
+
+class RejectedReplacementContract(BaseModel):
+    """Contract payload for rejected-task replacement/remediation with System5."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: int
+    initiative_id: int | None
+    assignee_agent_id_str: str
+    policy_id: int
+    policy_reasoning: str
+    case_judgement: str | None
+    execution_log: str | None
+    requested_outcome: str
+
+
 class UserMessage(BaseTextChatMessage):
     """Used by user to communicate with System 4."""
 
@@ -34,6 +75,7 @@ class CapabilityGapMessage(BaseTextChatMessage):
     task_id: int
     content: str
     assignee_agent_id_str: str
+    contract: BlockedRemediationContract | None = None
 
 
 class InitiativeAssignMessage(BaseTextChatMessage):
@@ -55,6 +97,7 @@ class PolicyViolationMessage(BaseTextChatMessage):
     policy_id: int
     assignee_agent_id_str: str
     content: str
+    contract: RejectedReplacementContract | None = None
 
 
 class PolicyVagueMessage(BaseTextChatMessage):
@@ -155,3 +198,4 @@ class InternalErrorMessage(BaseTextChatMessage):
     failed_message_type: str
     error_summary: str
     task_id: int | None = None
+    contract: InvalidReviewRecoveryContract | None = None

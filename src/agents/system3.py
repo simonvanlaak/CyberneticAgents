@@ -8,12 +8,15 @@ from autogen_core.tools import FunctionTool
 from pydantic import BaseModel, ConfigDict
 
 from src.agents.messages import (
+    BlockedRemediationContract,
     CapabilityGapMessage,
     InitiativeAssignMessage,
     InitiativeReviewMessage,
+    InvalidReviewRecoveryContract,
     PolicySuggestionMessage,
     PolicyVagueMessage,
     PolicyViolationMessage,
+    RejectedReplacementContract,
     ResearchRequestMessage,
     TaskAssignMessage,
     TaskReviewMessage,
@@ -215,15 +218,31 @@ class System3(SystemBase):
             "TaskReviewMessage received for non-review-eligible status "
             f"'{status_text}'."
         )
+        retry_count, should_auto_retry = task_service.record_invalid_review_event(
+            cast(Any, task),
+            error_summary,
+        )
         await self._route_internal_error_to_policy_system(
             failed_message_type=message.__class__.__name__,
             error_summary=error_summary,
             task_id=getattr(task, "id", None),
-        )
-
-        retry_count, should_auto_retry = task_service.record_invalid_review_event(
-            cast(Any, task),
-            error_summary,
+            contract=InvalidReviewRecoveryContract(
+                task_id=int(getattr(task, "id")),
+                initiative_id=(
+                    int(getattr(task, "initiative_id"))
+                    if isinstance(getattr(task, "initiative_id", None), int)
+                    else None
+                ),
+                observed_status=str(status_text),
+                retry_count=retry_count,
+                retry_limit=task_service.INVALID_REVIEW_AUTO_RETRY_LIMIT,
+                error_summary=error_summary,
+                next_action=(
+                    "auto_retry_assignment"
+                    if should_auto_retry
+                    else "wait_for_policy_remediation"
+                ),
+            ),
         )
         if not should_auto_retry:
             logger.info(
@@ -848,6 +867,24 @@ class System3(SystemBase):
                                 assignee_agent_id_str=task.assignee,
                                 policy_id=case.policy_id,
                                 content=case.reasoning,
+                                contract=RejectedReplacementContract(
+                                    task_id=task.id,
+                                    initiative_id=(
+                                        int(getattr(task, "initiative_id"))
+                                        if isinstance(
+                                            getattr(task, "initiative_id", None), int
+                                        )
+                                        else None
+                                    ),
+                                    assignee_agent_id_str=task.assignee,
+                                    policy_id=case.policy_id,
+                                    policy_reasoning=case.reasoning,
+                                    case_judgement=getattr(task, "case_judgement", None),
+                                    execution_log=getattr(task, "execution_log", None),
+                                    requested_outcome=(
+                                        "create_replacement_or_remediate"
+                                    ),
+                                ),
                                 source=self.name,
                             ),
                             system_5_id,
@@ -937,6 +974,17 @@ class System3(SystemBase):
                 task_id=task_id,
                 content=content,
                 assignee_agent_id_str=assignee,
+                contract=BlockedRemediationContract(
+                    task_id=task_id,
+                    initiative_id=(
+                        int(getattr(task, "initiative_id"))
+                        if isinstance(getattr(task, "initiative_id", None), int)
+                        else None
+                    ),
+                    assignee_agent_id_str=assignee,
+                    blocked_reasoning=str(getattr(task, "reasoning", "")),
+                    remediation_request=content,
+                ),
                 source=self.name,
             ),
             policy_systems[0].get_agent_id(),

@@ -237,6 +237,55 @@ async def test_system3_task_review_escalates_when_no_policies():
 
 
 @pytest.mark.asyncio
+async def test_system3_invalid_review_routes_contract_payload_to_system5() -> None:
+    system3 = System3("System3/controller1")
+    system3._publish_message_to_agent = AsyncMock()
+
+    message = TaskReviewMessage(
+        task_id=17,
+        assignee_agent_id_str="System1/root",
+        source="System1/root",
+        content="Task result",
+    )
+    context = MessageContext(
+        sender=AgentId.from_str("System1/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="invalid_review_contract",
+    )
+
+    class DummyTask:
+        id = 17
+        initiative_id = 4
+        assignee = "System1/root"
+        status = Status.IN_PROGRESS
+
+    class DummySystem5:
+        def get_agent_id(self):
+            return AgentId.from_str("System5/root")
+
+    with (
+        patch("src.cyberagent.services.tasks._get_task", return_value=DummyTask()),
+        patch(
+            "src.cyberagent.services.tasks.record_invalid_review_event",
+            return_value=(1, False),
+        ),
+        patch.object(system3, "_get_systems_by_type", return_value=[DummySystem5()]),
+    ):
+        await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
+
+    system3._publish_message_to_agent.assert_awaited_once()
+    await_args = system3._publish_message_to_agent.await_args
+    assert await_args is not None
+    published_message = await_args.args[0]
+    assert isinstance(published_message, InternalErrorMessage)
+    assert published_message.contract is not None
+    assert published_message.contract.task_id == 17
+    assert published_message.contract.retry_count == 1
+
+
+@pytest.mark.asyncio
 async def test_system3_task_review_processes_blocked_tasks() -> None:
     system3 = System3("System3/controller1")
     system3._publish_message_to_agent = AsyncMock()
@@ -675,6 +724,81 @@ async def test_system3_task_review_persists_case_judgements() -> None:
 
 
 @pytest.mark.asyncio
+async def test_system3_task_review_violation_message_includes_contract() -> None:
+    system3 = System3("System3/controller1")
+    system3._publish_message_to_agent = AsyncMock()
+
+    message = TaskReviewMessage(
+        task_id=55,
+        assignee_agent_id_str="System1/root",
+        source="System1/root",
+        content="Task result",
+    )
+    context = MessageContext(
+        sender=AgentId.from_str("System1/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="task_review_violation_contract",
+    )
+
+    class DummyTask:
+        id = 55
+        initiative_id = 9
+        assignee = "System1/root"
+        status = Status.COMPLETED
+        case_judgement = '[{"policy_id":2,"judgement":"Violated","reasoning":"bad"}]'
+        execution_log = '[{"type":"TextMessage","content":"raw trace"}]'
+
+    class DummySystem5:
+        def get_agent_id(self):
+            return AgentId.from_str("System5/root")
+
+    with (
+        patch("src.cyberagent.services.tasks._get_task", return_value=DummyTask()),
+        patch(
+            "src.cyberagent.services.policies._get_system_policy_prompts",
+            return_value=['{"id":2,"content":"p2","system_id":1,"team_id":1}'],
+        ),
+        patch.object(system3, "_get_systems_by_type", return_value=[DummySystem5()]),
+        patch.object(
+            system3,
+            "run",
+            AsyncMock(
+                return_value=TaskResult(
+                    messages=[TextMessage(content="{}", source="System3")]
+                )
+            ),
+        ),
+        patch.object(
+            system3,
+            "_get_structured_message",
+            return_value=CasesResponse(
+                cases=[
+                    PolicyJudgeResponse(
+                        policy_id=2,
+                        judgement=PolicyJudgement.VIOLATED,
+                        reasoning="bad",
+                    )
+                ]
+            ),
+        ),
+        patch("src.cyberagent.services.tasks.finalize_task_review"),
+        patch.object(system3, "_evaluate_initiative_progression", AsyncMock()),
+    ):
+        await system3.handle_task_review_message(message, context)  # type: ignore[arg-type]
+
+    system3._publish_message_to_agent.assert_awaited_once()
+    await_args = system3._publish_message_to_agent.await_args
+    assert await_args is not None
+    published_message = await_args.args[0]
+    assert published_message.contract is not None
+    assert published_message.contract.task_id == 55
+    assert published_message.contract.initiative_id == 9
+    assert "raw trace" in (published_message.contract.execution_log or "")
+
+
+@pytest.mark.asyncio
 async def test_system3_task_review_persists_failure_marker_and_escalates_on_parse_failure():
     system3 = System3("System3/controller1")
     system3._publish_message_to_agent = AsyncMock()
@@ -998,6 +1122,9 @@ async def test_system3_escalate_blocked_task_tool_uses_capability_gap_message() 
     assert isinstance(published_message, CapabilityGapMessage)
     assert published_message.task_id == 42
     assert published_message.assignee_agent_id_str == "System1/root"
+    assert published_message.contract is not None
+    assert published_message.contract.task_id == 42
+    assert published_message.contract.initiative_id is None
 
 
 @pytest.mark.asyncio

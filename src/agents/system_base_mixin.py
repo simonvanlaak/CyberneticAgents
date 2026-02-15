@@ -16,7 +16,7 @@ from autogen_core import AgentId, TopicId
 from autogen_core.models import SystemMessage
 from pydantic import BaseModel
 
-from src.agents.messages import InternalErrorMessage
+from src.agents.messages import InternalErrorMessage, InvalidReviewRecoveryContract
 from src.cyberagent.core.agent_naming import normalize_message_source
 from src.cyberagent.db.models.system import get_system_from_agent_id
 from src.cyberagent.memory.config import (
@@ -198,6 +198,7 @@ class SystemBaseMixin:
         failed_message_type: str,
         error_summary: str,
         task_id: int | None = None,
+        contract: InvalidReviewRecoveryContract | None = None,
     ) -> None:
         if self.agent_id.type == "System5":
             return
@@ -216,6 +217,7 @@ class SystemBaseMixin:
                 failed_message_type=failed_message_type,
                 error_summary=error_summary,
                 task_id=task_id,
+                contract=contract,
                 content="Internal processing failure routed to System5.",
                 source=self.name,
             ),

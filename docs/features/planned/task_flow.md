@@ -280,5 +280,5 @@ If System1 change is required:
 
 ## Discussion Topics
 Use this section to align remaining details before code changes:
-- Exact message schemas/payloads for replacement creation and remediation outcomes
+- Exact message schemas/payloads for replacement creation and remediation outcomes (see `docs/technical/message_contracts.md`)
 - Whether `NX5` should be purely passive wait or publish an explicit heartbeat/monitor event
