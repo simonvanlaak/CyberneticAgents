@@ -108,12 +108,13 @@ while [[ $process_count -lt $max_process ]]; do
   if ! git diff --quiet; then
     "$PYTHON" ./scripts/github_issue_queue.py --repo "$REPO" set-status --issue "$ISSUE_NUMBER" --status "$STATUS_BLOCKED"
 
-    gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments" -f body="Blocked by automation: working tree has uncommitted changes.
+    COMMENT_BODY="Blocked by automation: working tree has uncommitted changes.
 
 Please commit changes as small, atomic commits linked to #$ISSUE_NUMBER (per AGENTS.md), then re-label this issue as status:ready.
 
 Validation run so far:
-- bash ./scripts/quality_gate.sh" >/dev/null
+- bash ./scripts/quality_gate.sh"
+    gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments" -f body="$(printf '%b' "$COMMENT_BODY")" >/dev/null
 
     process_count=$((process_count + 1))
     continue
@@ -138,7 +139,7 @@ Validation run so far:
     fi
 
     # Post comment via REST API (avoid Projects/GraphQL throttling issues).
-    gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments" -f body="Moved to Blocked via automation: no code changes were produced.
+    COMMENT_BODY="Moved to Blocked via automation: no code changes were produced.
 
 I ran ./scripts/quality_gate.sh, but there were no commits to review.
 
@@ -147,7 +148,8 @@ This likely needs human input (clarify requirements) or a non-automatable implem
 Please add:
 - Expected outcome + acceptance criteria
 - Any pointers (files/paths) or constraints
-- If this is a docs-only / no-code task, explicitly say so and describe what 'done' looks like." >/dev/null
+- If this is a docs-only / no-code task, explicitly say so and describe what 'done' looks like."
+    gh api "repos/$REPO/issues/$ISSUE_NUMBER/comments" -f body="$(printf '%b' "$COMMENT_BODY")" >/dev/null
 
     process_count=$((process_count + 1))
     continue
