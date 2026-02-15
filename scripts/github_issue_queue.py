@@ -44,7 +44,14 @@ def _gh_api(path: str, *, method: str = "GET", fields: dict[str, Any] | None = N
 
 
 def _gh_api_json(path: str, *, method: str, body: dict[str, Any]) -> Any:
-    return json.loads(_sh(["gh", "api", "--method", method, path], input_json=body))
+    """Call gh api with a JSON body.
+
+    gh only reads stdin when --input - is provided.
+    """
+
+    return json.loads(
+        _sh(["gh", "api", "--method", method, path, "--input", "-"], input_json=body)
+    )
 
 
 def cmd_ensure_labels(args: argparse.Namespace) -> int:
