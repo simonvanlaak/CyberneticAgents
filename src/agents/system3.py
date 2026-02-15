@@ -676,7 +676,12 @@ class System3(SystemBase):
         if not available_task_ids:
             return
         if not systems_list:
-            raise ValueError("No available System1 to assign fallback task.")
+            logger.warning(
+                "No available System1 for fallback assignment on initiative=%s.",
+                message.initiative_id,
+            )
+            await self._publish_initiative_review_once(initiative=initiative)
+            return
         fallback_system_id = int(getattr(systems_list[0], "id"))
         fallback_task_id = min(available_task_ids)
         logger.warning(

@@ -131,7 +131,15 @@ class CliTool:
 
     def _check_permission(self, agent_id: str, tool_name: str) -> bool:
         """Check if agent has permission to use the tool."""
-        return has_tool_permission(agent_id, tool_name)
+        check_tool_permission = _get_check_tool_permission()
+        if check_tool_permission is None:
+            logger.warning("RBAC checker unavailable; denying tool execution.")
+            return False
+        try:
+            return bool(check_tool_permission(agent_id, tool_name))
+        except Exception as exc:
+            logger.warning("RBAC permission check failed: %s", exc)
+            return False
 
     def _check_skill_permission(
         self, agent_id: str, skill_name: str
@@ -191,6 +199,11 @@ class CliTool:
                 "error": result.output,
                 "raw_output": result.output,
             }
+
+
+def _get_check_tool_permission() -> Any:
+    check_tool_permission = has_tool_permission
+    return check_tool_permission if callable(check_tool_permission) else None
 
 
 def _get_executor_timeout(executor: Any) -> Optional[int]:
