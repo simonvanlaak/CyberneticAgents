@@ -48,14 +48,15 @@ def start_onboarding_interview(
         print(welcome_message)
         print(first_question)
     token = get_secret("TELEGRAM_BOT_TOKEN")
+    bot_link = build_bot_link()
     if token:
         print(get_message("onboarding", "telegram_session_required"))
-        bot_link = build_bot_link()
         if not bot_link:
             fetched = onboarding_telegram._fetch_bot_username_from_token(token)
             if fetched:
                 os.environ.setdefault("TELEGRAM_BOT_USERNAME", fetched)
-                bot_link = build_bot_link()
+                # Do not print a link derived from freshly fetched token data in this run.
+                bot_link = None
         if bot_link:
             print(f"Open: {bot_link}")
             qr = render_telegram_qr(bot_link)

@@ -281,6 +281,8 @@ def test_start_onboarding_interview_fetches_bot_username_when_missing(
     capsys: pytest.CaptureFixture[str],
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.delenv("TELEGRAM_BOT_USERNAME", raising=False)
+
     def _fake_secret(name: str) -> str | None:
         if name == "TELEGRAM_BOT_TOKEN":
             return "token"
@@ -305,6 +307,7 @@ def test_start_onboarding_interview_fetches_bot_username_when_missing(
         "build_onboarding_interview_prompt",
         lambda **_kwargs: "prompt",
     )
+
     build_calls = 0
 
     def _fake_build_bot_link() -> str | None:
@@ -330,8 +333,9 @@ def test_start_onboarding_interview_fetches_bot_username_when_missing(
 
     captured = capsys.readouterr().out
     assert "Send message to bot." in captured
-    assert "t.me/mybot" in captured
-    assert "QR" in captured
+    assert "t.me/mybot" not in captured
+    assert "QR" not in captured
+    assert os.environ.get("TELEGRAM_BOT_USERNAME") == "mybot"
 
 
 def test_send_onboarding_intro_messages_no_session_returns_false(
