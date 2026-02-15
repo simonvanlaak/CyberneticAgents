@@ -87,7 +87,7 @@ flowchart TB
         RC["Task -> canceled (archive rejected attempt)"]
         T1["System3 creates replacement task (same initiative)"]
         T2["Replacement task starts as pending"]
-        T3["Original.follow_up_task_ids += replacement_task_id"]
+        T3["Original.follow_up_task_id = replacement_task_id"]
         T4["Replacement.replaces_task_id = original_task_id"]
 
         L["Task -> canceled"]
@@ -271,10 +271,10 @@ If System1 change is required:
 - only System5 escalates to user when no viable remediation exists
 
 ## Task Attempt Lineage
-- Forward link on original task: `tasks.follow_up_task_ids` (JSON list of task IDs)
+- Forward link on original task: `tasks.follow_up_task_id` (single task ID)
 - Reverse link on replacement task: `tasks.replaces_task_id` (single task ID)
 - Expected usage:
-  - when a rejected task is replaced, append replacement id to original `follow_up_task_ids`
+  - when a rejected task is replaced, set original `follow_up_task_id` to replacement task id
   - set replacement `replaces_task_id` to original task id
   - keep all attempts as immutable historical records
 

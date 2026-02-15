@@ -7,7 +7,8 @@ This document defines explicit payload contracts for deterministic orchestration
 The contracts below cover:
 - invalid-review recovery
 - blocked remediation
-- rejected replacement/remediation
+- rejected replacement/remediation request
+- rejected-task remediation approval trigger
 
 ## 1) Invalid Review Recovery Contract
 
@@ -59,6 +60,23 @@ Fields:
 
 Current `requested_outcome` value:
 - `create_replacement_or_remediate`
+
+## 4) Rejected-Task Remediation Approval Contract
+
+**Carrier message:** `RejectedTaskRemediationApprovedMessage.contract`
+
+**Model:** `RejectedTaskRemediationApprovalContract`
+
+Fields:
+- `task_id` (int)
+- `initiative_id` (int | null)
+- `policy_id` (int)
+- `policy_reasoning` (str)
+- `approved_changes` (str)
+
+Notes:
+- This is the explicit System5 -> System3 unlock signal for replacement creation.
+- System3 must not create replacement tasks until this contract-bearing message is received.
 
 ## Validation
 
