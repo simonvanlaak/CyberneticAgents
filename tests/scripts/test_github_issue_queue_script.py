@@ -5,14 +5,11 @@ import sys
 from pathlib import Path
 
 
-def test_github_outbox_script_runs_from_any_cwd(tmp_path: Path) -> None:
-    """Regression test: scripts/github_outbox.py must not depend on cwd.
-
-    The cron worker invokes it from repo-adjacent directories.
-    """
+def test_github_issue_queue_script_runs_from_any_cwd(tmp_path: Path) -> None:
+    """Regression test: scripts/github_issue_queue.py must not depend on cwd."""
 
     repo_root = Path(__file__).resolve().parents[2]
-    script = repo_root / "scripts" / "github_outbox.py"
+    script = repo_root / "scripts" / "github_issue_queue.py"
 
     result = subprocess.run(
         [sys.executable, str(script), "--help"],
@@ -23,4 +20,4 @@ def test_github_outbox_script_runs_from_any_cwd(tmp_path: Path) -> None:
     )
 
     assert result.returncode == 0, result.stderr or result.stdout
-    assert "Rate-limit-aware GitHub outbox" in result.stdout
+    assert "Issue-label-based queue utilities" in result.stdout
