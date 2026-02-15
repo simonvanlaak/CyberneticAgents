@@ -21,6 +21,7 @@ def test_apply_stage_label_adds_stage_when_missing() -> None:
 @pytest.mark.parametrize(
     "stage",
     [
+        "stage:planned",
         "stage:backlog",
         "stage:needs-clarification",
         "stage:ready-to-implement",

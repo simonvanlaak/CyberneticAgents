@@ -19,6 +19,7 @@ from src.github_stage_queue import (
     STAGE_IN_PROGRESS,
     STAGE_IN_REVIEW,
     STAGE_NEEDS_CLARIFICATION,
+    STAGE_PLANNED,
     STAGE_READY_TO_IMPLEMENT,
     plan_label_changes,
 )
@@ -54,6 +55,7 @@ def cmd_ensure_labels(args: argparse.Namespace) -> int:
 
     # Use deterministic colors (arbitrary but stable).
     desired = {
+        STAGE_PLANNED: "cfd3d7",
         STAGE_BACKLOG: "ededed",
         STAGE_NEEDS_CLARIFICATION: "d4c5f9",
         STAGE_READY_TO_IMPLEMENT: "0e8a16",
@@ -65,10 +67,11 @@ def cmd_ensure_labels(args: argparse.Namespace) -> int:
     for name, color in desired.items():
         if name in names:
             continue
-        _gh_api_json(
+        # Use form fields (gh api -f ...) because JSON stdin has been flaky with labels create.
+        _gh_api(
             f"repos/{owner}/{repo_name}/labels",
             method="POST",
-            body={"name": name, "color": color, "description": "automation status label"},
+            fields={"name": name, "color": color, "description": "automation stage label"},
         )
 
     return 0
