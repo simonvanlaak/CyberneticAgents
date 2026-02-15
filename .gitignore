@@ -84,3 +84,6 @@ pip-delete-this-directory.txt
 # Pre-commit
 .pre-commit-cache/
 
+.env.taiga
+.tmp/obsidian_maya_last_hash.txt
+

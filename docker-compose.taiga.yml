@@ -1,0 +1,99 @@
+# Taiga self-host (MVP) for CyberneticAgents
+#
+# Notes:
+# - SMTP intentionally omitted for MVP (no outbound email).
+# - Defaults are dev-ish; put secrets in an .env file and DO NOT commit.
+# - This compose is meant to be used by ticket #120.
+#
+# Usage:
+#   cp .env.taiga.example .env.taiga
+#   docker compose --env-file .env.taiga -f docker-compose.taiga.yml up -d
+#
+# Then open:
+#   http://<host>:${TAIGA_PUBLIC_PORT:-9000}
+#
+# References:
+# - Taiga upstream docker repo/docs change over time; keep this file simple.
+
+services:
+  taiga-db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: ${TAIGA_DB_NAME:-taiga}
+      POSTGRES_USER: ${TAIGA_DB_USER:-taiga}
+      POSTGRES_PASSWORD: ${TAIGA_DB_PASSWORD:-change_me}
+    volumes:
+      - taiga_db:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  taiga-redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+  taiga-rabbit:
+    image: rabbitmq:3-alpine
+    hostname: taiga-rabbit
+    environment:
+      RABBITMQ_DEFAULT_USER: ${TAIGA_RABBIT_USER:-taiga}
+      RABBITMQ_DEFAULT_PASS: ${TAIGA_RABBIT_PASSWORD:-change_me}
+    restart: unless-stopped
+
+  # Backend (Django API)
+  taiga-back:
+    image: taigaio/taiga-back:latest
+    depends_on:
+      - taiga-db
+      - taiga-redis
+      - taiga-rabbit
+    environment:
+      # Minimal required settings.
+      TAIGA_SECRET_KEY: ${TAIGA_SECRET_KEY:-change_me}
+      TAIGA_SITES_SCHEME: http
+      TAIGA_SITES_DOMAIN: ${TAIGA_SITES_DOMAIN:-localhost:${TAIGA_PUBLIC_PORT:-9000}}
+
+      POSTGRES_DB: ${TAIGA_DB_NAME:-taiga}
+      POSTGRES_USER: ${TAIGA_DB_USER:-taiga}
+      POSTGRES_PASSWORD: ${TAIGA_DB_PASSWORD:-change_me}
+      POSTGRES_HOST: taiga-db
+      POSTGRES_PORT: 5432
+
+      REDIS_HOST: taiga-redis
+      REDIS_PORT: 6379
+
+      RABBITMQ_USER: ${TAIGA_RABBIT_USER:-taiga}
+      RABBITMQ_PASS: ${TAIGA_RABBIT_PASSWORD:-change_me}
+      RABBITMQ_HOST: taiga-rabbit
+      RABBITMQ_PORT: 5672
+
+      # Disable email for MVP.
+      EMAIL_BACKEND: django.core.mail.backends.console.EmailBackend
+    volumes:
+      - taiga_media:/taiga/media
+      - taiga_static:/taiga/static
+    restart: unless-stopped
+
+  # Events (websockets)
+  taiga-events:
+    image: taigaio/taiga-events:latest
+    depends_on:
+      - taiga-rabbit
+    environment:
+      RABBITMQ_USER: ${TAIGA_RABBIT_USER:-taiga}
+      RABBITMQ_PASS: ${TAIGA_RABBIT_PASSWORD:-change_me}
+      RABBITMQ_HOST: taiga-rabbit
+      RABBITMQ_PORT: 5672
+    restart: unless-stopped
+
+  # Frontend
+  taiga-front:
+    image: taigaio/taiga-front:latest
+    depends_on:
+      - taiga-back
+    ports:
+      - "${TAIGA_PUBLIC_PORT:-9000}:80"
+    restart: unless-stopped
+
+volumes:
+  taiga_db:
+  taiga_media:
+  taiga_static:
