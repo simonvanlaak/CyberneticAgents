@@ -147,6 +147,19 @@ Legacy paths above remain active until migration completes.
 
 ---
 
+## Contributing
+
+We’re very much looking forward to **feedback and suggestions**.
+
+Please **open a GitHub Issue** as a **“Prompt Request”** and describe your suggested change in detail.
+
+- **Do not create Pull Requests.**
+- Instead, explain what you’d change (and why) in an issue — if it fits the overall concept and vision, I’ll implement it.
+
+See: [CONTRIBUTING.md](CONTRIBUTING.md)
+
+---
+
 ## Testing and quality gates
 
 Run tests:
