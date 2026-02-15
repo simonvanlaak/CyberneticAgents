@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 
 from autogen_agentchat.base import TaskResult
 from autogen_agentchat.messages import TextMessage
+from autogen_core import AgentId
 
 from src.agents.system5 import System5
 from src.agents.messages import (
@@ -17,6 +18,8 @@ from src.agents.messages import (
     PolicySuggestionMessage,
     PolicyVagueMessage,
     PolicyViolationMessage,
+    RejectedReplacementContract,
+    RejectedTaskRemediationApprovedMessage,
     ResearchReviewMessage,
     StrategyReviewMessage,
     TaskReviewMessage,
@@ -420,7 +423,9 @@ async def test_system5_internal_error_wait_for_remediation_does_not_auto_retry(
         result = "done"
         name = "Task 42"
 
-    monkeypatch.setattr("src.agents.system5.task_service.get_task_by_id", lambda _tid: _Task())
+    monkeypatch.setattr(
+        "src.agents.system5.task_service.get_task_by_id", lambda _tid: _Task()
+    )
 
     ensure_calls: list[str] = []
 
@@ -459,6 +464,65 @@ async def test_system5_internal_error_wait_for_remediation_does_not_auto_retry(
     assert "retry cap" in result.content.lower()
     assert ensure_calls == []
     system5._publish_message_to_agent.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_system5_policy_violation_contract_publishes_remediation_approval() -> (
+    None
+):
+    system5 = System5("System5/root")
+    system5.run = AsyncMock(
+        return_value=TaskResult(
+            messages=[
+                TextMessage(
+                    content="Apply concrete citation updates",
+                    source="System5/root",
+                )
+            ]
+        )
+    )
+    system5._publish_message_to_agent = AsyncMock()
+
+    class DummyControl:
+        def get_agent_id(self) -> AgentId:
+            return AgentId.from_str("System3/root")
+
+    system5._get_systems_by_type = lambda _system_type: [DummyControl()]  # type: ignore[method-assign]
+
+    message = PolicyViolationMessage(
+        task_id=7,
+        policy_id=1,
+        assignee_agent_id_str="System1/root",
+        content="Violation details",
+        contract=RejectedReplacementContract(
+            task_id=7,
+            initiative_id=4,
+            assignee_agent_id_str="System1/root",
+            policy_id=1,
+            policy_reasoning="Missing citations",
+            case_judgement='[{"judgement":"Violated"}]',
+            execution_log='[{"kind":"step"}]',
+            requested_outcome="create_replacement_or_remediate",
+        ),
+        source="System3/root",
+    )
+
+    result = await system5.handle_policy_violation_message(
+        message=message,
+        ctx=SimpleNamespace(),
+    )  # type: ignore[call-arg]
+
+    assert result.content == "Apply concrete citation updates"
+    system5._publish_message_to_agent.assert_awaited_once()
+    publish_args = system5._publish_message_to_agent.await_args
+    assert publish_args is not None
+    published_message = publish_args.args[0]
+    assert isinstance(published_message, RejectedTaskRemediationApprovedMessage)
+    assert published_message.task_id == 7
+    assert published_message.contract is not None
+    assert (
+        published_message.contract.approved_changes == "Apply concrete citation updates"
+    )
 
 
 @pytest.mark.asyncio

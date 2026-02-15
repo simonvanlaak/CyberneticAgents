@@ -22,6 +22,8 @@ from src.agents.messages import (
     InternalErrorMessage,
     PolicySuggestionMessage,
     PolicyVagueMessage,
+    RejectedTaskRemediationApprovalContract,
+    RejectedTaskRemediationApprovedMessage,
     TaskAssignMessage,
     TaskReviewMessage,
 )
@@ -1172,6 +1174,68 @@ async def test_system3_cancel_task_tool_cancels_blocked_task_without_replacement
 
 
 @pytest.mark.asyncio
+async def test_system3_rejected_remediation_approval_creates_replacement_and_reassigns() -> (
+    None
+):
+    system3 = System3("System3/controller1")
+    system3.assign_task = AsyncMock()  # type: ignore[method-assign]
+
+    message = RejectedTaskRemediationApprovedMessage(
+        task_id=42,
+        source="System5/root",
+        content="Approved remediation",
+        contract=RejectedTaskRemediationApprovalContract(
+            task_id=42,
+            initiative_id=9,
+            policy_id=77,
+            policy_reasoning="Missing source citations",
+            approved_changes="Add citations for each claim.",
+        ),
+    )
+    context = MessageContext(
+        sender=AgentId.from_str("System5/root"),
+        topic_id=None,
+        is_rpc=False,
+        cancellation_token=CancellationToken(),
+        message_id="rejected_remediation_approved",
+    )
+
+    class DummyTask:
+        id = 42
+        team_id = 3
+        initiative_id = 9
+        status = Status.REJECTED
+        assignee = "System1/original"
+        name = "Draft report"
+        content = "Write the first draft"
+
+    class DummyReplacement:
+        id = 84
+        status = Status.PENDING
+        assignee = None
+
+    with (
+        patch("src.cyberagent.services.tasks.get_task_by_id", return_value=DummyTask()),
+        patch(
+            "src.cyberagent.services.tasks.archive_rejected_task_with_replacement",
+            return_value=DummyReplacement(),
+        ) as archive,
+        patch.object(
+            system3,
+            "_select_best_operation_system_id_for_task",
+            AsyncMock(return_value=11),
+        ),
+    ):
+        await system3.handle_rejected_task_remediation_approved_message(
+            message,
+            context,
+        )
+
+    archive.assert_called_once()
+    system3.assign_task.assert_awaited_once_with(11, 84)
+
+
+@pytest.mark.asyncio
 async def test_system3_evaluate_initiative_progression_assigns_pending_task() -> None:
     system3 = System3("System3/controller1")
     system3.assign_task = AsyncMock()  # type: ignore[method-assign]
@@ -1208,7 +1272,9 @@ async def test_system3_evaluate_initiative_progression_assigns_pending_task() ->
         def get_tasks(self) -> list[DummyTask]:
             return self._tasks
 
-    completed_task = DummyTask(task_id=42, status=Status.COMPLETED, assignee="System1/root")
+    completed_task = DummyTask(
+        task_id=42, status=Status.COMPLETED, assignee="System1/root"
+    )
     pending_task = DummyTask(task_id=43, status=Status.PENDING, assignee=None)
     initiative = DummyInitiative([completed_task, pending_task])
 
@@ -1222,7 +1288,11 @@ async def test_system3_evaluate_initiative_progression_assigns_pending_task() ->
             "_select_pending_task_for_progression",
             AsyncMock(return_value=pending_task),
         ),
-        patch.object(system3, "_select_retry_operation_system_id", return_value=7),
+        patch.object(
+            system3,
+            "_select_best_operation_system_id_for_task",
+            AsyncMock(return_value=7),
+        ),
     ):
         await system3._evaluate_initiative_progression(
             triggering_task=completed_task,
@@ -1284,7 +1354,9 @@ async def test_system3_evaluate_initiative_progression_zero_tasks_sends_review_o
         ),
         patch(
             "src.agents.system3.initiative_service.set_initiative_status",
-            side_effect=lambda initiative_obj, status: initiative_obj.set_status(status),
+            side_effect=lambda initiative_obj, status: initiative_obj.set_status(
+                status
+            ),
         ),
         patch.object(system3, "_get_systems_by_type", return_value=[DummySystem4()]),
     ):

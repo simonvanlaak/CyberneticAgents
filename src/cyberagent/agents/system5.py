@@ -10,6 +10,8 @@ from src.cyberagent.agents.messages import (
     ConfirmationResponse,
     InternalErrorMessage,
     PolicySuggestionMessage,
+    RejectedTaskRemediationApprovalContract,
+    RejectedTaskRemediationApprovedMessage,
     TaskReviewMessage,
     PolicyVagueMessage,
     PolicyViolationMessage,
@@ -169,6 +171,10 @@ class System5(SystemBase):
             parsed: ConfirmationResponse = self._get_structured_message(
                 response, ConfirmationResponse
             )
+            await self._publish_rejected_task_remediation_approval(
+                message,
+                approved_changes=parsed.content,
+            )
             return ConfirmationMessage(
                 content=parsed.content,
                 is_error=parsed.is_error,
@@ -181,11 +187,48 @@ class System5(SystemBase):
             content = getattr(last_message, "content", "")
             if not isinstance(content, str):
                 content = str(content)
+            await self._publish_rejected_task_remediation_approval(
+                message,
+                approved_changes=content,
+            )
             return ConfirmationMessage(
                 content=content,
                 is_error=False,
                 source=self.name,
             )
+
+    async def _publish_rejected_task_remediation_approval(
+        self,
+        message: PolicyViolationMessage,
+        *,
+        approved_changes: str,
+    ) -> None:
+        contract = getattr(message, "contract", None)
+        if contract is None:
+            return
+        requested_outcome = getattr(contract, "requested_outcome", None)
+        if requested_outcome != "create_replacement_or_remediate":
+            return
+
+        control_systems = self._get_systems_by_type(SystemType.CONTROL)
+        if not control_systems:
+            return
+
+        await self._publish_message_to_agent(
+            RejectedTaskRemediationApprovedMessage(
+                task_id=message.task_id,
+                content=approved_changes,
+                source=self.name,
+                contract=RejectedTaskRemediationApprovalContract(
+                    task_id=message.task_id,
+                    initiative_id=contract.initiative_id,
+                    policy_id=message.policy_id,
+                    policy_reasoning=contract.policy_reasoning,
+                    approved_changes=approved_changes,
+                ),
+            ),
+            control_systems[0].get_agent_id(),
+        )
 
     def approve_procedure_tool(self, procedure_id: int) -> dict[str, object]:
         """

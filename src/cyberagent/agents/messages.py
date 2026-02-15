@@ -43,6 +43,18 @@ class RejectedReplacementContract(BaseModel):
     requested_outcome: str
 
 
+class RejectedTaskRemediationApprovalContract(BaseModel):
+    """Contract payload for System5 remediation approval to unlock replacement creation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: int
+    initiative_id: int | None
+    policy_id: int
+    policy_reasoning: str
+    approved_changes: str
+
+
 class UserMessage(BaseTextChatMessage):
     """Used by user to communicate with System 4."""
 
@@ -98,6 +110,14 @@ class PolicyViolationMessage(BaseTextChatMessage):
     assignee_agent_id_str: str
     content: str
     contract: RejectedReplacementContract | None = None
+
+
+class RejectedTaskRemediationApprovedMessage(BaseTextChatMessage):
+    """Used by System5 to authorize rejected-task archival and replacement creation in System3."""
+
+    task_id: int
+    content: str
+    contract: RejectedTaskRemediationApprovalContract
 
 
 class PolicyVagueMessage(BaseTextChatMessage):

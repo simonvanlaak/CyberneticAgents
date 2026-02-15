@@ -432,6 +432,70 @@ def test_record_invalid_review_event_stops_auto_retry_after_cap() -> None:
     assert task.updated is True
 
 
+def test_archive_rejected_task_creates_pending_replacement_with_lineage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from src.cyberagent.services import tasks as task_service
+    from src.cyberagent.db.models.task import Task
+    from src.enums import Status
+
+    original = cast(Task, _FakeTask())
+    original.id = 14
+    original.team_id = 5
+    original.initiative_id = 22
+    original.name = "Collect links"
+    original.content = "Collect all source links"
+    original.status = Status.REJECTED
+    original.assignee = "System1/original"
+    original.follow_up_task_id = None
+
+    replacement = cast(Task, _FakeTask())
+    replacement.id = 15
+    replacement.status = Status.PENDING
+    replacement.assignee = None
+    replacement.replaces_task_id = None
+
+    monkeypatch.setattr(task_service, "create_task", lambda **_kwargs: replacement)
+    monkeypatch.setattr(task_service, "_persist_task", lambda task: task.update())
+
+    created = task_service.archive_rejected_task_with_replacement(
+        original,
+        replacement_name="Collect links (replacement)",
+        replacement_content="Collect all source links\n\nChange: include LinkedIn profile URL.",
+        replacement_reasoning="Policy remediation approved",
+    )
+
+    assert created is replacement
+    assert original.status == Status.CANCELED
+    assert original.assignee == "System1/original"
+    assert original.follow_up_task_id == 15
+    assert replacement.replaces_task_id == 14
+    assert replacement.status == Status.PENDING
+    assert replacement.assignee is None
+    assert replacement.reasoning == "Policy remediation approved"
+
+
+def test_archive_rejected_task_raises_for_non_rejected_status() -> None:
+    from src.cyberagent.services import tasks as task_service
+    from src.cyberagent.db.models.task import Task
+    from src.enums import Status
+
+    task = cast(Task, _FakeTask())
+    task.id = 14
+    task.team_id = 5
+    task.initiative_id = 22
+    task.name = "Collect links"
+    task.content = "Collect all source links"
+    task.status = Status.COMPLETED
+
+    with pytest.raises(ValueError, match="must be in rejected status"):
+        task_service.archive_rejected_task_with_replacement(
+            task,
+            replacement_name="Collect links (replacement)",
+            replacement_content="Collect all source links",
+        )
+
+
 def test_is_review_eligible_for_task_when_completed_or_blocked() -> None:
     from src.cyberagent.services import tasks as task_service
     from src.cyberagent.db.models.task import Task

@@ -17,6 +17,7 @@ from src.cyberagent.agents.messages import (
     PolicyVagueMessage,
     PolicyViolationMessage,
     RejectedReplacementContract,
+    RejectedTaskRemediationApprovedMessage,
     ResearchRequestMessage,
     TaskAssignMessage,
     TaskReviewMessage,
@@ -208,6 +209,99 @@ class System3(SystemBase):
             key=lambda system: int(getattr(system, "id")),
         )
         return int(getattr(ordered_systems[0], "id"))
+
+    async def _select_best_operation_system_id_for_task(
+        self,
+        *,
+        task: object,
+        message: object,
+        ctx: MessageContext,
+    ) -> int:
+        """Select the best available System1 for a task.
+
+        This path is used for replacement-task assignment so System3 performs
+        explicit reselection across all available operation systems.
+        """
+
+        operation_systems = self._get_systems_by_type(SystemType.OPERATION)
+        if not operation_systems:
+            raise ValueError("No operation system found for assignment reselection.")
+
+        ordered_systems = sorted(
+            operation_systems,
+            key=lambda system: int(getattr(system, "id")),
+        )
+        available_system_ids = {
+            int(getattr(system, "id")) for system in ordered_systems
+        }
+        systems_payload = [
+            {
+                "system_id": int(getattr(system, "id")),
+                "name": str(getattr(system, "name", "")),
+                "agent_id_str": str(getattr(system, "agent_id_str", "")),
+                "system_type": str(
+                    getattr(
+                        getattr(system, "type", None),
+                        "value",
+                        getattr(system, "type", ""),
+                    )
+                ),
+            }
+            for system in ordered_systems
+        ]
+        task_payload = {
+            "task_id": getattr(task, "id", None),
+            "name": str(getattr(task, "name", "")),
+            "content": str(getattr(task, "content", "")),
+            "reasoning": str(getattr(task, "reasoning", "")),
+            "initiative_id": getattr(task, "initiative_id", None),
+        }
+
+        prompts = [
+            "Select the best System1 for this task.",
+            'Return strict JSON only with schema: {"system_id": <int>, "task_id": <int>}.',
+            "Use only system ids listed in AVAILABLE SYSTEM 1s.",
+            "## TASK",
+            json.dumps(task_payload, indent=4),
+            "## AVAILABLE SYSTEM 1s",
+            json.dumps(systems_payload, indent=4),
+        ]
+
+        try:
+            response = await self.run(
+                [cast(Any, message)],
+                ctx,
+                prompts,
+                TaskAssignmentResponse,
+                include_memory_context=False,
+            )
+            assignment = self._get_structured_message(response, TaskAssignmentResponse)
+            selected_system_id = int(assignment.system_id)
+            if selected_system_id in available_system_ids:
+                return selected_system_id
+        except Exception as exc:
+            logger.warning("Best-System1 reselection failed, using fallback: %s", exc)
+
+        return int(getattr(ordered_systems[0], "id"))
+
+    def _build_replacement_content_from_approval(
+        self,
+        *,
+        original_task: object,
+        approved_changes: str,
+    ) -> str:
+        original_content = str(getattr(original_task, "content", "")).strip()
+        changes_text = approved_changes.strip()
+        if not changes_text:
+            return original_content
+
+        # Keep the original task content verbatim and append explicit diff-style
+        # remediation notes to avoid erosion across repeated rewrites.
+        return (
+            f"{original_content}\n\n"
+            "Approved remediation changes:\n"
+            f"{changes_text}"
+        )
 
     async def _handle_invalid_review_status(
         self,
@@ -449,8 +543,13 @@ class System3(SystemBase):
                 )
                 return
 
+            selected_system_id = await self._select_best_operation_system_id_for_task(
+                task=next_task,
+                message=message,
+                ctx=ctx,
+            )
             await self.assign_task(
-                self._select_retry_operation_system_id(),
+                selected_system_id,
                 int(getattr(next_task, "id")),
             )
             return
@@ -462,6 +561,42 @@ class System3(SystemBase):
             return
 
         await self._publish_initiative_review_once(initiative=initiative)
+
+    @message_handler
+    async def handle_rejected_task_remediation_approved_message(
+        self,
+        message: RejectedTaskRemediationApprovedMessage,
+        ctx: MessageContext,
+    ) -> None:
+        task = task_service.get_task_by_id(message.task_id)
+        if self._task_status_text(task) not in {"rejected", "status.rejected"}:
+            raise ValueError(
+                f"Task {message.task_id} must be in rejected status before replacement orchestration."
+            )
+
+        original_name = (
+            str(getattr(task, "name", "")).strip() or f"Task {message.task_id}"
+        )
+        replacement_name = f"{original_name} (replacement)"
+        replacement_content = self._build_replacement_content_from_approval(
+            original_task=task,
+            approved_changes=message.contract.approved_changes,
+        )
+
+        replacement_task = task_service.archive_rejected_task_with_replacement(
+            cast(Any, task),
+            replacement_name=replacement_name,
+            replacement_content=replacement_content,
+            replacement_reasoning=message.content,
+        )
+
+        selected_system_id = await self._select_best_operation_system_id_for_task(
+            task=replacement_task,
+            message=message,
+            ctx=ctx,
+        )
+        replacement_task_id = int(getattr(replacement_task, "id"))
+        await self.assign_task(selected_system_id, replacement_task_id)
 
     @message_handler
     async def handle_initiative_assign_message(

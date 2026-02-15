@@ -309,6 +309,58 @@ def persist_task(task: Task) -> None:
     _persist_task(task)
 
 
+def archive_rejected_task_with_replacement(
+    original_task: Task,
+    *,
+    replacement_name: str,
+    replacement_content: str,
+    replacement_reasoning: str | None = None,
+) -> Task:
+    """Archive a rejected task and create a replacement attempt with lineage wiring.
+
+    The original task is transitioned from ``rejected`` to ``canceled`` to preserve
+    immutable attempt history. A new replacement task is then created in the same
+    initiative, kept ``pending`` with no assignee, and linked bidirectionally.
+
+    Args:
+        original_task: Existing task attempt in ``rejected`` status.
+        replacement_name: Name for the replacement task.
+        replacement_content: Full replacement content/spec.
+        replacement_reasoning: Optional reasoning to persist on replacement.
+
+    Returns:
+        The newly created replacement task.
+
+    Raises:
+        ValueError: If the original task is not in rejected status.
+    """
+
+    current_status = _resolve_task_status(getattr(original_task, "status", None))
+    if current_status != Status.REJECTED:
+        raise ValueError(
+            "Rejected-task archival requires original task and must be in rejected status."
+        )
+
+    _transition_task(original_task, Status.CANCELED)
+
+    replacement = create_task(
+        team_id=int(getattr(original_task, "team_id")),
+        initiative_id=int(getattr(original_task, "initiative_id")),
+        name=replacement_name,
+        content=replacement_content,
+    )
+    replacement.assignee = None
+    replacement.replaces_task_id = int(getattr(original_task, "id"))
+    if replacement_reasoning is not None:
+        replacement.reasoning = replacement_reasoning
+
+    original_task.follow_up_task_id = int(getattr(replacement, "id"))
+
+    _persist_task(original_task)
+    _persist_task(replacement)
+    return replacement
+
+
 def _persist_task(task: Task) -> None:
     """
     Persist a task mutation using service-level transaction control.
