@@ -34,6 +34,7 @@ from src.cyberagent.channels.telegram.parser import build_session_id
 from src.cyberagent.cli import dev as dev_cli
 from src.cyberagent.cli import dashboard_launcher
 from src.cyberagent.cli import kanban as kanban_cli
+from src.cyberagent.cli import planka as planka_cli
 from src.cyberagent.cli import taiga as taiga_cli
 from src.cyberagent.cli.env_loader import load_op_service_account_token
 from src.cyberagent.cli import log_filters
@@ -133,6 +134,13 @@ def _handle_taiga(args: argparse.Namespace) -> int:
     if args.taiga_command == "worker":
         return taiga_cli.handle_taiga_worker_command(args)
     print(f"Unknown taiga command: {args.taiga_command}", file=sys.stderr)
+    return 1
+
+
+def _handle_planka(args: argparse.Namespace) -> int:
+    if args.planka_command == "worker":
+        return planka_cli.handle_planka_worker_command(args)
+    print(f"Unknown planka command: {args.planka_command}", file=sys.stderr)
     return 1
 
 
@@ -727,6 +735,7 @@ _HANDLERS = {
     DASHBOARD_COMMAND: _handle_ui,
     KANBAN_COMMAND: _handle_kanban,
     "taiga": _handle_taiga,
+    "planka": _handle_planka,
     "status": _handle_status,
     "task": _handle_task,
     "onboarding": _handle_onboarding,

@@ -6,10 +6,18 @@ from src.cyberagent.integrations.planka.adapter import (
     PlankaCard,
     PlankaList,
 )
+from src.cyberagent.integrations.planka.worker import (
+    PlankaExecutionResult,
+    PlankaWorker,
+    PlankaWorkerConfig,
+)
 
 __all__ = [
     "PlankaAdapter",
     "PlankaBoard",
     "PlankaCard",
     "PlankaList",
+    "PlankaExecutionResult",
+    "PlankaWorker",
+    "PlankaWorkerConfig",
 ]

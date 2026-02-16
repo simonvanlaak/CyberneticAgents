@@ -91,6 +91,48 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run continuously (default mode).",
     )
 
+    planka_parser = subparsers.add_parser(
+        "planka",
+        help="Run Planka integration commands.",
+    )
+    planka_subparsers = planka_parser.add_subparsers(
+        dest="planka_command", required=True
+    )
+    planka_worker_parser = planka_subparsers.add_parser(
+        "worker",
+        help="Run the Planka worker loop (claim -> execute -> transition).",
+    )
+    planka_worker_parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Optional JSON config file for worker defaults.",
+    )
+    planka_worker_parser.add_argument("--board-id", type=str, default=None)
+    planka_worker_parser.add_argument("--source-list", type=str, default=None)
+    planka_worker_parser.add_argument("--in-progress-list", type=str, default=None)
+    planka_worker_parser.add_argument("--success-list", type=str, default=None)
+    planka_worker_parser.add_argument("--failure-list", type=str, default=None)
+    planka_worker_parser.add_argument("--blocked-list", type=str, default=None)
+    planka_worker_parser.add_argument("--poll-seconds", type=float, default=None)
+    planka_worker_parser.add_argument("--max-cards", type=int, default=None)
+    planka_worker_parser.add_argument("--run-id", type=str, default=None)
+    planka_mode_group = planka_worker_parser.add_mutually_exclusive_group()
+    planka_mode_group.add_argument(
+        "--once",
+        dest="once",
+        action="store_true",
+        default=None,
+        help="Process up to --max-cards once and exit.",
+    )
+    planka_mode_group.add_argument(
+        "--loop",
+        dest="once",
+        action="store_false",
+        default=None,
+        help="Run continuously (default mode).",
+    )
+
     add_onboarding_args(subparsers)
     add_pairing_parser(subparsers)
 

@@ -26,6 +26,13 @@ Operational scripts that remain specific to CyberneticAgents.
   - Runs the operational Taiga worker loop with deterministic status validation and OCC claim semantics.
   - Optional JSON config: `cyberagent taiga worker --config path/to/worker.json`.
 
+### Planka worker
+
+- **`cyberagent planka worker --loop`** (default) or **`cyberagent planka worker --once --max-cards N`**
+  - Runs the operational Planka worker loop using list-name transitions
+    (`pending` -> `in_progress` -> terminal list).
+  - Optional JSON config: `cyberagent planka worker --config path/to/worker.json`.
+
 ## Moved to standalone repository
 
 The GitHub issue stage-label workflow engine was extracted from this repository.
