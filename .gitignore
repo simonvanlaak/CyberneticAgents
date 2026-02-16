@@ -12,6 +12,7 @@ venv/
 data/last_team.json
 logs/
 docker_cli_executor/
+.autopilot.lock
 env/
 ENV/
 .venv
