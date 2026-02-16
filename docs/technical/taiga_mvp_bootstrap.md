@@ -1,22 +1,31 @@
 # Taiga MVP bootstrap (CyberneticAgents)
 
-Ticket: #120
+Ticket: #119
 
-Goal: run a self-hosted Taiga instance (Docker) and bootstrap a single project used as the MVP task backend.
+Goal: run a unified self-hosted stack (Taiga + CyberneticAgents) with a single root `docker-compose.yml` and one `.env` contract.
 
-## Bring up Taiga (Docker)
+## Bring up unified stack (Docker)
 
 ```bash
 cd /root/.openclaw/workspace/CyberneticAgents
-cp .env.taiga.example .env.taiga
-# Edit .env.taiga (secrets, domain)
+cp .env.example .env
+# Edit .env (secrets + required placeholders)
 
-docker compose --env-file .env.taiga -f docker-compose.taiga.yml up -d
+docker compose up -d --build
 ```
 
 Open Taiga:
 
-- `http://<host>:9000` (or whatever `TAIGA_PUBLIC_PORT` is)
+- `http://<host>:${TAIGA_PUBLIC_PORT:-9000}`
+
+## Health checks
+
+```bash
+docker compose ps
+curl -fsS "http://127.0.0.1:${TAIGA_PUBLIC_PORT:-9000}/api/v1/"
+docker compose logs --tail=100 taiga-back
+docker compose logs --tail=100 cyberagent
+```
 
 ## MVP bootstrap checklist
 
@@ -32,7 +41,7 @@ Create two users:
 - `taiga-admin@local` (admin/bootstrap)
 - `taiga-bot@local` (runtime / least privilege)
 
-Store passwords in 1Password.
+Store credentials in 1Password.
 
 ### 3) Task statuses (match CyberneticAgents Status enum)
 
@@ -57,4 +66,5 @@ This links a Taiga task back to the current CA initiative.
 ## Notes
 
 - SMTP/email is intentionally skipped for MVP.
-- #114 PoC bridge implementation is documented in `docs/technical/taiga_adapter_poc.md` and runnable via `python -m scripts.taiga_poc_bridge`.
+- #114 PoC bridge implementation is documented in `docs/technical/taiga_adapter_poc.md`.
+- Runtime worker-loop hardening is tracked separately in #124.

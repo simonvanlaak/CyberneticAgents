@@ -13,7 +13,7 @@ This PoC validates the thin Taiga bridge loop for CyberneticAgents:
 - This document covers **adapter/workflow PoC code only**.
 - Taiga self-host/bootstrap infra is documented separately in:
   - `docs/technical/taiga_mvp_bootstrap.md`
-  - `docker-compose.taiga.yml`
+  - `docker-compose.yml`
 
 ## Required environment
 

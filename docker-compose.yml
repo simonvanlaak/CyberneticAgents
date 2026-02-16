@@ -1,24 +1,9 @@
-# Legacy Taiga-only compose file (kept for reference).
+# Unified MVP stack: Taiga + CyberneticAgents runtime
 #
-# Preferred runtime stack: use root docker-compose.yml with a single .env contract
-# (Taiga + CyberneticAgents together).
-#
-# If you only need Taiga services for isolated local testing, this file remains
-# available as a minimal subset.
-#
-# Then open:
-#   http://<host>:${TAIGA_PUBLIC_PORT:-9000}
-#
-# References:
-# - Taiga upstream docker repo/docs change over time; keep this file simple.
-#
-# SMTP intentionally omitted for MVP (no outbound email).
-# Defaults are dev-ish; put secrets in .env and DO NOT commit.
-#
-# Example:
-#   docker compose -f docker-compose.taiga.yml up -d
-#
-# Ticket lineage: originally added for #120, superseded by #119 unified stack.
+# Usage:
+#   cp .env.example .env
+#   # fill required secrets/placeholders in .env
+#   docker compose up -d
 
 services:
   taiga-db:
@@ -43,7 +28,6 @@ services:
       RABBITMQ_DEFAULT_PASS: ${TAIGA_RABBIT_PASSWORD:-change_me}
     restart: unless-stopped
 
-  # Backend (Django API)
   taiga-back:
     image: taigaio/taiga-back:latest
     depends_on:
@@ -51,33 +35,26 @@ services:
       - taiga-redis
       - taiga-rabbit
     environment:
-      # Minimal required settings.
       TAIGA_SECRET_KEY: ${TAIGA_SECRET_KEY:-change_me}
       TAIGA_SITES_SCHEME: http
       TAIGA_SITES_DOMAIN: ${TAIGA_SITES_DOMAIN:-localhost:${TAIGA_PUBLIC_PORT:-9000}}
-
       POSTGRES_DB: ${TAIGA_DB_NAME:-taiga}
       POSTGRES_USER: ${TAIGA_DB_USER:-taiga}
       POSTGRES_PASSWORD: ${TAIGA_DB_PASSWORD:-change_me}
       POSTGRES_HOST: taiga-db
       POSTGRES_PORT: 5432
-
       REDIS_HOST: taiga-redis
       REDIS_PORT: 6379
-
       RABBITMQ_USER: ${TAIGA_RABBIT_USER:-taiga}
       RABBITMQ_PASS: ${TAIGA_RABBIT_PASSWORD:-change_me}
       RABBITMQ_HOST: taiga-rabbit
       RABBITMQ_PORT: 5672
-
-      # Disable email for MVP.
       EMAIL_BACKEND: django.core.mail.backends.console.EmailBackend
     volumes:
       - taiga_media:/taiga/media
       - taiga_static:/taiga/static
     restart: unless-stopped
 
-  # Events (websockets)
   taiga-events:
     image: taigaio/taiga-events:latest
     depends_on:
@@ -89,7 +66,6 @@ services:
       RABBITMQ_PORT: 5672
     restart: unless-stopped
 
-  # Frontend
   taiga-front:
     image: taigaio/taiga-front:latest
     depends_on:
@@ -98,7 +74,26 @@ services:
       - "127.0.0.1:${TAIGA_PUBLIC_PORT:-9000}:80"
     restart: unless-stopped
 
+  cyberagent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - taiga-back
+    env_file:
+      - .env
+    environment:
+      CYBERAGENT_DB_URL: ${CYBERAGENT_DB_URL:-sqlite:///data/CyberneticAgents.db}
+      CYBERAGENT_ACTIVE_TEAM_ID: ${CYBERAGENT_ACTIVE_TEAM_ID:-1}
+    command: ["python", "-m", "src.cyberagent.cli.cyberagent", "serve"]
+    volumes:
+      - cyberagent_data:/app/data
+      - cyberagent_logs:/app/logs
+    restart: unless-stopped
+
 volumes:
   taiga_db:
   taiga_media:
   taiga_static:
+  cyberagent_data:
+  cyberagent_logs:

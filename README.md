@@ -60,6 +60,27 @@ Copy and adjust local env config:
 cp .env.example .env
 ```
 
+## Unified Docker stack (Taiga + CyberneticAgents)
+
+Bring up the full MVP stack from repo root:
+
+```bash
+docker compose up -d --build
+```
+
+Quick health checks:
+
+```bash
+docker compose ps
+curl -fsS "http://127.0.0.1:${TAIGA_PUBLIC_PORT:-9000}/api/v1/"
+docker compose logs --tail=100 taiga-back
+docker compose logs --tail=100 cyberagent
+```
+
+Detailed bootstrap/runbook:
+
+- `docs/technical/taiga_mvp_bootstrap.md`
+
 ---
 
 ## Run the system
