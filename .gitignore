@@ -85,5 +85,14 @@ pip-delete-this-directory.txt
 .pre-commit-cache/
 
 .env.taiga
+
+# Autopilot / local agent state
+.autopilot.lock
+.tmp/
+done
+in_progress
+in_review
+pending
+
 .tmp/obsidian_maya_last_hash.txt
 
