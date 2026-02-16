@@ -32,8 +32,8 @@ if [[ -x ".venv/bin/basedpyright" ]]; then
   BASEDPYRIGHT_BIN=".venv/bin/basedpyright"
 fi
 
-# Staged Python files
-staged_py_files=$(git diff --cached --name-only --diff-filter=ACM | rg '\.py$' || true)
+# Staged Python files (avoid ripgrep dependency)
+staged_py_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.py$' || true)
 
 if [[ -n "${staged_py_files}" ]]; then
   echo "Running black --check on staged Python files..."
@@ -50,17 +50,17 @@ else
   echo "No staged Python files for black/ruff/basedpyright."
 fi
 
-# Staged test files only
-staged_test_files=$(git diff --cached --name-only --diff-filter=ACM | rg '^tests/.*\.py$' || true)
+# Staged test files only (avoid ripgrep dependency)
+staged_test_files=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^tests/.*\.py$' || true)
 coverage_anchor="tests/tools/test_cli_executor_coverage.py"
 if [[ -n "${staged_test_files}" ]]; then
-  if ! echo "${staged_test_files}" | rg -q "^${coverage_anchor}$"; then
+  if ! echo "${staged_test_files}" | grep -qx "${coverage_anchor}"; then
     staged_test_files="${staged_test_files} ${coverage_anchor}"
   fi
 fi
 
 if [[ -n "${staged_test_files}" ]]; then
-  staged_cov_targets=$(git diff --cached --name-only --diff-filter=ACM | rg '^src/.*\.py$' || true)
+  staged_cov_targets=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^src/.*\.py$' || true)
   cov_args=""
   if [[ -n "${staged_cov_targets}" ]]; then
     while IFS= read -r file; do
