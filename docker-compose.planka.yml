@@ -1,0 +1,54 @@
+# Planka MVP stack (IP-only)
+#
+# Usage:
+#   cp .env.example .env
+#   # Set PLANKA_BASE_URL + PLANKA_SECRET_KEY + PLANKA_DB_PASSWORD (and optionally admin defaults)
+#   docker compose -f docker-compose.planka.yml --env-file .env up -d
+#
+# Notes:
+# - Exposes Planka on 0.0.0.0 so you can access it via the server IP.
+
+services:
+  planka-db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${PLANKA_DB_NAME:-planka}
+      POSTGRES_USER: ${PLANKA_DB_USER:-planka}
+      POSTGRES_PASSWORD: ${PLANKA_DB_PASSWORD:-change_me}
+    volumes:
+      - planka_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PLANKA_DB_USER:-planka} -d ${PLANKA_DB_NAME:-planka}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  planka:
+    image: ghcr.io/plankanban/planka:latest
+    restart: unless-stopped
+    depends_on:
+      planka-db:
+        condition: service_healthy
+    ports:
+      - "${PLANKA_PUBLIC_BIND:-0.0.0.0}:${PLANKA_PUBLIC_PORT:-3000}:1337"
+    volumes:
+      - planka_data:/app/data
+    environment:
+      # For IP-only deployments, set this to something like:
+      #   http://<SERVER_IP>:3000
+      BASE_URL: ${PLANKA_BASE_URL:-http://localhost:3000}
+      DATABASE_URL: postgresql://${PLANKA_DB_USER:-planka}:${PLANKA_DB_PASSWORD:-change_me}@planka-db:5432/${PLANKA_DB_NAME:-planka}
+
+      # Required (set to a long random string).
+      SECRET_KEY: ${PLANKA_SECRET_KEY:-change_me}
+
+      # Optional: seed a default admin.
+      DEFAULT_ADMIN_EMAIL: ${PLANKA_DEFAULT_ADMIN_EMAIL:-}
+      DEFAULT_ADMIN_PASSWORD: ${PLANKA_DEFAULT_ADMIN_PASSWORD:-}
+      DEFAULT_ADMIN_NAME: ${PLANKA_DEFAULT_ADMIN_NAME:-}
+      DEFAULT_ADMIN_USERNAME: ${PLANKA_DEFAULT_ADMIN_USERNAME:-}
+
+volumes:
+  planka_db:
+  planka_data:
