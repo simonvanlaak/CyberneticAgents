@@ -31,6 +31,7 @@ dependencies = [
   "requests",
   "qrcode",
   "streamlit",
+  "plankapy>=2.2.2",
 ]
 
 [project.scripts]
