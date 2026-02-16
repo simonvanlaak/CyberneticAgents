@@ -4,7 +4,7 @@ import json
 from typing import Any
 
 from src.cyberagent.services import policies as policy_service
-from src.cyberagent.ui.kanban_data import TaskCard, load_task_detail
+from src.cyberagent.services.task_data import TaskDetailView, load_task_detail
 
 
 def render_task_detail(task_id: int) -> str | None:
@@ -15,7 +15,7 @@ def render_task_detail(task_id: int) -> str | None:
     return _format_task_detail(task)
 
 
-def _format_task_detail(task: TaskCard) -> str:
+def _format_task_detail(task: TaskDetailView) -> str:
     lines = [
         f"Task #{task.id}: {task.name}",
         f"- Status: `{task.status}`",

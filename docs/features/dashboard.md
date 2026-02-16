@@ -1,22 +1,26 @@
 # Dashboard Feature
 
 ## Overview
-The dashboard is a local read-only Streamlit UI for viewing operational state.
-It provides Kanban and team views, plus task drill-down details, without
-mutating runtime data.
+The dashboard is a local read-only Streamlit UI for operational visibility
+outside of task-board management.
+
+Task-board operations now live in **Taiga UI** and are opened via:
+
+```bash
+cyberagent kanban
+```
 
 ## Core Capabilities
-- **Kanban board**: Groups tasks by team/purpose/strategy/initiative and status.
-- **Task filters**: Filter by team, strategy, initiative, and assignee.
-- **Task details page**: Click a task card to open a dedicated detail page.
-- **Case judgement visibility**: Shows persisted policy review case judgements per task.
 - **Teams page**: Shows teams, members, and their policy/permission summaries.
-- **Log badge**: Displays warning/error counts from the latest runtime log file.
+- **Inbox page**: Shows user prompts, system questions/responses, and supports
+  answering pending questions.
+- **Memory page**: Shows searchable/paginated memory entries.
+- **Log badge**: Displays warning/error counts from runtime logs.
 
 ## UI Pages
-- `Kanban`: Main task board and task table.
 - `Teams`: Team and member overview.
-- `Task Details`: Selected task metadata, content, result, and case judgement.
+- `Inbox`: Message and pending-question visibility.
+- `Memory`: Memory inspection and filtering.
 
 ## Runtime Behavior
 - `cyberagent dashboard` starts Streamlit for `src/cyberagent/ui/dashboard.py`.
@@ -24,23 +28,19 @@ mutating runtime data.
   it falls back to repo-local `.venv/bin/python` when available.
 - If Streamlit is unavailable in both locations, the CLI exits with a clear
   install instruction.
-
-## Data Model Notes
-- Task cards are read from SQLite with hierarchy joins.
-- Task detail includes:
-  - `id`, `status`, `assignee`, `name`, `content`, `result`
-  - team/purpose/strategy/initiative identifiers and names
-  - `case_judgement` (JSON payload persisted from System3 policy review)
+- `cyberagent kanban` opens (or prints) the Taiga UI URL.
 
 ## How to Test
 - `python3 -m pytest tests/cli/test_dashboard_command.py -q`
-- `python3 -m pytest tests/cyberagent/test_kanban_data.py -q`
+- `python3 -m pytest tests/cli/test_kanban_command.py -q`
+- `python3 -m pytest tests/cyberagent/test_dashboard_ui.py -q`
 - `python3 -m pytest tests/cyberagent/test_dashboard_log_badge.py -q`
 
 ## File Map
 - `src/cyberagent/ui/dashboard.py`
-- `src/cyberagent/ui/kanban_data.py`
 - `src/cyberagent/cli/cyberagent.py`
+- `src/cyberagent/cli/kanban.py`
 - `tests/cli/test_dashboard_command.py`
-- `tests/cyberagent/test_kanban_data.py`
+- `tests/cli/test_kanban_command.py`
+- `tests/cyberagent/test_dashboard_ui.py`
 - `tests/cyberagent/test_dashboard_log_badge.py`

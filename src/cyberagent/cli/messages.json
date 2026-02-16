@@ -195,6 +195,8 @@
     "model_output_parse_failed": "Model output could not be parsed. Try rephrasing the request or using a more explicit payload.",
     "runtime_shutdown_timed_out": "Runtime shutdown timed out; exiting anyway.",
     "streamlit_missing": "Streamlit is not installed in this Python environment. Install dependencies with 'python3 -m pip install -e .' and retry.",
+    "kanban_opening": "Taiga UI: {taiga_url}",
+    "kanban_open_manual": "Could not open a browser automatically. Open this URL manually: {taiga_url}",
     "payload_required": "payload is required",
     "yaml_requires_pyyaml": "YAML support requires PyYAML"
   },

@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import argparse
 
-from src.cyberagent.cli.constants import DASHBOARD_COMMAND, SERVE_COMMAND
+from src.cyberagent.cli.constants import (
+    DASHBOARD_COMMAND,
+    KANBAN_COMMAND,
+    SERVE_COMMAND,
+)
 from src.cyberagent.cli.onboarding_args import add_onboarding_args
 from src.cyberagent.cli.pairing import add_pairing_parser
 from src.cyberagent.cli.transcribe import add_transcribe_parser
@@ -40,6 +44,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     subparsers.add_parser(
         DASHBOARD_COMMAND, help="Open the local read-only Streamlit dashboard."
+    )
+    subparsers.add_parser(
+        KANBAN_COMMAND,
+        help="Open the Taiga Kanban UI in your browser.",
     )
     add_onboarding_args(subparsers)
     add_pairing_parser(subparsers)

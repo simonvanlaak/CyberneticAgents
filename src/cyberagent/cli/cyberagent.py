@@ -33,6 +33,7 @@ from src.cli_session import list_inbox_entries
 from src.cyberagent.channels.telegram.parser import build_session_id
 from src.cyberagent.cli import dev as dev_cli
 from src.cyberagent.cli import dashboard_launcher
+from src.cyberagent.cli import kanban as kanban_cli
 from src.cyberagent.cli.env_loader import load_op_service_account_token
 from src.cyberagent.cli import log_filters
 from src.cyberagent.cli.log_session import get_session_log_files
@@ -42,6 +43,7 @@ from src.cyberagent.cli.cyberagent_helpers import handle_help, handle_login
 from src.cyberagent.cli.constants import (
     DASHBOARD_COMMAND,
     INBOX_COMMAND,
+    KANBAN_COMMAND,
     INBOX_HINT_COMMAND,
     KEYRING_SERVICE,
     ParsedSuggestion,
@@ -120,6 +122,10 @@ def _handle_ui(_: argparse.Namespace) -> int:
         env=os.environ.copy(),
     )
     return int(result.returncode)
+
+
+def _handle_kanban(_: argparse.Namespace) -> int:
+    return kanban_cli.handle_kanban_command()
 
 
 async def _handle_restart(args: argparse.Namespace) -> int:
@@ -711,6 +717,7 @@ _HANDLERS = {
     "restart": _handle_restart,
     "stop": _handle_stop,
     DASHBOARD_COMMAND: _handle_ui,
+    KANBAN_COMMAND: _handle_kanban,
     "status": _handle_status,
     "task": _handle_task,
     "onboarding": _handle_onboarding,

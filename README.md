@@ -137,6 +137,12 @@ Use exactly one stage label per issue:
 
 **No GitHub Projects v2 queue is used for active automation flow.**
 
+### Task board of record
+
+- The operational task board is **Taiga UI**.
+- Open it with `cyberagent kanban`.
+- `cyberagent dashboard` remains a read-only operational view (teams/inbox/memory), not a task board.
+
 ---
 
 ## Architecture and directory layout

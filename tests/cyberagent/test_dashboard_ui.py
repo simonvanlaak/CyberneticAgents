@@ -390,91 +390,6 @@ def test_render_inbox_page_answers_only_first_pending_question(monkeypatch) -> N
     assert fake_st.success_messages == ["Answer submitted for question #30."]
 
 
-def test_render_task_details_shows_status_reasoning(monkeypatch) -> None:
-    writes: list[object] = []
-    markdown_blocks: list[str] = []
-    dataframe_data: list[object] = []
-
-    class _TitleCol:
-        def __enter__(self):
-            return self
-
-        def __exit__(self, exc_type, exc, tb):
-            return False
-
-    class _TaskDetailStreamlit:
-        def __init__(self) -> None:
-            self.session_state = {
-                "dashboard_selected_task_id": 101,
-                "dashboard_page": "Task Details",
-            }
-
-        def title(self, _text: str) -> None:
-            return None
-
-        def info(self, _text: str) -> None:
-            return None
-
-        def error(self, _text: str) -> None:
-            return None
-
-        def subheader(self, _text: str) -> None:
-            return None
-
-        def markdown(self, text: str) -> None:
-            markdown_blocks.append(text)
-
-        def write(self, text: object) -> None:
-            writes.append(text)
-
-        def dataframe(self, data: object, **_kwargs: object) -> None:
-            dataframe_data.append(data)
-
-        def button(self, _text: str) -> bool:
-            return False
-
-        def rerun(self) -> None:
-            return None
-
-    task = type(
-        "Task",
-        (),
-        {
-            "id": 101,
-            "name": "Task needing unblock",
-            "status": "blocked",
-            "reasoning": "Waiting for OAuth credentials from ops.",
-            "assignee": "System1/root",
-            "team_name": "team-a",
-            "team_id": 1,
-            "purpose_name": "purpose-a",
-            "strategy_name": "strategy-a",
-            "initiative_name": "initiative-a",
-            "initiative_id": 5,
-            "follow_up_task_id": 202,
-            "replaces_task_id": 99,
-            "content": "Do work",
-            "result": None,
-            "execution_log": '[{"type":"ToolCallExecutionEvent","name":"task_search"}]',
-            "case_judgement": None,
-        },
-    )()
-    monkeypatch.setattr(dashboard, "load_task_detail", lambda _task_id: task)
-    monkeypatch.setattr(dashboard, "_render_case_judgement", lambda *_args: None)
-
-    st = _TaskDetailStreamlit()
-    dashboard._render_task_details_page(st, _TitleCol())
-
-    assert "Waiting for OAuth credentials from ops." in writes
-    assert any("Follow-up Task ID: `202`" in block for block in markdown_blocks)
-    assert any("Replaces Task ID: `99`" in block for block in markdown_blocks)
-    assert len(dataframe_data) == 1
-    rows = dataframe_data[0]
-    assert isinstance(rows, list)
-    assert rows[0]["type"] == "ToolCallExecutionEvent"
-    assert rows[0]["tool"] == "task_search"
-    assert "task_search" in str(rows[0]["summary"])
-
 
 def test_render_execution_log_fallbacks_to_code_for_invalid_json() -> None:
     fake_st = _FakeStreamlit()
@@ -615,3 +530,82 @@ def test_select_page_with_buttons_updates_when_clicked() -> None:
     )
 
     assert selected == "Inbox"
+
+
+
+def test_render_board_excludes_kanban_page(monkeypatch) -> None:
+    captured_pages: dict[str, list[str]] = {}
+
+    class _Sidebar:
+        def markdown(self, _text: str) -> None:
+            return None
+
+        def caption(self, _text: str) -> None:
+            return None
+
+        def button(
+            self,
+            _label: str,
+            key: str | None = None,
+            use_container_width: bool = False,
+        ) -> bool:
+            _ = (key, use_container_width)
+            return False
+
+        def selectbox(self, _label: str, options: list[object], format_func=None):
+            _ = format_func
+            return options[0]
+
+        def text_input(self, _label: str, value: str = "") -> str:
+            return value
+
+        def number_input(
+            self,
+            _label: str,
+            min_value: int = 0,
+            max_value: int = 1000,
+            value: int = 0,
+            step: int = 1,
+        ) -> int:
+            _ = (min_value, max_value, step)
+            return value
+
+    class _Column:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb) -> bool:
+            return False
+
+    class _FakeStreamlit:
+        def __init__(self) -> None:
+            self.sidebar = _Sidebar()
+            self.session_state: dict[str, object] = {}
+
+        def set_page_config(self, **_kwargs: object) -> None:
+            return None
+
+        def columns(self, _spec: list[int]):
+            return (_Column(), _Column())
+
+        def markdown(self, _text: str) -> None:
+            return None
+
+        def title(self, _text: str) -> None:
+            return None
+
+    fake_st = _FakeStreamlit()
+
+    def _capture_pages(_st: object, pages: list[str], current_page: str) -> str:
+        _ = current_page
+        captured_pages["pages"] = pages
+        return "Teams"
+
+    monkeypatch.setattr(dashboard, "_load_streamlit", lambda: fake_st)
+    monkeypatch.setattr(dashboard, "count_warnings_errors", lambda _path: (0, 0))
+    monkeypatch.setattr(dashboard, "_select_page_with_buttons", _capture_pages)
+    monkeypatch.setattr(dashboard, "render_teams_page", lambda _st: None)
+
+    dashboard.render_board()
+
+    assert "Kanban" not in captured_pages["pages"]

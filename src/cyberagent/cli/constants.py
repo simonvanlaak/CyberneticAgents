@@ -6,6 +6,7 @@ from typing import Any
 KEYRING_SERVICE = "cyberagent-cli"
 SERVE_COMMAND = "serve"
 DASHBOARD_COMMAND = "dashboard"
+KANBAN_COMMAND = "kanban"
 TEST_START_ENV = "CYBERAGENT_TEST_NO_RUNTIME"
 SUGGEST_COMMAND = 'cyberagent suggest "Describe the task"'
 START_COMMAND = "cyberagent start"
