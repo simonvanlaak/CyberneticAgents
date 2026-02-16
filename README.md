@@ -1,21 +1,29 @@
 # CyberneticAgents
 
-CyberneticAgents is a VSM-inspired multi-agent system built with AutoGen Core, Casbin RBAC, and a CLI-first runtime.
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Architecture: VSM](https://img.shields.io/badge/architecture-viable%20systems%20model-6f42c1)](docs/discoverability.md)
 
-It models Systems 1/3/4/5 as cooperating agents and enforces role boundaries for cross-agent actions.
+CyberneticAgents is an **agentic multi-agent runtime** grounded in **cybernetics**, **Stafford Beer**'s **Viable Systems Model (VSM)**, and practical **systems theory**.
 
-## Current status
+Built with **AutoGen Core** and **Casbin RBAC**, it models Systems 1/3/4/5 as cooperating agents and enforces role boundaries for cross-agent actions.
+
+## What it includes
 
 - Multi-agent runtime (AutoGen Core + AgentChat)
 - VSM roles implemented: System 1, 3, 4, 5
-- Casbin RBAC enforcement for delegation/tool actions
-- SQLite-backed domain data and policy data
+- Casbin RBAC authorization for delegation/tool actions
 - CLI-first workflows, optional Telegram interaction
-- Label-driven GitHub issue automation for implementation flow
+- Label-driven GitHub issue-stage workflow for implementation automation
+- Taiga-backed operational task board flow (MVP migration path)
 
 ---
 
 ## Quick start
+
+Docs entry points:
+- `docs/README.md` (entrypoint)
+- `docs/discoverability.md` (keywords + architecture context)
 
 ## Prerequisites
 
