@@ -43,7 +43,7 @@ def get_model_client(
     agent_id: AgentId,
     structured_output: bool,
 ) -> OpenAIChatCompletionClient:
-    provider = os.environ.get("LLM_PROVIDER", "groq").lower()
+    provider = os.environ.get("LLM_PROVIDER", "openai").lower()
     if provider == "openai":
         model = os.environ.get("OPENAI_MODEL", "gpt-5-nano-2025-08-07")
         base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com/v1")

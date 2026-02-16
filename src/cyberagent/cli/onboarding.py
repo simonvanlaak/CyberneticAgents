@@ -90,6 +90,7 @@ TOOL_SECRET_DOC_HINTS = {
 }
 FEATURE_READY_MESSAGE_KEYS = {
     "BRAVE_API_KEY": "feature_web_search",
+    "OPENAI_API_KEY": "feature_ai_ready",
     "GROQ_API_KEY": "feature_ai_ready",
     "MISTRAL_API_KEY": "feature_ai_ready",
     "TELEGRAM_BOT_TOKEN": "feature_telegram",
@@ -462,61 +463,51 @@ def _print_feature_ready(env_name: str, skills: list[str] | None = None) -> None
 
 
 def _check_llm_credentials() -> bool:
-    if not os.environ.get("GROQ_API_KEY"):
+    provider = os.environ.get("LLM_PROVIDER", "openai").lower()
+
+    if provider == "mistral":
+        required_env = "MISTRAL_API_KEY"
+        missing_key_msg = "missing_mistral"
+        description = "Mistral API key"
+    elif provider == "groq":
+        required_env = "GROQ_API_KEY"
+        missing_key_msg = "missing_groq"
+        description = "Groq API key"
+    else:
+        # Default to OpenAI everywhere (Groq remains optional).
+        required_env = "OPENAI_API_KEY"
+        missing_key_msg = "missing_openai"
+        description = "OpenAI API key"
+
+    if not os.environ.get(required_env):
         loaded = _load_secret_from_1password(
             vault_name=VAULT_NAME,
-            item_name="GROQ_API_KEY",
+            item_name=required_env,
             field_label="credential",
         )
         if loaded:
-            _print_feature_ready("GROQ_API_KEY")
+            _print_feature_ready(required_env)
             return True
-        print(get_message("onboarding", "missing_groq"))
+
+        print(get_message("onboarding", missing_key_msg))
         print(
             get_message(
                 "onboarding",
                 "llm_key_hint",
                 vault_name=VAULT_NAME,
-                key_name="GROQ_API_KEY",
+                key_name=required_env,
             )
         )
         print(get_message("onboarding", "field_name_hint"))
         if not prompt_store_secret_in_1password(
-            env_name="GROQ_API_KEY",
-            description="Groq API key",
+            env_name=required_env,
+            description=description,
             doc_hint=None,
             vault_name=VAULT_NAME,
         ):
             return False
-    _print_feature_ready("GROQ_API_KEY")
-    if os.environ.get("LLM_PROVIDER", "groq").lower() == "mistral":
-        if not os.environ.get("MISTRAL_API_KEY"):
-            loaded = _load_secret_from_1password(
-                vault_name=VAULT_NAME,
-                item_name="MISTRAL_API_KEY",
-                field_label="credential",
-            )
-            if loaded:
-                _print_feature_ready("MISTRAL_API_KEY")
-                return True
-            print(get_message("onboarding", "missing_mistral"))
-            print(
-                get_message(
-                    "onboarding",
-                    "llm_key_hint",
-                    vault_name=VAULT_NAME,
-                    key_name="MISTRAL_API_KEY",
-                )
-            )
-            print(get_message("onboarding", "field_name_hint"))
-            if not prompt_store_secret_in_1password(
-                env_name="MISTRAL_API_KEY",
-                description="Mistral API key",
-                doc_hint=None,
-                vault_name=VAULT_NAME,
-            ):
-                return False
-        _print_feature_ready("MISTRAL_API_KEY")
+
+    _print_feature_ready(required_env)
     return True
 
 

@@ -60,6 +60,7 @@
     "database_file_not_writable": "Database file is not writable: {path}",
     "feature_ready": "✓ {message}",
     "feature_skills_ready": "{skill_names} is now available.",
+    "missing_openai": "Missing OPENAI_API_KEY.",
     "missing_groq": "Missing GROQ_API_KEY.",
     "missing_mistral": "Missing MISTRAL_API_KEY.",
     "llm_key_hint": "CyberneticAgents stores LLM provider keys in 1Password. Create a vault named '{vault_name}' and add an item named {key_name}.",

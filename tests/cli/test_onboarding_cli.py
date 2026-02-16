@@ -545,11 +545,11 @@ def test_handle_onboarding_does_not_enqueue_system3_work_on_restart(
     assert queued == []
 
 
-def test_technical_onboarding_requires_groq_key(
+def test_technical_onboarding_requires_openai_key(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.delenv("GROQ_API_KEY", raising=False)
-    monkeypatch.setenv("LLM_PROVIDER", "groq")
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
     monkeypatch.setattr(
         onboarding_cli,
         "_load_secret_from_1password",
@@ -580,14 +580,14 @@ def test_technical_onboarding_requires_groq_key(
     assert onboarding_cli.run_technical_onboarding_checks() is False
     captured = capsys.readouterr().out
     assert "Activating features..." in captured
-    assert "GROQ_API_KEY" in captured
+    assert "OPENAI_API_KEY" in captured
 
 
 def test_technical_onboarding_requires_onepassword_auth(
     monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
 ) -> None:
-    monkeypatch.setenv("GROQ_API_KEY", "test")
-    monkeypatch.setenv("LLM_PROVIDER", "groq")
+    monkeypatch.setenv("OPENAI_API_KEY", "test")
+    monkeypatch.setenv("LLM_PROVIDER", "openai")
     monkeypatch.setattr(onboarding_cli, "_is_path_writable", lambda *_: True)
     monkeypatch.setattr(onboarding_cli, "_check_path_writable", lambda *_: True)
     monkeypatch.setattr(onboarding_cli, "check_docker_socket_access", lambda: True)
