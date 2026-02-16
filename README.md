@@ -15,7 +15,7 @@ Built with **AutoGen Core** and **Casbin RBAC**, it models Systems 1/3/4/5 as co
 - Casbin RBAC authorization for delegation/tool actions
 - CLI-first workflows, optional Telegram interaction
 - Label-driven GitHub issue-stage workflow for implementation automation
-- Taiga-backed operational task board flow (MVP migration path)
+- Planka-backed operational task board flow
 
 ---
 
@@ -69,26 +69,26 @@ Copy and adjust local env config:
 cp .env.example .env
 ```
 
-## Unified Docker stack (Taiga + CyberneticAgents)
+## Unified Docker stack (Planka + CyberneticAgents)
 
 Bring up the full MVP stack from repo root:
 
 ```bash
-docker compose up -d --build
+docker compose -f docker-compose.planka.yml up -d --build
 ```
 
 Quick health checks:
 
 ```bash
-docker compose ps
-curl -fsS "http://127.0.0.1:${TAIGA_PUBLIC_PORT:-9000}/api/v1/"
-docker compose logs --tail=100 taiga-back
-docker compose logs --tail=100 cyberagent
+docker compose -f docker-compose.planka.yml ps
+curl -fsS "http://127.0.0.1:${PLANKA_PUBLIC_PORT:-3000}/"
+docker compose -f docker-compose.planka.yml logs --tail=100 planka
+docker compose -f docker-compose.planka.yml logs --tail=100 cyberagent
 ```
 
 Detailed bootstrap/runbook:
 
-- `docs/technical/taiga_mvp_bootstrap.md`
+- `docs/technical/planka_compose_ops_runbook_2026-02-16.md`
 
 ---
 
@@ -148,7 +148,7 @@ Use exactly one stage label per issue:
 
 ### Task board of record
 
-- The operational task board is **Taiga UI**.
+- The operational task board is **Planka**.
 - Open it with `cyberagent kanban`.
 - `cyberagent dashboard` remains a read-only operational view (teams/inbox/memory), not a task board.
 

@@ -1,5 +1,8 @@
 # Taiga adapter PoC runbook
 
+> **DEPRECATED — LEGACY**: Taiga has been replaced by Planka as the operational task board. This document is kept for historical reference only. See `docs/technical/planka_compose_ops_runbook_2026-02-16.md` for the current runbook.
+
+
 Ticket: #114
 
 This PoC validates the thin Taiga bridge loop for CyberneticAgents:

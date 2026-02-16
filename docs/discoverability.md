@@ -13,7 +13,7 @@ It combines those concepts with current engineering tools:
 - AutoGen Core for agent orchestration
 - Casbin RBAC for policy/authorization
 - GitHub issue-stage workflow for implementation queueing
-- Taiga as operational task board (MVP migration path)
+- Planka as operational task board
 
 ## What CyberneticAgents is
 

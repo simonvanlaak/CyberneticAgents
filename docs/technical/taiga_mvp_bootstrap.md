@@ -1,5 +1,8 @@
 # Taiga MVP bootstrap (CyberneticAgents)
 
+> **DEPRECATED — LEGACY**: Taiga has been replaced by Planka as the operational task board. This document is kept for historical reference only. See `docs/technical/planka_compose_ops_runbook_2026-02-16.md` for the current runbook.
+
+
 Ticket: #119
 
 Goal: run a unified self-hosted stack (Taiga + CyberneticAgents) with a single root `docker-compose.yml` and one `.env` contract.
