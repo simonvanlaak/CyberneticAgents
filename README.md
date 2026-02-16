@@ -50,8 +50,9 @@ uv tool install -e .
 CyberneticAgents expects secrets from 1Password at runtime.
 Create a vault named `CyberneticAgents` and add items (with a `credential` field):
 
-- `GROQ_API_KEY` (required)
+- `OPENAI_API_KEY` (required by default)
 - `BRAVE_API_KEY` (required for web search)
+- `GROQ_API_KEY` (only if `LLM_PROVIDER=groq`)
 - `MISTRAL_API_KEY` (only if `LLM_PROVIDER=mistral`)
 - optional: `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGSMITH_API_KEY`
 - optional: `TELEGRAM_BOT_TOKEN`

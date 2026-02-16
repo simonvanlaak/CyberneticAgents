@@ -32,8 +32,8 @@ class LLMConfig:
         api_type: API type for Mistral (Mistral-specific)
     """
 
-    provider: str = "groq"
-    model: str = "llama-3.3-70b-versatile"
+    provider: str = "openai"
+    model: str = "gpt-5-nano-2025-08-07"
     api_key: str = ""
     temperature: float = 0.7
     max_tokens: int = 4096
@@ -82,7 +82,7 @@ def load_llm_config() -> LLMConfig:
         LLMConfig instance with loaded configuration
     """
     # Determine provider from environment or use default
-    provider = os.environ.get("LLM_PROVIDER", "groq").lower()
+    provider = os.environ.get("LLM_PROVIDER", "openai").lower()
 
     # Load API keys
     groq_api_key = get_secret("GROQ_API_KEY") or ""

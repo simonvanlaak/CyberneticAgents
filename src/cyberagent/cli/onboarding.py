@@ -350,10 +350,11 @@ def run_technical_onboarding_checks(*, pkm_source: str | None = None) -> bool:
 
 
 def _collect_technical_onboarding_state(*, pkm_source: str | None = None) -> dict[str, object]:
-    llm_provider = os.environ.get("LLM_PROVIDER", "groq").lower()
+    llm_provider = os.environ.get("LLM_PROVIDER", "openai").lower()
     return {
         "llm_provider": llm_provider,
         "pkm_source": pkm_source or "unknown",
+        "has_openai_key": bool(os.environ.get("OPENAI_API_KEY")),
         "has_groq_key": bool(os.environ.get("GROQ_API_KEY")),
         "has_mistral_key": bool(os.environ.get("MISTRAL_API_KEY")),
         "has_brave_key": bool(os.environ.get("BRAVE_API_KEY")),

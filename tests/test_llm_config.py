@@ -134,3 +134,17 @@ def test_load_llm_config_openai_requires_key(monkeypatch: pytest.MonkeyPatch) ->
 
     with pytest.raises(ValueError, match="OPENAI_API_KEY"):
         load_llm_config()
+
+
+def test_load_llm_config_defaults_to_openai_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("LLM_PROVIDER", raising=False)
+    monkeypatch.setenv("OPENAI_API_KEY", "test-openai-key")
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    monkeypatch.delenv("MISTRAL_API_KEY", raising=False)
+
+    config = load_llm_config()
+
+    assert config.provider == "openai"
+    assert config.api_key == "test-openai-key"
