@@ -16,11 +16,15 @@ Operational scripts that remain specific to CyberneticAgents.
   - Fetches/stores issue context under `.tmp/issues/`.
   - Optionally delegates to `scripts/issue_handlers/<issue_number>.sh`.
 
-### Taiga bridge PoC
+### Taiga bridge / worker
 
 - **`python -m scripts.taiga_poc_bridge`**
   - Runs a one-shot Taiga task bridge cycle (poll one assigned task + comment + status transition).
   - Reads `TAIGA_*` environment variables.
+
+- **`cyberagent taiga worker --loop`** (default) or **`cyberagent taiga worker --once --max-tasks N`**
+  - Runs the operational Taiga worker loop with deterministic status validation and OCC claim semantics.
+  - Optional JSON config: `cyberagent taiga worker --config path/to/worker.json`.
 
 ## Moved to standalone repository
 
