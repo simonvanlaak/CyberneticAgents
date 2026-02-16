@@ -57,4 +57,4 @@ This links a Taiga task back to the current CA initiative.
 ## Notes
 
 - SMTP/email is intentionally skipped for MVP.
-- Once Taiga is up, #114 will implement the Taiga-backed task repository/adapter.
+- #114 PoC bridge implementation is documented in `docs/technical/taiga_adapter_poc.md` and runnable via `python -m scripts.taiga_poc_bridge`.

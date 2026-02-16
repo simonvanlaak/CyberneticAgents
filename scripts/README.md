@@ -16,6 +16,12 @@ Operational scripts that remain specific to CyberneticAgents.
   - Fetches/stores issue context under `.tmp/issues/`.
   - Optionally delegates to `scripts/issue_handlers/<issue_number>.sh`.
 
+### Taiga bridge PoC
+
+- **`python -m scripts.taiga_poc_bridge`**
+  - Runs a one-shot Taiga task bridge cycle (poll one assigned task + comment + status transition).
+  - Reads `TAIGA_*` environment variables.
+
 ## Moved to standalone repository
 
 The GitHub issue stage-label workflow engine was extracted from this repository.
