@@ -14,10 +14,19 @@ fail() {
   exit 2
 }
 
-command -v python >/dev/null 2>&1 || fail "python not found (activate venv first)"
+PYTHON_BIN=""
+if command -v python >/dev/null 2>&1; then
+  PYTHON_BIN="python"
+elif command -v python3 >/dev/null 2>&1; then
+  PYTHON_BIN="python3"
+else
+  fail "python/python3 not found (activate venv first)"
+fi
+
 command -v cyberagent >/dev/null 2>&1 || fail "cyberagent entrypoint not found (is package installed?)"
 
-echo "[usability] python: $(python -V)"
+echo "[usability] python: $(${PYTHON_BIN} -V)"
+echo "[usability] python_bin: $(command -v ${PYTHON_BIN})"
 echo "[usability] cyberagent: $(command -v cyberagent)"
 
 echo "[usability] cyberagent --help"
@@ -46,7 +55,7 @@ echo "[usability] status exit code: $code"
 # Run fast CLI-focused tests if present.
 if [ -d tests/cli ]; then
   echo "[usability] pytest tests/cli"
-  python -m pytest -q tests/cli
+  ${PYTHON_BIN} -m pytest -q tests/cli
 fi
 
 echo "[usability] OK"
