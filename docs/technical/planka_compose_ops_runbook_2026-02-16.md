@@ -6,13 +6,19 @@ Ticket: #131
 
 This runbook targets the current Planka compose flow:
 - `docker-compose.planka.yml`
-- `.env` (from `.env.example`)
+- `.env.planka` (from `.env.planka.example`)
 
 This is intended for an **IP-only** deployment (no domain required).
 
 ## Required env placeholders
 
-Set in `.env` (do not commit real values):
+Initialize env file:
+
+```bash
+cp .env.planka.example .env.planka
+```
+
+Set in `.env.planka` (do not commit real values):
 - `PLANKA_BASE_URL=http://<SERVER_IP>:3000`
 - `PLANKA_SECRET_KEY=<long-random-string>`
 - `PLANKA_DB_PASSWORD=<strong-password>`
@@ -28,34 +34,34 @@ Optional first admin seed:
 Start services:
 
 ```bash
-docker compose -f docker-compose.planka.yml --env-file .env up -d
+docker compose -f docker-compose.planka.yml --env-file .env.planka up -d
 ```
 
 Stop services:
 
 ```bash
-docker compose -f docker-compose.planka.yml --env-file .env down
+docker compose -f docker-compose.planka.yml --env-file .env.planka down
 ```
 
 Restart services:
 
 ```bash
-docker compose -f docker-compose.planka.yml --env-file .env down
-docker compose -f docker-compose.planka.yml --env-file .env up -d
+docker compose -f docker-compose.planka.yml --env-file .env.planka down
+docker compose -f docker-compose.planka.yml --env-file .env.planka up -d
 ```
 
 Inspect state:
 
 ```bash
-docker compose -f docker-compose.planka.yml --env-file .env ps
+docker compose -f docker-compose.planka.yml --env-file .env.planka ps
 ```
 
 Inspect logs:
 
 ```bash
-docker compose -f docker-compose.planka.yml --env-file .env logs --tail=200
-docker compose -f docker-compose.planka.yml --env-file .env logs --tail=200 planka
-docker compose -f docker-compose.planka.yml --env-file .env logs --tail=200 planka-db
+docker compose -f docker-compose.planka.yml --env-file .env.planka logs --tail=200
+docker compose -f docker-compose.planka.yml --env-file .env.planka logs --tail=200 planka
+docker compose -f docker-compose.planka.yml --env-file .env.planka logs --tail=200 planka-db
 ```
 
 ## Health checks
@@ -63,7 +69,7 @@ docker compose -f docker-compose.planka.yml --env-file .env logs --tail=200 plan
 1) DB readiness:
 
 ```bash
-docker compose -f docker-compose.planka.yml --env-file .env exec planka-db pg_isready -U "${PLANKA_DB_USER:-planka}" -d "${PLANKA_DB_NAME:-planka}"
+docker compose -f docker-compose.planka.yml --env-file .env.planka exec planka-db pg_isready -U "${PLANKA_DB_USER:-planka}" -d "${PLANKA_DB_NAME:-planka}"
 ```
 
 2) HTTP:
@@ -86,7 +92,7 @@ TS="$(date -u +%Y%m%dT%H%M%SZ)"
 Postgres dump:
 
 ```bash
-docker compose -f docker-compose.planka.yml --env-file .env exec -T planka-db \
+docker compose -f docker-compose.planka.yml --env-file .env.planka exec -T planka-db \
   pg_dump -U "${PLANKA_DB_USER:-planka}" "${PLANKA_DB_NAME:-planka}" > "backups/planka/planka_db_${TS}.sql"
 ```
 
@@ -112,7 +118,7 @@ Restore DB dump:
 
 ```bash
 DUMP_FILE="backups/planka/planka_db_YYYYMMDDTHHMMSSZ.sql"
-cat "${DUMP_FILE}" | docker compose -f docker-compose.planka.yml --env-file .env exec -T planka-db \
+cat "${DUMP_FILE}" | docker compose -f docker-compose.planka.yml --env-file .env.planka exec -T planka-db \
   psql -U "${PLANKA_DB_USER:-planka}" "${PLANKA_DB_NAME:-planka}"
 ```
 

@@ -1,9 +1,9 @@
 # Planka MVP stack (IP-only)
 #
 # Usage:
-#   cp .env.example .env
+#   cp .env.planka.example .env.planka
 #   # Set PLANKA_BASE_URL + PLANKA_SECRET_KEY + PLANKA_DB_PASSWORD (and optionally admin defaults)
-#   docker compose -f docker-compose.planka.yml --env-file .env up -d
+#   docker compose -f docker-compose.planka.yml --env-file .env.planka up -d
 #
 # Notes:
 # - Exposes Planka on 0.0.0.0 so you can access it via the server IP.
