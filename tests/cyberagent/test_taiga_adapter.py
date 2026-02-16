@@ -26,8 +26,14 @@ class _FakeResponse:
 
 
 class _FakeSession:
-    def __init__(self, *, get_responses: list[_FakeResponse] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        get_responses: list[_FakeResponse] | None = None,
+        patch_responses: list[_FakeResponse] | None = None,
+    ) -> None:
         self._get_responses = get_responses or []
+        self._patch_responses = patch_responses or []
         self.get_calls: list[tuple[str, dict[str, object]]] = []
         self.patch_calls: list[tuple[str, dict[str, object]]] = []
         self.headers: dict[str, str] = {}
@@ -52,6 +58,8 @@ class _FakeSession:
         timeout: int,
     ) -> _FakeResponse:
         self.patch_calls.append((url, {"json": json, "timeout": timeout}))
+        if self._patch_responses:
+            return self._patch_responses.pop(0)
         return _FakeResponse(status_code=200, payload={})
 
 
@@ -266,3 +274,62 @@ def test_process_first_assigned_task_runs_one_item_cycle() -> None:
             },
         )
     ]
+
+
+def test_validate_required_statuses_raises_for_missing_status() -> None:
+    session = _FakeSession(
+        get_responses=[
+            _FakeResponse(
+                status_code=200,
+                payload=[
+                    {"id": 3, "name": "pending", "slug": "pending"},
+                    {"id": 5, "name": "completed", "slug": "completed"},
+                ],
+            ),
+        ]
+    )
+    adapter = TaigaAdapter(
+        base_url="http://taiga.local",
+        token="test-token",
+        session=session,
+    )
+
+    with pytest.raises(ValueError, match="Missing required Taiga task statuses"):
+        adapter.validate_required_statuses(
+            project_id=44,
+            required_status_names=("pending", "in_progress", "completed"),
+        )
+
+
+def test_claim_task_returns_false_on_version_conflict() -> None:
+    session = _FakeSession(
+        get_responses=[
+            _FakeResponse(
+                status_code=200,
+                payload=[
+                    {"id": 3, "name": "pending", "slug": "pending"},
+                    {"id": 4, "name": "in_progress", "slug": "in_progress"},
+                ],
+            ),
+        ],
+        patch_responses=[_FakeResponse(status_code=409, payload={})],
+    )
+    adapter = TaigaAdapter(
+        base_url="http://taiga.local",
+        token="test-token",
+        session=session,
+    )
+
+    claimed = adapter.claim_task(
+        TaigaTask(
+            task_id=77,
+            ref=12,
+            subject="Verify adapter PoC",
+            status_id=3,
+            project_id=44,
+            version=8,
+        ),
+        target_status_name="in_progress",
+    )
+
+    assert claimed is False

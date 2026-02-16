@@ -49,6 +49,48 @@ def build_parser() -> argparse.ArgumentParser:
         KANBAN_COMMAND,
         help="Open the Taiga Kanban UI in your browser.",
     )
+
+    taiga_parser = subparsers.add_parser(
+        "taiga",
+        help="Run Taiga integration commands.",
+    )
+    taiga_subparsers = taiga_parser.add_subparsers(dest="taiga_command", required=True)
+    worker_parser = taiga_subparsers.add_parser(
+        "worker",
+        help="Run the Taiga worker loop (claim -> execute -> transition).",
+    )
+    worker_parser.add_argument(
+        "--config",
+        type=str,
+        default=None,
+        help="Optional JSON config file for worker defaults.",
+    )
+    worker_parser.add_argument("--project-slug", type=str, default=None)
+    worker_parser.add_argument("--assignee", type=str, default=None)
+    worker_parser.add_argument("--source-status", type=str, default=None)
+    worker_parser.add_argument("--in-progress-status", type=str, default=None)
+    worker_parser.add_argument("--success-status", type=str, default=None)
+    worker_parser.add_argument("--failure-status", type=str, default=None)
+    worker_parser.add_argument("--blocked-status", type=str, default=None)
+    worker_parser.add_argument("--poll-seconds", type=float, default=None)
+    worker_parser.add_argument("--max-tasks", type=int, default=None)
+    worker_parser.add_argument("--run-id", type=str, default=None)
+    mode_group = worker_parser.add_mutually_exclusive_group()
+    mode_group.add_argument(
+        "--once",
+        dest="once",
+        action="store_true",
+        default=None,
+        help="Process up to --max-tasks once and exit.",
+    )
+    mode_group.add_argument(
+        "--loop",
+        dest="once",
+        action="store_false",
+        default=None,
+        help="Run continuously (default mode).",
+    )
+
     add_onboarding_args(subparsers)
     add_pairing_parser(subparsers)
 

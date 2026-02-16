@@ -104,6 +104,67 @@ class TaigaAdapter:
             raise ValueError("Unexpected Taiga task payload: expected object.")
         return self._parse_task(payload)
 
+    def validate_required_statuses(
+        self,
+        *,
+        project_id: int,
+        required_status_names: tuple[str, ...],
+    ) -> None:
+        """Ensure configured status names exist in the target Taiga project."""
+        response = self._session.get(
+            f"{self._api_base_url}/task-statuses",
+            params={"project": project_id},
+            timeout=self._timeout_seconds,
+        )
+        response.raise_for_status()
+
+        payload = response.json()
+        if not isinstance(payload, list):
+            raise ValueError("Unexpected Taiga task-statuses payload: expected list.")
+
+        available: set[str] = set()
+        for raw_status in payload:
+            if not isinstance(raw_status, dict):
+                continue
+            name = str(raw_status.get("name", "")).strip().lower()
+            slug = str(raw_status.get("slug", "")).strip().lower()
+            if name:
+                available.add(name)
+            if slug:
+                available.add(slug)
+
+        missing = [
+            name
+            for name in required_status_names
+            if name.strip().lower() not in available
+        ]
+        if missing:
+            joined_missing = ", ".join(sorted(missing))
+            raise ValueError(
+                "Missing required Taiga task statuses for project "
+                f"{project_id}: {joined_missing}"
+            )
+
+    def claim_task(self, task: TaigaTask, *, target_status_name: str) -> bool:
+        """Try to claim a pending task by transitioning it to in-progress with OCC."""
+        target_status_id = self._resolve_task_status_id(
+            project_id=task.project_id,
+            target_status_name=target_status_name,
+        )
+
+        response = self._session.patch(
+            f"{self._api_base_url}/tasks/{task.task_id}",
+            json={
+                "version": task.version,
+                "status": target_status_id,
+            },
+            timeout=self._timeout_seconds,
+        )
+        if getattr(response, "status_code", None) in {409, 412}:
+            return False
+        response.raise_for_status()
+        return True
+
     def append_result_and_transition(
         self,
         *,
