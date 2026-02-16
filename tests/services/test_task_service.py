@@ -497,6 +497,30 @@ def test_archive_rejected_task_raises_for_non_rejected_status() -> None:
         )
 
 
+def test_archive_rejected_task_raises_when_follow_up_already_exists() -> None:
+    from src.cyberagent.services import tasks as task_service
+    from src.cyberagent.db.models.task import Task
+    from src.enums import Status
+
+    task = cast(Task, _FakeTask())
+    task.id = 14
+    task.team_id = 5
+    task.initiative_id = 22
+    task.name = "Collect links"
+    task.content = "Collect all source links"
+    task.status = Status.REJECTED
+    task.follow_up_task_id = 99
+
+    with pytest.raises(ValueError, match="already has follow_up_task_id"):
+        task_service.archive_rejected_task_with_replacement(
+            task,
+            replacement_name="Collect links (replacement)",
+            replacement_content="Collect all source links",
+        )
+
+    assert task.status == Status.REJECTED
+
+
 def test_is_review_eligible_for_task_when_completed_or_blocked() -> None:
     from src.cyberagent.services import tasks as task_service
     from src.cyberagent.db.models.task import Task

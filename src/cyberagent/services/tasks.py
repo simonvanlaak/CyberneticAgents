@@ -367,6 +367,12 @@ def archive_rejected_task_with_replacement(
             "Rejected-task archival requires original task and must be in rejected status."
         )
 
+    existing_follow_up = getattr(original_task, "follow_up_task_id", None)
+    if existing_follow_up is not None:
+        raise ValueError(
+            "Rejected-task archival cannot proceed because original task already has follow_up_task_id."
+        )
+
     _transition_task(original_task, Status.CANCELED)
 
     replacement = create_task(
