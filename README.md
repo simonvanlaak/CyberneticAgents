@@ -17,6 +17,9 @@ Built with **AutoGen Core** and **Casbin RBAC**, it models Systems 1/3/4/5 as co
 - Label-driven GitHub issue-stage workflow for implementation automation
 - Planka-backed operational task board flow
 
+## News / Update
+I have decided to pause further development on this repo, which I continue to think this is the right approach forward, the main issue I see in current agents is integrations into other software, reliability and defining workflows to collaborate with humans. I will focus on this problem space before I come back to this project. The idea of this project was to improve agent decision making and guardrails, but I now see this as a lower priority with the newest LLMs having sigificantly improved there already. Nonetheless I'm open to collaboration here!
+
 ---
 
 ## Quick start
