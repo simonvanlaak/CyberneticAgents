@@ -20,7 +20,7 @@ dependencies = [
   "traceloop-sdk",
   "pre-commit==4.5.1",
   "pylint==3.3.3",
-  "black==26.1.0",
+  "black==26.3.1",
   "langfuse",
   "python-dotenv",
   "tiktoken",
